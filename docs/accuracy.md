@@ -122,18 +122,23 @@ latency on a Mac or preserve accuracy after conversion/quantization.
    trimmed. It also resolves one narrow self-repair shape: after a comma, a cue
    containing "no" or "I mean" ("sorry, no", "no wait", ", no,", ", I mean,"),
    followed by a word that also appears in the last four words of the same
-   sentence and is not a subject pronoun. The cleaner deletes from that earlier
-   word through the cue, so "go to Pune, sorry, no, to Delhi" becomes "go to
-   Delhi". A lone "sorry", with or without commas, counts only when the repair
-   restarts on in, at, on, from, near, into, by or with, so "I live in Ahmedabad
-   sorry in Delhi" becomes "I live in Delhi" and "meet at 5 sorry at 6" becomes
-   "meet at 6". Otherwise a lone "sorry" is an apology ("sorry for the wait",
-   "sorry, the train was late"), and "so sorry in" or "sorry in advance" stays.
-   "Yes to X, no to Y" has no set-off cue, and a repair that shares no word
-   ("Pune, sorry, no, Delhi") or restarts on a pronoun ("we go, no, we stay") is
-   left alone. "Like", "basically", "sort of" and other repairs and restarts are
-   left alone too. A closed list covers fillers, but general repairs need a
-   trained model and deleting hedges changes meaning ("it basically works").
+   sentence. The cleaner deletes from that earlier word through the cue, so "go
+   to Pune, sorry, no, to Delhi" becomes "go to Delhi". "Sorry" paired with "no"
+   or "I mean" needs no comma, because Parakeet often writes none, so "I live in
+   Delhi no sorry I live in Ahmedabad" becomes "I live in Ahmedabad". A repair
+   that restarts on a subject pronoun counts only when the word after the
+   pronoun repeats too ("I live ... I live"). A lone "sorry", with or without
+   commas, counts only when the repair restarts on in, at, on, from, near, into,
+   by or with, so "I live in Ahmedabad sorry in Delhi" becomes "I live in
+   Delhi" and "meet at 5 sorry at 6" becomes "meet at 6". Otherwise a lone
+   "sorry" is an apology ("sorry for the wait", "sorry, the train was late"),
+   and "so sorry in" or "sorry in advance" stays.
+   "Yes to X, no to Y" and "no wait at all" have no set-off cue, and a repair
+   that shares no word ("Pune, sorry, no, Delhi") or repeats only a pronoun ("we
+   go, no, we should stay", "I said no sorry I can't") is left alone. "Like",
+   "basically", "sort of" and other repairs and restarts are left alone too. A
+   closed list covers fillers, but general repairs need a trained model and
+   deleting hedges changes meaning ("it basically works").
    History keeps the raw output. On the 38 saved Parakeet transcripts available
    on 2026-10-08, the cleaner removed all 47 uh/um and 4 mm tokens and otherwise
    only collapsed four one-word stutters; no set-off "you know" occurred. Adding
@@ -141,6 +146,9 @@ latency on a Mac or preserve accuracy after conversion/quantization.
    Dilli" dictation it was written for. Adding the lone "sorry" rule changed none
    of the 190 saved transcripts available on 2026-10-09; three contain "sorry"
    and none restarts on a preposition it shares with the words before it.
+   Pairing "sorry" without commas and allowing two-word pronoun restarts changed
+   one of the 277 saved transcripts available on 2026-10-11, the "Delhi no sorry
+   I live in Ahmedabad" dictation it was written for.
 
    `VoiceCommands` then writes spoken numbers as digits and spoken symbols as
    @, # and %. "two hundred and fifty thousand" becomes "250,000", "ten

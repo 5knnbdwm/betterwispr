@@ -24,7 +24,6 @@ public final class ParakeetProvider: SpeechProvider {
 
     nonisolated static let phraseBoosterMegabytes = 100.0
 
-    /// The FluidAudio version, repository and approximate download size behind a catalog model.
     nonisolated static func source(for model: SpeechModel) -> (version: AsrModelVersion, repo: Repo, megabytes: Double)? {
         guard model.engine == .parakeet else { return nil }
         return switch model.modelName {
@@ -37,7 +36,6 @@ public final class ParakeetProvider: SpeechProvider {
         }
     }
 
-    /// FluidAudio resolves a model's files from the sibling folder named after its repository.
     nonisolated static func folder(for model: SpeechModel, modelsDirectory: URL) -> URL {
         modelsDirectory.appending(path: "Parakeet/\(model.modelName)", directoryHint: .isDirectory)
     }
@@ -49,7 +47,6 @@ public final class ParakeetProvider: SpeechProvider {
             && AsrModels.modelsExist(at: folder, version: source.version)
     }
 
-    /// FluidAudio's vocabulary session reads the CTC tokenizer from this fixed cache folder.
     public nonisolated static var phraseBoosterDirectory: URL { CtcModels.defaultCacheDirectory(for: .ctc110m) }
 
     public nonisolated static func isPhraseBoosterInstalled(at directory: URL = phraseBoosterDirectory) -> Bool {

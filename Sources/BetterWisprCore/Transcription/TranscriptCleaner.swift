@@ -90,7 +90,7 @@ public enum TranscriptCleaner {
         return setOffBefore && setOffAfter
     }
 
-    /// Turns "to Pune, sorry, no, to Delhi" or "in Pune sorry in Delhi" into the repair when it restarts on a recent non-pronoun word.
+    /// Turns "to Pune, sorry, no, to Delhi" or "in Pune sorry in Delhi" into the repair when it restarts on a recent word, or on a pronoun and the word after it.
     private static func dropRepairs(_ tokens: [Token]) -> [Token] {
         var tokens = tokens
         var i = 1
@@ -100,6 +100,7 @@ public enum TranscriptCleaner {
             guard let onset = repairOnset(tokens, at: i),
                   let anchor = (sentenceStart..<i).last(where: { tokens[$0].word.lowercased() == tokens[onset].word.lowercased() }),
                   !subjectPronouns.contains(String(tokens[anchor].word.lowercased().prefix { $0 != "'" && $0 != "’" }))
+                    || (onset + 1 < tokens.count && tokens[anchor + 1].word.lowercased() == tokens[onset + 1].word.lowercased())
             else { i += 1; continue }
             tokens[anchor].trailing = tokens[onset].trailing
             tokens.removeSubrange(anchor + 1...onset)
@@ -108,7 +109,7 @@ public enum TranscriptCleaner {
         return tokens
     }
 
-    /// The first repair word after a comma-set cue that says "no" or "I mean", or after a lone "sorry" that restarts on a place or time word.
+    /// The first repair word after a cue that says "no" or "I mean" and is set off by commas or paired with "sorry", or after a lone "sorry" that restarts on a place or time word.
     private static func repairOnset(_ tokens: [Token], at start: Int) -> Int? {
         var end = start
         var cues: [[String]] = []
@@ -122,7 +123,8 @@ public enum TranscriptCleaner {
               !tokens[start..<end].contains(where: { $0.trailing.contains(where: terminators.contains) }) else { return nil }
         guard cues == [["sorry"]] else {
             let setOff = tokens[start - 1].trailing.contains(",") && (cues.count > 1 || tokens[end - 1].trailing.contains(","))
-            return setOff && cues.contains(where: correctingCues.contains) ? end : nil
+            let apologized = cues.count > 1 && cues.contains(["sorry"])
+            return (setOff || apologized) && cues.contains(where: correctingCues.contains) ? end : nil
         }
         let restart = tokens[end...].prefix(2).map { $0.word.lowercased() }
         return repairPrepositions.contains(restart[0]) && restart != ["in", "advance"] && !apologyLeads.contains(tokens[start - 1].word.lowercased()) ? end : nil

@@ -4,6 +4,11 @@ All notable changes to BetterWispr are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/). The current version lives in `VERSION`.
 
+## [0.1.5] - 2026-10-11
+
+### Fixed
+- Light cleanup now turns "I live in Delhi no sorry I live in Ahmedabad" into "I live in Ahmedabad". A "no sorry" or "sorry, no" counts as a correction even when the speech model writes no commas, and a correction can restart on "I" or "we" when the word after it repeats too. "Should we go, no, we should stay" and "I said no sorry I can't come" stay as you said them.
+
 ## [0.1.4] - 2026-10-10
 
 ### Added

@@ -165,12 +165,16 @@ func standaloneModifiersRoundTripThroughSettings(keyCode: UInt32) throws {
     #expect(TranscriptCleaner.clean("I live in Ahmedabad, sorry, in Delhi.", language: "en") == "I live in Delhi.")
     #expect(TranscriptCleaner.clean("I live in Ahmedabad sorry in Delhi", language: "en") == "I live in Delhi")
     #expect(TranscriptCleaner.clean("Let's meet at 5 sorry at 6.", language: "en") == "Let's meet at 6.")
+    #expect(TranscriptCleaner.clean("Hey, I live in Delhi uh no sorry I live in Ahmedabad.", language: "en") == "Hey, I live in Ahmedabad.")
+    #expect(TranscriptCleaner.clean("I live in Pune, sorry, no, I live in Delhi.", language: "en") == "I live in Delhi.")
 }
 
 @Test func cleanerKeepsCorrectionLookalikes() {
     #expect(TranscriptCleaner.clean("I said yes to the plan, no to the budget.", language: "en") == "I said yes to the plan, no to the budget.")
     #expect(TranscriptCleaner.clean("I can't make it, sorry, I have a meeting.", language: "en") == "I can't make it, sorry, I have a meeting.")
     #expect(TranscriptCleaner.clean("Should we go, no, we should stay.", language: "en") == "Should we go, no, we should stay.")
+    #expect(TranscriptCleaner.clean("I said no sorry I can't come.", language: "en") == "I said no sorry I can't come.")
+    #expect(TranscriptCleaner.clean("We booked at noon and had no wait at all.", language: "en") == "We booked at noon and had no wait at all.")
     #expect(TranscriptCleaner.clean("Is it at 5? No, at 6.", language: "en") == "Is it at 5? No, at 6.")
     #expect(TranscriptCleaner.clean("Thanks for coming, sorry for the wait.", language: "en") == "Thanks for coming, sorry for the wait.")
     #expect(TranscriptCleaner.clean("Go to Ahmedabad, sorry, no, Delhi", language: "en") == "Go to Ahmedabad, sorry, no, Delhi")
