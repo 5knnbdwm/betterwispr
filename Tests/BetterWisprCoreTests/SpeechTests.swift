@@ -395,17 +395,17 @@ func everyListedParakeetV3LanguageReachesTheDecoderAsAHint(_ id: String) throws 
     #expect(ParakeetProvider.restoringPunctuation(
         original: "Hey, this is Karthik. Please ping Lubshetvur about it.",
         rescored: "Hey, this is Kartik Please ping Labhshetwar about it.",
-        replacements: [(original: "Karthik.", replacement: "Kartik"), (original: "Lubshetvur", replacement: "Labhshetwar")]
+        replacements: [(original: "Karthik.", replacement: "Kartik", keepsOriginal: false), (original: "Lubshetvur", replacement: "Labhshetwar", keepsOriginal: false)]
     ) == "Hey, this is Kartik. Please ping Labhshetwar about it.")
     #expect(ParakeetProvider.restoringPunctuation(
         original: "Deploy to (Super base), then ship.",
         rescored: "Deploy to Supabase then ship.",
-        replacements: [(original: "(Super base),", replacement: "Supabase")]
+        replacements: [(original: "(Super base),", replacement: "Supabase", keepsOriginal: false)]
     ) == "Deploy to (Supabase), then ship.")
     #expect(ParakeetProvider.restoringPunctuation(
         original: "Kartik met Karthik.",
         rescored: "Kartik met Kartik",
-        replacements: [(original: "Karthik.", replacement: "Kartik")]
+        replacements: [(original: "Karthik.", replacement: "Kartik", keepsOriginal: false)]
     ) == "Kartik met Kartik.")
     #expect(ParakeetProvider.restoringPunctuation(
         original: "one two three",
@@ -415,16 +415,36 @@ func everyListedParakeetV3LanguageReachesTheDecoderAsAHint(_ id: String) throws 
 }
 
 @Test func boostedReplacementsNeverSwallowNeighbouringWords() {
-    let widened = [(original: "seven Harry Potter", replacement: "Harry Potter")]
+    let widened = (original: "seven Harry Potter", replacement: "Harry Potter")
     #expect(ParakeetProvider.restoringPunctuation(
         original: "Have you seen all the seven Harry Potter movies?",
         rescored: "Have you seen all the Harry Potter movies?",
-        replacements: widened
+        replacements: [(original: widened.original, replacement: widened.replacement, keepsOriginal: true)]
     ) == "Have you seen all the seven Harry Potter movies?")
-    #expect(ParakeetProvider.alreadySaysTerm(widened[0]))
+    #expect(ParakeetProvider.alreadySaysTerm(widened))
+    #expect(ParakeetProvider.keepsOriginal(widened, spelledCorrectly: false))
     #expect(ParakeetProvider.alreadySaysTerm((original: "GitHub's", replacement: "GitHub")))
     #expect(!ParakeetProvider.alreadySaysTerm((original: "Karthik.", replacement: "Kartik")))
     #expect(!ParakeetProvider.alreadySaysTerm((original: "Next JS", replacement: "NextJS")))
+}
+
+@Test func boostedTermsReplaceMisheardSpellingsButNotOtherRealWords() {
+    #expect(ParakeetProvider.keepsOriginal((original: "option", replacement: "Notion"), spelledCorrectly: true))
+    #expect(ParakeetProvider.keepsOriginal((original: "dinner", replacement: "Disney"), spelledCorrectly: true))
+    #expect(ParakeetProvider.keepsOriginal((original: "grand slam", replacement: "Granola"), spelledCorrectly: true))
+    #expect(!ParakeetProvider.keepsOriginal((original: "Versal", replacement: "Vercel"), spelledCorrectly: false))
+    #expect(!ParakeetProvider.keepsOriginal((original: "Karthik.", replacement: "Kartik"), spelledCorrectly: true))
+    #expect(!ParakeetProvider.keepsOriginal((original: "Better Whisper", replacement: "BetterWispr"), spelledCorrectly: true))
+    #expect(ParakeetProvider.restoringPunctuation(
+        original: "Pick an option, then tell Versal.",
+        rescored: "Pick an Notion then tell Vercel",
+        replacements: [(original: "option,", replacement: "Notion", keepsOriginal: true), (original: "Versal.", replacement: "Vercel", keepsOriginal: false)]
+    ) == "Pick an option, then tell Vercel.")
+    #expect(ParakeetProvider.restoringPunctuation(
+        original: "Pick an option today.",
+        rescored: "Pick Notion today",
+        replacements: [(original: "option", replacement: "Notion", keepsOriginal: true)]
+    ) == "Pick an option today.")
 }
 
 @Test func phraseBoosterDownloadsIntoTheFolderItLoadsFrom() {
