@@ -4,11 +4,16 @@ import { useState } from "react";
 
 export type Testimonial = {
   name: string;
-  handle: string;
+  handle?: string;
   quote: string;
   postUrl: string;
   image?: string;
 };
+
+const SOURCES = [
+  { name: "X", label: "X", pattern: /^https:\/\/(?:x\.com|twitter\.com)\/\w+\/status\/\d+\/?(?:[?#].*)?$/ },
+  { name: "Hacker News", label: "HN", pattern: /^https:\/\/news\.ycombinator\.com\/item\?id=\d+$/ },
+];
 
 function TestimonialCard({
   testimonial,
@@ -18,9 +23,7 @@ function TestimonialCard({
   preview: boolean;
 }) {
   const { name, handle, quote, postUrl, image } = testimonial;
-  const href = /^https:\/\/(?:x\.com|twitter\.com)\/\w+\/status\/\d+\/?(?:[?#].*)?$/.test(postUrl)
-    ? postUrl
-    : undefined;
+  const source = SOURCES.find(({ pattern }) => pattern.test(postUrl));
 
   return (
     <figure className="testimonial-card flex h-full flex-col rounded-2xl border border-zinc-200 bg-white p-6 transition-colors hover:border-zinc-300">
@@ -42,9 +45,11 @@ function TestimonialCard({
         </div>
         <div className="min-w-0 flex-1">
           <p className="break-words text-sm font-semibold text-zinc-900">{name}</p>
-          <p className="break-all text-xs text-zinc-500">{handle}</p>
+          {handle && <p className="break-all text-xs text-zinc-500">{handle}</p>}
         </div>
-        <span className="text-sm font-medium text-zinc-400" aria-label="X">X</span>
+        {source && (
+          <span className="text-sm font-medium text-zinc-400" aria-label={source.name}>{source.label}</span>
+        )}
       </figcaption>
       <blockquote className="my-6 whitespace-pre-line break-words text-base leading-relaxed text-zinc-700">
         {quote}
@@ -52,15 +57,15 @@ function TestimonialCard({
       <div className="mt-auto border-t border-zinc-100 pt-4 text-xs">
         {preview ? (
           <span className="text-zinc-500">Sample testimonial · preview only</span>
-        ) : href ? (
+        ) : source ? (
           <a
-            href={href}
+            href={postUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex min-h-6 items-center gap-1.5 rounded-sm font-medium text-zinc-600 hover:text-[#00159d]"
-            aria-label={`Read ${name}’s post on X (opens in a new tab)`}
+            aria-label={`Read ${name}’s post on ${source.name} (opens in a new tab)`}
           >
-            Read on X <ArrowUpRight className="size-3.5" aria-hidden="true" />
+            Read on {source.name} <ArrowUpRight className="size-3.5" aria-hidden="true" />
           </a>
         ) : (
           <span className="text-zinc-500">Post link unavailable</span>
@@ -91,14 +96,14 @@ export default function Testimonials({
     >
       <div className="page-shell">
         <div className="mx-auto max-w-xl text-center">
-          <p className="eyebrow">BetterWispr on X</p>
+          <p className="eyebrow">What people are saying</p>
           <h2 id="testimonials-title" className="mt-4 text-3xl tracking-tight sm:text-4xl">
             Your voice. In your words.
           </h2>
           <p className="mt-4 text-base text-zinc-600">
             {preview
               ? "A preview with sample quotes and stock photos, not real endorsements."
-              : "Thoughts from people using BetterWispr, shared on X."}
+              : "Replies from the BetterWispr launch threads on Hacker News and X."}
           </p>
         </div>
 

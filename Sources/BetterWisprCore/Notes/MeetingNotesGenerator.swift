@@ -256,6 +256,7 @@ enum NotesWriter {
                     let response = try await model.respond(to: "\(condensePrompt)\n\n\(part)").trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !response.isEmpty else { throw MeetingNotesError.unavailable("The notes model returned an empty response. Your full meeting is still saved; try again or choose another model.") }
                     condensed.append(response)
+                    FileHandle.standardError.write(Data("DEBUG round \(round) part \(part.count) -> \(response.count)\n".utf8))
                 }
                 material = condensed.joined(separator: "\n")
                 guard material.count > budget, round + 1 < maximumRounds else { break }

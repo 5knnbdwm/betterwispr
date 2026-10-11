@@ -142,12 +142,9 @@ struct ModelsView: View {
                 HStack(spacing: 6) {
                     Text(speechModel.name).fontWeight(.medium)
                     if selected {
-                        Text("Active")
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.green)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 1)
-                            .background(.green.opacity(0.15), in: Capsule())
+                        badge("Active", color: .green)
+                    } else if speechModel.id == "parakeet-ultra" {
+                        badge("Recommended", color: .accentColor)
                     }
                 }
                 Text(speechModel.detail)
@@ -181,6 +178,15 @@ struct ModelsView: View {
             }
         }
         .padding(.vertical, 4)
+    }
+
+    private func badge(_ title: String, color: Color) -> some View {
+        Text(title)
+            .font(.caption.weight(.medium))
+            .foregroundStyle(color)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 1)
+            .background(color.opacity(0.15), in: Capsule())
     }
 
     private func engineLabel(_ engine: SpeechEngine) -> String {

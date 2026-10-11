@@ -190,6 +190,7 @@ func standaloneModifiersRoundTripThroughSettings(keyCode: UInt32) throws {
 @Test func cleanerRemovesRepeatedPhrases() {
     #expect(TranscriptCleaner.clean("Then we can we can deploy the app", language: "en") == "Then we can deploy the app")
     #expect(TranscriptCleaner.clean("I want to I want to fix the login bug", language: nil) == "I want to fix the login bug")
+    #expect(TranscriptCleaner.clean("and then and then we shipped it", language: "en") == "and then we shipped it")
 }
 
 @Test func cleanerKeepsFirstCopyOfStutteredWord() {
@@ -205,6 +206,8 @@ func standaloneModifiersRoundTripThroughSettings(keyCode: UInt32) throws {
     #expect(TranscriptCleaner.clean("dial one one two", language: "en") == "dial one one two")
     #expect(TranscriptCleaner.clean("in twenty twenty five, a fifty fifty split", language: "en") == "in twenty twenty five, a fifty fifty split")
     #expect(TranscriptCleaner.clean("uh-huh, that sounds right", language: "en") == "uh-huh, that sounds right")
+    #expect(TranscriptCleaner.clean("drinking more and more and more", language: "en") == "drinking more and more and more")
+    #expect(TranscriptCleaner.clean("we tried again and again and again", language: "en") == "we tried again and again and again")
 }
 
 @Test func cleanerLeavesOtherLanguagesAndEmptiesFillerOnlyText() {

@@ -187,8 +187,10 @@ try {
   assert.ok(single.includes("An exact quote &lt;preserved&gt; &amp; escaped."));
   assert.equal((single.match(/<blockquote/g) ?? []).length, 1);
   assert.ok(!single.includes("testimonials-track"), "Small collections stay static");
-  for (const postUrl of ["javascript:alert(1)", "https://x.com.evil.test/a/status/1", "https://example.com/a/status/1", ""]) {
-    assert.ok(!renderTestimonials([{ ...testimonial, postUrl }]).includes("<a "), "Only X post URLs are linked");
+  const hackerNews = renderTestimonials([{ name: "hn_user", quote: "Neat.", postUrl: "https://news.ycombinator.com/item?id=50046250" }]);
+  assert.ok(hackerNews.includes('href="https://news.ycombinator.com/item?id=50046250"') && hackerNews.includes("Read on Hacker News"));
+  for (const postUrl of ["javascript:alert(1)", "https://x.com.evil.test/a/status/1", "https://example.com/a/status/1", "https://news.ycombinator.com.evil.test/item?id=1", "https://news.ycombinator.com/item?id=1&goto=https://evil.test", ""]) {
+    assert.ok(!renderTestimonials([{ ...testimonial, postUrl }]).includes("<a "), "Only X and Hacker News post URLs are linked");
   }
   const scrolling = renderTestimonials(Array.from({ length: 6 }, () => testimonial));
   assert.equal((scrolling.match(/<blockquote/g) ?? []).length, 12);
@@ -197,8 +199,21 @@ try {
   const { default: TestimonialsDemo } = await vite.ssrLoadModule("/src/components/ui/demo.tsx");
   const demo = renderToStaticMarkup(createElement(TestimonialsDemo));
   assert.ok(demo.includes("not real endorsements") && !demo.includes("<a "));
-  assert.ok(!homepage.includes('id="testimonials"'), "Testimonials stay off the homepage until requested");
+  assert.ok(
+    homepage.includes('id="testimonials"') &&
+      homepage.includes('href="https://news.ycombinator.com/item?id=') &&
+      homepage.includes('href="https://x.com/'),
+    "The homepage shows testimonials linked to their Hacker News and X sources",
+  );
   assert.ok(!homepage.includes("Sample author"), "The homepage never imports fictional endorsements");
+  const closing = homepage.match(/<section\b[^>]*aria-labelledby="start-title"[^>]*>([\s\S]*?)<\/section>/)?.[1] ?? "";
+  const highlightAt = closing.indexOf("without a single error!</mark>");
+  assert.ok(
+    highlightAt > -1 &&
+      highlightAt < closing.indexOf("BetterWispr-arm64.dmg") &&
+      closing.includes('href="https://news.ycombinator.com/item?id=50046250"'),
+    "The closing download CTA leads with a highlighted, sourced launch quote",
+  );
   const menuButton = homepage.match(
     /<button\b[^>]*aria-controls="navigation-links"[^>]*>/,
   )?.[0];

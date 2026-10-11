@@ -231,6 +231,35 @@ public final class MeetingRecorder {
         }
     }
 
+    /// Splits a recording into the chunks a meeting would transcribe if `speaker` played it live, in 10 ms buffers like the system audio tap.
+    nonisolated public static func chunks(of url: URL, speaker: Speaker, threshold: Float = 0.002, policy: ChunkPolicy = ChunkPolicy()) throws -> [MeetingAudioChunk] {
+        let source = try AVAudioFile(forReading: url)
+        let format = source.processingFormat
+        let writer = try MeetingChunkWriter(speaker: speaker, format: format, threshold: threshold, policy: policy, startOffset: 0)
+        let frames = AVAudioFrameCount(format.sampleRate / 100)
+        var chunks: [MeetingAudioChunk] = []
+        func collect() throws {
+            let ready = writer.takeReady()
+            chunks += ready.chunks
+            if let error = ready.error { throw error }
+        }
+        do {
+            while source.framePosition < source.length, let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames) {
+                let time = Double(source.framePosition) / format.sampleRate
+                try source.read(into: buffer, frameCount: frames)
+                _ = writer.write(buffer, at: time)
+                try collect()
+            }
+            writer.finish()
+            try collect()
+        } catch {
+            writer.cancel()
+            for chunk in chunks { try? FileManager.default.removeItem(at: chunk.url) }
+            throw error
+        }
+        return chunks
+    }
+
     private func receive(_ sample: (rms: Float, duration: TimeInterval), from speaker: Speaker, session id: UUID) {
         guard session == id, let writer = writers[speaker] else { return }
         let level = meters[speaker, default: VoiceLevelMeter()].update(rms: sample.rms, over: sample.duration)

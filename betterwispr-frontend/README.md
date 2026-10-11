@@ -54,19 +54,21 @@ import { Button } from "@betterwispr-frontend/ui/components/button";
 
 If you want to add app-specific blocks instead of shared primitives, run the shadcn CLI from `apps/web`.
 
-### X testimonials
+### Testimonials
 
-The testimonial component is intentionally **not mounted on the landing page**.
-Keep it hidden until real reviews are available and its inclusion is requested.
-When ready, import `Testimonials` from `@/components/ui/cards` and pass an array
-of real feedback as its `testimonials` prop, preserving each author's wording:
+The homepage shows real replies from the launch threads on Hacker News and X.
+They live in `TESTIMONIALS` in `apps/web/src/routes/index.tsx`. Add only real
+feedback, preserving each author's wording:
 
 ```tsx
 { name: "Author's display name", handle: "@handle", quote: "Exact post text", postUrl: "https://x.com/handle/status/POST_ID", image: "/assets/author.jpg" }
+{ name: "hn_username", quote: "Exact comment text", postUrl: "https://news.ycombinator.com/item?id=COMMENT_ID" }
 ```
 
-Replace `POST_ID` with the numeric post ID. `image` is optional; cards fall back
-to an initial. Each card links to its source post. There is no X API, embed script,
+Replace `POST_ID` or `COMMENT_ID` with the numeric ID. `handle` and `image` are
+optional; cards fall back to an initial. The source label and link come from
+`postUrl`: X posts and Hacker News items are linked, anything else shows
+"Post link unavailable". There is no X API, embed script,
 provider, or network fetch for testimonials. An empty list renders nothing;
 one to five posts use a responsive grid, and six or more use
 two scrolling rows with pause controls and a static reduced-motion layout.

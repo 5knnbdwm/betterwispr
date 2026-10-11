@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import DownloadCTA, { ClosingCTA } from "@/components/download-cta";
 import HeroDemo from "@/components/hero-demo";
 import FeatureBento from "@/components/feature-bento";
+import Testimonials, { type Testimonial } from "@/components/ui/cards";
 import { comparisons } from "@/lib/comparisons";
 import { pageHead } from "@/lib/seo";
 
@@ -58,6 +59,45 @@ const FAQS = [
     "Does it learn my words?",
     "Yes. Add names and terms in Vocabulary, or fix a misheard word in History or right after it is pasted. BetterWispr adds the correction to Vocabulary and spells it your way next time. You can turn learning off in Settings.",
   ],
+];
+
+const TESTIMONIALS: Testimonial[] = [
+  {
+    name: "GodelNumbering",
+    quote: "Just tried it out as I was looking for something that does this exact thing well (macbook). So far I dictated about 5 different things in different contexts, it worked without a single error! Good choice to use parakeet v3.\nNice work, thanks for building it!",
+    postUrl: "https://news.ycombinator.com/item?id=50046250",
+  },
+  {
+    name: "Sameer Vanjari",
+    handle: "@VanjariSameer",
+    quote: "I just read your post in the morning. and now you have the app. Amazing.",
+    postUrl: "https://x.com/VanjariSameer/status/2108248442770534481",
+    image: "https://pbs.twimg.com/profile_images/1595780430233743362/2e1GDWhj_200x200.jpg",
+  },
+  {
+    name: "frenchie4111",
+    quote: "This is awesome.",
+    postUrl: "https://news.ycombinator.com/item?id=50044781",
+  },
+  {
+    name: "Nikhil Bhima",
+    handle: "@nikhilbhima",
+    quote: "haha, product looks good btw\n\ngoodluck :)",
+    postUrl: "https://x.com/nikhilbhima/status/2108231675977384037",
+    image: "https://pbs.twimg.com/profile_images/2043046755663749120/weEgP_gC_200x200.jpg",
+  },
+  {
+    name: "Na6z",
+    quote: "This is pretty neat, I built something similar a couple months ago.",
+    postUrl: "https://news.ycombinator.com/item?id=50044482",
+  },
+  {
+    name: "Rahul Karajgikar",
+    handle: "@Road_Kill11",
+    quote: "sick stuff man",
+    postUrl: "https://x.com/Road_Kill11/status/2108238524323643466",
+    image: "https://pbs.twimg.com/profile_images/1940948153450004480/Fpdxv7On_200x200.jpg",
+  },
 ];
 
 function HomeComponent() {
@@ -177,6 +217,8 @@ function HomeComponent() {
           </ol>
         </div>
       </section>
+
+      <Testimonials testimonials={TESTIMONIALS} />
 
       <section className="bg-paper py-20" aria-labelledby="local-title">
         <div className="page-shell grid items-start gap-12 md:grid-cols-2">

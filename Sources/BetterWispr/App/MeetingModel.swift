@@ -50,7 +50,7 @@ final class MeetingModel {
     @ObservationIgnored private var work: Task<Void, Never>?
     @ObservationIgnored private var ticker: Task<Void, Never>?
     @ObservationIgnored private var voices: SpeakerRecording?
-    @ObservationIgnored private var detection: Task<[UUID: Int], Error>?
+    @ObservationIgnored private var detection: Task<[MeetingSegment], Error>?
     @ObservationIgnored private var saves: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var heard: (me: Bool, them: Bool) = (false, false)
     @ObservationIgnored private var levelsShownAt = ContinuousClock.now
@@ -151,12 +151,12 @@ final class MeetingModel {
             guard self.session == token else { return }
             self.edit(id, save: false) { $0.duration = duration }
             self.saveNow(id)
-            self.provider = nil
             if let voices = self.voices {
                 self.voices = nil
                 await self.findSpeakers(in: id, from: voices, token: token)
                 guard self.session == token else { return }
             }
+            self.provider = nil
             if self.notesAvailability == .available, self.meeting(id)?.hasContent == true {
                 await self.writeNotes(for: id, token: token)
             } else {
@@ -255,14 +255,19 @@ final class MeetingModel {
     private func findSpeakers(in id: UUID, from voices: SpeakerRecording, token: UUID) async {
         defer { voices.discard() }
         activity = .findingSpeakers(id)
-        let detection = Task { try await voices.participants() }
+        let segments = meeting(id)?.segments ?? []
+        let provider = provider
+        let detection = Task {
+            try await SpeakerDetection.label(segments, voices: voices) { audio, start, duration in
+                guard let provider else { return nil }
+                return try await self.segment(of: audio, speaker: .them, start: start, duration: duration, with: provider)
+            }
+        }
         self.detection = detection
         do {
-            let participants = try await detection.value
+            let labelled = try await detection.value
             guard session == token else { return }
-            edit(id, save: false) { meeting in
-                for index in meeting.segments.indices { meeting.segments[index].participant = participants[meeting.segments[index].id] }
-            }
+            edit(id, save: false) { $0.segments = labelled }
             saveNow(id)
         } catch {
             guard session == token else { return }
@@ -342,11 +347,9 @@ final class MeetingModel {
                 if session == token { pendingChunks = max(0, pendingChunks - 1) }
             }
             do {
-                let raw = try await provider.transcribe(audioURL: chunk.url, language: language, vocabulary: VocabularyProcessor.hints(vocabulary))
+                let segment = try await segment(of: chunk.url, speaker: chunk.speaker, start: chunk.start, duration: chunk.duration, with: provider)
                 guard session == token else { return }
-                let text = VocabularyProcessor.apply(vocabulary, to: TranscriptCleaner.clean(raw, language: language))
-                guard !text.isEmpty else { continue }
-                let segment = MeetingSegment(speaker: chunk.speaker, start: chunk.start, duration: chunk.duration, text: text, rawText: raw)
+                guard let segment else { continue }
                 edit(id, save: false) { $0.insert(segment) }
                 saveNow(id)
                 if chunk.speaker == .them, let voices { try? await voices.append(chunk.url, for: segment.id) }
@@ -358,6 +361,12 @@ final class MeetingModel {
             }
         }
         if session == token { drain = nil }
+    }
+
+    private func segment(of audio: URL, speaker: Speaker, start: TimeInterval, duration: TimeInterval, with provider: any SpeechProvider) async throws -> MeetingSegment? {
+        let raw = try await provider.transcribe(audioURL: audio, language: language, vocabulary: VocabularyProcessor.hints(vocabulary))
+        let text = VocabularyProcessor.apply(vocabulary, to: TranscriptCleaner.clean(raw, language: language))
+        return text.isEmpty ? nil : MeetingSegment(speaker: speaker, start: start, duration: duration, text: text, rawText: raw)
     }
 
     private func receive(_ levels: (me: Float, them: Float)) {

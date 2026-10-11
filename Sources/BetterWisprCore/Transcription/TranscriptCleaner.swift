@@ -147,6 +147,13 @@ public enum TranscriptCleaner {
         return (0..<n).allSatisfy { tokens[i + $0].word.lowercased() == tokens[i + n + $0].word.lowercased() }
             && span.dropLast().allSatisfy { $0.trailing.allSatisfy(\.isWhitespace) }
             && !span.contains { isProtected($0.word.lowercased(), single: n == 1) }
+            && !(n == 2 && isEmphasis(tokens, at: i))
+    }
+
+    /// "more and more and more" repeats "more and" for emphasis, unlike the restart in "and then and then".
+    private static func isEmphasis(_ tokens: [Token], at i: Int) -> Bool {
+        let word = { (index: Int) in tokens.indices.contains(index) ? tokens[index].word.lowercased() : "" }
+        return (word(i + 1) == "and" && word(i + 4) == word(i)) || (word(i) == "and" && word(i - 1) == word(i + 1))
     }
 
     private static func isProtected(_ word: String, single: Bool) -> Bool {

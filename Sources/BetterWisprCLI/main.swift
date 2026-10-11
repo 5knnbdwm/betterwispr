@@ -1,4 +1,3 @@
-@preconcurrency import AVFoundation
 import BetterWisprCore
 import Foundation
 
@@ -20,10 +19,12 @@ func run() async throws {
           --download-model MODEL_ID
           --download-phrase-booster
           --download-speaker-detection
-          --find-speakers PATH
-            Splits the file into 5-second pieces as meetings do for call audio and prints which voice
-            speaks in each. Needs macOS 15 and --download-speaker-detection.
           --transcribe-file PATH [--model MODEL_ID] [--language en] [--vocabulary "Term,Other term"]
+          --meeting PATH [--model MODEL_ID] [--language en] [--vocabulary "Term,Other term"] [--notes OUT.md] [--notes-model OLLAMA_MODEL]
+            Plays the file through the meeting chunker as call audio, transcribes each chunk as meetings do and
+            prints one JSON segment per line. Speaker detection labels voices when it is installed (macOS 15).
+            --notes writes the meeting with notes from Apple Intelligence or the named Ollama model. With --notes,
+            PATH may instead be a .jsonl file of segments from an earlier run, which skips transcription.
           --bench MANIFEST.jsonl [--model MODEL_ID] [--language auto|en] [--vocabulary "Term,Other term"] [--cleanup light|medium] [--notes-model OLLAMA_MODEL]
             Each manifest line is {"id", "language", "audio", "reference"}. Prints one JSON line per clip
             with the hypothesis and recognition seconds. Without --language, each clip uses its own language.
@@ -52,23 +53,19 @@ func run() async throws {
         print("Installed speaker detection at \(SpeakerDetection.directory.path).")
         return
     }
-    if arguments.count == 2, arguments[0] == "--find-speakers" {
-        try await findSpeakers(in: URL(fileURLWithPath: arguments[1]))
-        return
-    }
     var options: [String: String] = [:]
     var index = 0
     while index < arguments.count {
         let option = arguments[index]
-        guard ["--download-model", "--transcribe-file", "--bench", "--model", "--language", "--vocabulary", "--cleanup", "--notes-model"].contains(option),
+        guard ["--download-model", "--transcribe-file", "--bench", "--meeting", "--notes", "--model", "--language", "--vocabulary", "--cleanup", "--notes-model"].contains(option),
               index + 1 < arguments.count, !arguments[index + 1].hasPrefix("--"), options[option] == nil else {
             throw CLIError.usage("Invalid or repeated argument: \(option). Run --help for usage.")
         }
         options[option] = arguments[index + 1]
         index += 2
     }
-    guard options["--download-model"] != nil || options["--transcribe-file"] != nil || options["--bench"] != nil else {
-        throw CLIError.usage("Choose --download-model, --transcribe-file or --bench.")
+    guard options["--download-model"] != nil || options["--transcribe-file"] != nil || options["--bench"] != nil || options["--meeting"] != nil else {
+        throw CLIError.usage("Choose --download-model, --transcribe-file, --bench or --meeting.")
     }
     if let downloadID = options["--download-model"], let modelID = options["--model"], downloadID != modelID {
         throw CLIError.usage("Download and transcription must select the same model.")
@@ -101,6 +98,12 @@ func run() async throws {
         settings.notesModel = options["--notes-model"]
         try await bench(manifest: URL(fileURLWithPath: (path as NSString).expandingTildeInPath), provider: provider,
                         language: options["--language"], vocabulary: vocabulary, settings: settings)
+    } else if let path = options["--meeting"] {
+        var settings = AppSettings()
+        settings.notesModel = options["--notes-model"]
+        try await meeting(URL(fileURLWithPath: (path as NSString).expandingTildeInPath), provider: provider,
+                          language: options["--language"].flatMap { $0 == "auto" ? nil : $0 }, vocabulary: vocabulary,
+                          notes: options["--notes"].map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }, settings: settings)
     } else if let path = options["--transcribe-file"] {
         let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
         let language = options["--language"].flatMap { $0 == "auto" ? nil : $0 }
@@ -129,29 +132,51 @@ struct BenchResult: Codable {
     var cleanupSeconds: Double?
 }
 
+/// Transcribes call audio chunk by chunk as a meeting does, then labels voices and optionally writes notes.
 @MainActor
-func findSpeakers(in url: URL) async throws {
-    guard SpeakerDetection.isReady else { throw CLIError.usage("Speaker detection needs macOS 15. Install it with --download-speaker-detection.") }
-    let voices = try SpeakerRecording()
-    defer { voices.discard() }
-    let source = try AVAudioFile(forReading: url)
-    let format = source.processingFormat
-    let frames = AVAudioFrameCount(format.sampleRate * 5)
-    var starts: [(segment: UUID, start: TimeInterval)] = []
-    while source.framePosition < source.length, let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames) {
-        let start = Double(source.framePosition) / format.sampleRate
-        try source.read(into: buffer, frameCount: frames)
-        let piece = FileManager.default.temporaryDirectory.appending(path: "betterwispr-meeting-\(UUID().uuidString).caf")
-        defer { try? FileManager.default.removeItem(at: piece) }
-        try AVAudioFile(forWriting: piece, settings: format.settings, commonFormat: format.commonFormat, interleaved: format.isInterleaved).write(from: buffer)
-        let segment = UUID()
-        try await voices.append(piece, for: segment)
-        starts.append((segment, start))
+func meeting(_ url: URL, provider: any SpeechProvider, language: String?, vocabulary: [String], notes: URL?, settings: AppSettings) async throws {
+    if url.pathExtension == "jsonl" {
+        guard let notes else { throw CLIError.usage("Pass --notes OUT.md to write notes from saved segments.") }
+        let segments = try String(contentsOf: url, encoding: .utf8).split(whereSeparator: \.isNewline).map { try JSONDecoder().decode(MeetingSegment.self, from: Data($0.utf8)) }
+        return try await write(notes: notes, for: segments, language: language, settings: settings)
     }
-    let participants = try await voices.participants()
-    for (segment, start) in starts {
-        print(String(format: "%02d:%02d\t", Int(start) / 60, Int(start) % 60) + (participants[segment].map { "Speaker \($0)" } ?? "no voice"))
+    let voices = SpeakerDetection.isReady ? try SpeakerRecording() : nil
+    defer { voices?.discard() }
+    if voices == nil { FileHandle.standardError.write(Data("Speaker detection isn’t installed, so voices stay unlabeled.\n".utf8)) }
+    var segments: [MeetingSegment] = []
+    let chunks = try MeetingRecorder.chunks(of: url, speaker: .them)
+    defer { for chunk in chunks { try? FileManager.default.removeItem(at: chunk.url) } }
+    func segment(of audio: URL, start: TimeInterval, duration: TimeInterval) async throws -> MeetingSegment? {
+        let raw = try await provider.transcribe(audioURL: audio, language: language, vocabulary: vocabulary)
+        let text = TranscriptCleaner.clean(raw, language: language)
+        return text.isEmpty ? nil : MeetingSegment(speaker: .them, start: start, duration: duration, text: text, rawText: raw)
     }
+    for chunk in chunks where chunk.hasSpeech {
+        do {
+            guard let segment = try await segment(of: chunk.url, start: chunk.start, duration: chunk.duration) else { continue }
+            segments.append(segment)
+            try await voices?.append(chunk.url, for: segment.id)
+        } catch {
+            FileHandle.standardError.write(Data("Skipped \(Int(chunk.start)) s: \(error.localizedDescription)\n".utf8))
+        }
+    }
+    if let voices {
+        segments = try await SpeakerDetection.label(segments, voices: voices, transcribe: segment)
+    }
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = .withoutEscapingSlashes
+    for segment in segments { print(String(decoding: try encoder.encode(segment), as: UTF8.self)) }
+    guard let notes else { return }
+    try await write(notes: notes, for: segments, language: language, settings: settings)
+}
+
+@MainActor
+func write(notes: URL, for segments: [MeetingSegment], language: String?, settings: AppSettings) async throws {
+    var record = Meeting(segments: segments, modelName: "", language: language ?? "auto")
+    let generated = try await MeetingNotesGenerator.generate(segments: segments, userNotes: "", settings: settings) { _, _ in }
+    record.title = generated.title
+    record.summary = generated.summary
+    try record.markdown.write(to: notes, atomically: true, encoding: .utf8)
 }
 
 /// Transcribes every manifest clip with the prepared provider, one JSON line per clip on stdout.

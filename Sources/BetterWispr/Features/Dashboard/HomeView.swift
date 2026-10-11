@@ -393,10 +393,11 @@ private struct SetupTiles: View {
     var body: some View {
         let speech = model.selectedModel
         let installed = model.isModelInstalled(speech)
+        let onOlderParakeet = ["parakeet-v3", "parakeet-v2"].contains(speech.id)
         let tiles = [
             SetupTile(
                 symbol: "cpu", title: "Speech model", value: speech.name,
-                detail: speech.connection.map { "Sends audio to \($0.endpoint)" } ?? (installed ? "Runs on this Mac" : "Not downloaded yet"),
+                detail: speech.connection.map { "Sends audio to \($0.endpoint)" } ?? (installed ? (onOlderParakeet ? "Try Parakeet Ultra" : "Runs on this Mac") : "Not downloaded yet"),
                 ready: installed
             ) { model.selectedPage = .models },
             SetupTile(

@@ -5,7 +5,11 @@ import {
   DropdownMenuTrigger,
 } from "@betterwispr-frontend/ui/components/dropdown-menu";
 import { track } from "@databuddy/sdk";
-import { CaretDownIcon, DownloadSimpleIcon } from "@phosphor-icons/react";
+import {
+  ArrowUpRightIcon,
+  CaretDownIcon,
+  DownloadSimpleIcon,
+} from "@phosphor-icons/react";
 
 import AppleLogo from "@/components/apple-logo";
 import { DOWNLOAD_URL, INTEL_DOWNLOAD_URL } from "@/lib/links";
@@ -14,6 +18,14 @@ const DOWNLOADS = [
   { href: DOWNLOAD_URL, chip: "Apple Silicon", macs: "M1 or newer" },
   { href: INTEL_DOWNLOAD_URL, chip: "Intel", macs: "Intel-based Macs" },
 ];
+
+const FEATURED_QUOTE = {
+  name: "GodelNumbering",
+  postUrl: "https://news.ycombinator.com/item?id=50046250",
+  before:
+    "Just tried it out as I was looking for something that does this exact thing well (macbook). So far I dictated about 5 different things in different contexts, ",
+  highlight: "it worked without a single error!",
+};
 
 export default function DownloadCTA({
   compact = false,
@@ -94,7 +106,32 @@ export function ClosingCTA() {
         Local speech models. The apps you already use. A little more room to
         think.
       </p>
-      <div className="mt-8">
+      <figure className="mx-auto mt-12 max-w-2xl">
+        <figcaption className="flex flex-col items-center">
+          <span className="text-base font-semibold text-zinc-900">
+            {FEATURED_QUOTE.name}
+          </span>
+          <a
+            href={FEATURED_QUOTE.postUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex min-h-6 items-center gap-1 text-xs text-zinc-500 hover:text-zinc-900"
+            aria-label={`Read ${FEATURED_QUOTE.name}’s comment on Hacker News (opens in a new tab)`}
+          >
+            on Hacker News
+            <ArrowUpRightIcon className="size-3" aria-hidden="true" />
+          </a>
+        </figcaption>
+        <blockquote className="mt-6 font-serif text-2xl leading-snug text-zinc-800 italic sm:text-3xl">
+          <span className="text-yellow-700">“</span>
+          {FEATURED_QUOTE.before}
+          <mark className="rounded-sm bg-yellow-200/70 box-decoration-clone px-1 text-inherit">
+            {FEATURED_QUOTE.highlight}
+          </mark>
+          <span className="text-yellow-700">”</span>
+        </blockquote>
+      </figure>
+      <div className="mt-10">
         <DownloadCTA />
       </div>
       <p className="mt-4 text-sm text-zinc-600">
