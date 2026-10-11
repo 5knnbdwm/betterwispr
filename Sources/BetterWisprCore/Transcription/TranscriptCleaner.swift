@@ -90,7 +90,7 @@ public enum TranscriptCleaner {
         return setOffBefore && setOffAfter
     }
 
-    /// Turns "to Pune, sorry, no, to Delhi" or "in Pune sorry in Delhi" into the repair when it restarts on a recent word, or on a pronoun and the word after it.
+    /// Turns "to Pune, sorry, no, to Delhi" or "in Pune sorry in Delhi" into the repair when it restarts on a recent word, or on a pronoun and the word after it, and ends its clause about as soon as the words it replaces.
     private static func dropRepairs(_ tokens: [Token]) -> [Token] {
         var tokens = tokens
         var i = 1
@@ -100,13 +100,18 @@ public enum TranscriptCleaner {
             guard let onset = repairOnset(tokens, at: i),
                   let anchor = (sentenceStart..<i).last(where: { tokens[$0].word.lowercased() == tokens[onset].word.lowercased() }),
                   !subjectPronouns.contains(String(tokens[anchor].word.lowercased().prefix { $0 != "'" && $0 != "’" }))
-                    || (onset + 1 < tokens.count && tokens[anchor + 1].word.lowercased() == tokens[onset + 1].word.lowercased())
+                    || (onset + 1 < tokens.count && tokens[anchor + 1].word.lowercased() == tokens[onset + 1].word.lowercased()),
+                  closesClause(tokens, from: onset, within: i - anchor + 1)
             else { i += 1; continue }
             tokens[anchor].trailing = tokens[onset].trailing
             tokens.removeSubrange(anchor + 1...onset)
             i = anchor + 1
         }
         return tokens
+    }
+
+    private static func closesClause(_ tokens: [Token], from start: Int, within length: Int) -> Bool {
+        tokens.count - start <= length || tokens[start...].prefix(length).contains { $0.trailing.contains(where: clauseBreaks.contains) }
     }
 
     /// The first repair word after a cue that says "no" or "I mean" and is set off by commas or paired with "sorry", or after a lone "sorry" that restarts on a place or time word.
