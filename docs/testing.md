@@ -6,6 +6,39 @@ version, Mac model, input device, engine/model and date for future runs. A
 successful build does not verify microphone capture, clipboard behavior or
 general recognition accuracy.
 
+## Accuracy and meetings check, 2026-10-12, version 0.1.5
+
+Apple M5, macOS 27.0.1, release builds of `BetterWisprCLI`. Every check below
+ran through the CLI, which reuses the app's providers, cleanup, meeting chunker,
+Speaker detection and notes writer. [Accuracy](accuracy.md) has the numbers.
+
+- `--bench` on 597 held-out EdAcc segments with Parakeet v3 and Ultra, Light
+  cleanup, with and without vocabulary, before and after the phrase booster and
+  cleanup changes.
+- `--meeting` on four 10-minute AMI meetings and six EdAcc calls with v3 and
+  Ultra, scored by `scripts/evaluate_meetings.py`. It replaces
+  `--find-speakers` from the check below. Rebuilding the corpus with
+  `fetch_bench_corpus.py --meetings` gave the same AMI speaker turns and the
+  same number of samples, with a few samples differing by 1 in 16 bits.
+- `--meeting SEGMENTS.jsonl --notes` with Apple Intelligence on seven meetings,
+  three runs each, before and after the notes changes.
+- Light cleanup re-run on the raw text of 290 dictations saved on this Mac.
+- `swift build`, `swift test`, `python3 Tests/evaluate_check.py`,
+  `python3 Tests/release_check.py` and `./scripts/build-app.sh` passed on a
+  copy of exactly the committed files, 111 tests in `swift test`.
+
+Not exercised in the app: the global shortcut, microphone capture and paste
+with the changed cleanup and booster, a live meeting with call audio, Speaker
+detection and notes after a real call, and the Home "Try Parakeet Ultra" detail
+and Recommended badge.
+
+- [ ] With Parakeet v3 selected, Home shows "Try Parakeet Ultra" and Models
+  marks Ultra Recommended. Nothing downloads until Download is clicked.
+- [ ] Add "Claude" to Vocabulary and dictate "it runs in the cloud". "cloud"
+  stays.
+- [ ] Dictate "Let's meet at 5, no, at 6 pm" with Light cleanup. Expect "Let's
+  meet at 6 pm".
+
 ## Speaker detection check, 2026-10-11, version 0.1.5
 
 macOS 27.0.1. `swift run BetterWisprCLI --download-speaker-detection` installed
