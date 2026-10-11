@@ -30,6 +30,14 @@ Sources/
 
 ## Dictation flow
 
+The menu bar and global shortcut remain available after the last window closes.
+The app delegate starts shortcut and panel services at launch, independently of
+dashboard presentation. `AppSettings.showInDock` defaults to true for new and
+older workspaces. The bundle launches as an `LSUIElement` agent to avoid a Dock
+icon flashing when the saved preference is off; the delegate restores `.regular`
+or `.accessory` activation policy before launch finishes. Settings changes apply
+the policy immediately and persist through the existing workspace store.
+
 1. A dashboard action or the global shortcut (**Option–Space** unless changed in
    Settings) starts a session. Capture the previously focused external app before
    showing the nonactivating capsule.

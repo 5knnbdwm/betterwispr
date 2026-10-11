@@ -11,6 +11,7 @@
     <key>CFBundleShortVersionString</key><string>0.1.0</string>
     <key>CFBundleVersion</key><string>1</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
+    <key>LSUIElement</key><true/>
     <key>NSHighResolutionCapable</key><true/>
     <key>NSAudioCaptureUsageDescription</key><string>BetterWispr records the other side of a meeting when you start meeting notes. Audio is processed on this Mac or sent to the API connection you select. Temporary recordings are deleted afterwards.</string>
     <key>NSMicrophoneUsageDescription</key><string>BetterWispr records your microphone when you start dictation. Audio is processed on this Mac or sent to the API connection you select. Temporary recordings are deleted afterwards.</string>

@@ -26,6 +26,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var detectMeetings: Bool = true
     public var theme: AppTheme = .dark
     public var launchAtLogin: Bool = false
+    public var showInDock: Bool = true
     public var silenceThreshold: Float = 0.002
     public var dictationMode: DictationMode = .hold
     public var shortcut: DictationShortcut = .optionSpace
@@ -98,6 +99,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         detectMeetings = try container.decodeIfPresent(Bool.self, forKey: .detectMeetings) ?? true
         theme = try container.decodeIfPresent(AppTheme.self, forKey: .theme) ?? .dark
         launchAtLogin = try container.decode(Bool.self, forKey: .launchAtLogin)
+        showInDock = try container.decodeIfPresent(Bool.self, forKey: .showInDock) ?? true
         silenceThreshold = try container.decode(Float.self, forKey: .silenceThreshold)
         dictationMode = try container.decodeIfPresent(DictationMode.self, forKey: .dictationMode) ?? .hold
         shortcut = try container.decodeIfPresent(DictationShortcut.self, forKey: .shortcut) ?? .optionSpace

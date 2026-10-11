@@ -40,6 +40,11 @@ If paste can't safely reach the previous app, the text is copied to your
 clipboard instead, so you never lose a dictation. Recordings stop automatically
 after two minutes.
 
+To keep BetterWispr in the background without a Dock icon, turn off
+**Settings → App → Show in Dock**, then close its window. **⌥ Space** still
+works. Use the menu bar icon to reopen the dashboard or quit. Enable
+**Open at login** in the same settings section to launch it when your Mac starts.
+
 ## Bring your own model
 
 **Models → Bring your own model → Add connection.** Choose a provider, enter the
