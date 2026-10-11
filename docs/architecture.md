@@ -110,7 +110,19 @@ tabs backed by the existing meeting fields.
 3. One serial queue transcribes chunks in order, applies the same cleanup and
    vocabulary as dictation, keeps raw and final text, inserts the segment by start
    time and saves. A failed chunk shows a message and the meeting continues.
-4. Stopping closes both sources, transcribes the remaining chunks, then writes
+   When speaker detection is installed and the Mac runs macOS 15 or later
+   (FluidAudio issue 878 crashes its Core ML path on macOS 14), each transcribed
+   "Them" chunk is also resampled to 16 kHz mono and appended to one
+   `SpeakerRecording` file, which remembers where each segment sits in it.
+4. Stopping closes both sources and transcribes the remaining chunks. If a
+   `SpeakerRecording` exists, FluidAudio's `OfflineDiarizerManager` (pyannote
+   community-1 with VBx clustering) runs on it with models that
+   `SpeakerDetection.loadModels` reads from disk; it never downloads. Each "Them"
+   segment gets the voice heard longest within it, numbered 1, 2, 3 by first
+   appearance, in `MeetingSegment.participant`. Skip or an error leaves the
+   segments as "Them". Names typed above the transcript are saved in
+   `Meeting.participantNames`, and `MeetingSegment.label(names:)` renders the
+   transcript, Markdown and notes input with them. Then it writes
    notes with the explicitly chosen notes model: Apple Intelligence by default,
    local Ollama, Claude Code, Codex, or an OpenAI-compatible chat API. Transcription
    selection remains independent. `NotesWriter` combines the transcript and all
@@ -120,7 +132,9 @@ tabs backed by the existing meeting fields.
    transcript, thoughts and previous summary remain saved.
 5. Each meeting is one JSON file in `Application Support/BetterWispr/Meetings`.
    Unreadable files are reported and left untouched. Chunk files are deleted after
-   transcription, on cancel and at quit, and leftovers are removed at launch.
+   transcription, on cancel and at quit, and leftovers are removed at launch. The
+   speaker detection file is deleted after detection, on cancel and at quit, and
+   shares the chunk prefix, so launch cleanup removes it too.
 
 A session token guards every continuation, so a stopped or quit meeting never
 receives a late segment or summary.

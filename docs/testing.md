@@ -6,6 +6,31 @@ version, Mac model, input device, engine/model and date for future runs. A
 successful build does not verify microphone capture, clipboard behavior or
 general recognition accuracy.
 
+## Speaker detection check, 2026-10-11, version 0.1.5
+
+macOS 27.0.1. `swift run BetterWisprCLI --download-speaker-detection` installed
+21 MB into `~/Library/Application Support/FluidAudio/Models/speaker-diarization`
+and its verification load passed. `--find-speakers` ran the app's
+`SpeakerRecording` path on two 35.5 second WAV files made with `say`, cut into
+5-second pieces. Lines were Samantha (0 to 9.8 s), Daniel (to 21.6 s), Samantha
+(to 26.6 s) and a third voice. With Rishi as the third voice the pieces were
+labelled 1, 1, 2, 2, 1, 3, 3, 3, as expected. With Karen as the third voice,
+Karen was merged into Samantha (1, 1, 2, 2, 1, 1, 1, 1): two similar synthetic
+female voices became one speaker. Each run took about 3 seconds and left no
+temporary files. These are synthetic voices, not people on a call. A real call,
+Skip, quitting during detection, renaming in the app and macOS 14 hiding the
+download have not been exercised.
+
+- [ ] Install Speaker detection in Models on macOS 15 or later. Hold a call with at
+  least two remote people, stop the meeting and check that "Telling the speakers
+  on the call apart" appears, then Speaker 1, Speaker 2 labels and name fields.
+  Type a name and check the transcript, Copy transcript and regenerated notes.
+- [ ] Press Skip during detection. The meeting keeps Them and writes notes.
+- [ ] Quit during detection, relaunch and check no `betterwispr-meeting-voices-`
+  file is left in the temporary folder.
+- [ ] On macOS 14, Models shows Speaker detection as needing macOS 15 and offers no
+  download.
+
 ## Live meeting capture recheck, 2026-10-10, version 0.1.4
 
 Same Mac, model and kind of script as the check below, after the start, idle

@@ -67,6 +67,7 @@ struct ModelInstallation: Equatable {
 final class AppModel {
     static let onboardingVersion = 1
     static let phraseBoosterID = "phrase-booster"
+    static let speakerDetectionID = "speaker-detection"
     static let unpastedCardSeconds = 5.0
     static let cancellationSeconds = 5.0
 
@@ -99,6 +100,7 @@ final class AppModel {
     let meetingDetector: MeetingDetector
     var installation: ModelInstallation?
     var phraseBoosterInstalled = false
+    var speakerDetectionInstalled = false
     var microphoneGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
     var accessibilityGranted = AXIsProcessTrusted()
     var microphones: [AudioInputDevice] = []
@@ -535,6 +537,15 @@ final class AppModel {
         }
     }
 
+    func installSpeakerDetection() {
+        guard !isInstalling else { return }
+        install(id: Self.speakerDetectionID, name: "speaker detection") { report in
+            try await SpeakerDetection.install { fraction in Task { @MainActor in report(fraction * 0.9) } }
+        } completion: { [weak self] in
+            self?.statusMessage = "New meetings will tell the speakers on the call apart."
+        }
+    }
+
     func cancelInstallation() {
         installTask?.cancel()
         installation = nil
@@ -671,6 +682,7 @@ final class AppModel {
     private func refreshModels() {
         installedModelIDs = Set(models.filter { WhisperKitProvider.isInstalled($0) || ParakeetProvider.isInstalled($0) }.map(\.id))
         phraseBoosterInstalled = ParakeetProvider.isPhraseBoosterInstalled()
+        speakerDetectionInstalled = SpeakerDetection.isInstalled()
         modelRevision += 1
     }
 

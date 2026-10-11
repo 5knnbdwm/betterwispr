@@ -6,6 +6,11 @@ All notable changes to BetterWispr are listed here. The format follows
 
 ## [0.1.5] - 2026-10-11
 
+### Added
+- Meeting notes can tell the people on the other side of a call apart. Download Speaker detection (about 21 MB) under Meeting speakers in Models. When a meeting ends, BetterWispr listens back to the call audio on this Mac and labels each line Speaker 1, Speaker 2 and so on, in the order they first spoke. The notes model gets the same labels, so the summary can say who said what. While it works, the notetaker shows "Telling the speakers on the call apart" with a Skip button that goes straight to the notes. It needs macOS 15 or later and the call audio the notetaker records on macOS 14.2 or later. Your microphone is still Me, so people in the room with you are not separated. A line in which two people talk goes to whoever spoke longer. Meetings recorded before the download keep Them.
+- Name the speakers. Fields above the transcript let you type a name for each detected speaker, and the name replaces "Speaker 2" in the transcript, in Copy and Copy transcript, and in notes you generate after that. Renaming marks the summary as out of date so you can regenerate it with the names.
+- `BetterWisprCLI --download-speaker-detection` installs the speaker detection models, and `--find-speakers PATH` splits an audio file into 5-second pieces and prints which speaker talks in each.
+
 ### Fixed
 - Light cleanup now turns "I live in Delhi no sorry I live in Ahmedabad" into "I live in Ahmedabad". A "no sorry" or "sorry, no" counts as a correction even when the speech model writes no commas, and a correction can restart on "I" or "we" when the word after it repeats too. "Should we go, no, we should stay" and "I said no sorry I can't come" stay as you said them.
 

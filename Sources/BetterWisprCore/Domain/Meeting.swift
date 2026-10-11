@@ -14,14 +14,24 @@ public struct MeetingSegment: Codable, Identifiable, Equatable, Sendable {
     public var duration: TimeInterval
     public var text: String
     public var rawText: String
+    /// Which voice on the call said this, numbered by first appearance; nil for Me and before speakers are found.
+    public var participant: Int?
 
-    public init(id: UUID = UUID(), speaker: Speaker, start: TimeInterval, duration: TimeInterval, text: String, rawText: String) {
+    public init(id: UUID = UUID(), speaker: Speaker, start: TimeInterval, duration: TimeInterval, text: String, rawText: String, participant: Int? = nil) {
         self.id = id
         self.speaker = speaker
         self.start = start
         self.duration = duration
         self.text = text
         self.rawText = rawText
+        self.participant = participant
+    }
+
+    /// "Me", "Them", or the name given to this voice, else "Speaker 2".
+    public func label(names: [Int: String]? = nil) -> String {
+        guard speaker == .them, let participant else { return speaker.label }
+        let name = names?[participant]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return name.isEmpty ? "Speaker \(participant)" : name
     }
 
     public var timestamp: String {
@@ -70,6 +80,8 @@ public struct Meeting: Codable, Identifiable, Equatable, Sendable {
     public var segments: [MeetingSegment]
     public var modelName: String
     public var language: String
+    /// Names the user gave voices on the call, by participant number.
+    public var participantNames: [Int: String]?
 
     public init(id: UUID = UUID(), title: String = "", createdAt: Date = .now, duration: TimeInterval = 0, notes: String = "",
                 summary: MeetingSummary? = nil, segments: [MeetingSegment] = [], modelName: String, language: String) {
@@ -104,8 +116,11 @@ public struct Meeting: Codable, Identifiable, Equatable, Sendable {
     }
 
     public var transcript: String {
-        transcriptSegments.map { "[\($0.timestamp)] \($0.speaker.label): \($0.text)" }.joined(separator: "\n")
+        transcriptSegments.map { "[\($0.timestamp)] \($0.label(names: participantNames)): \($0.text)" }.joined(separator: "\n")
     }
+
+    /// Voices found on the call, in the order they first spoke.
+    public var participants: [Int] { Set(segments.compactMap(\.participant)).sorted() }
 
     /// Keep the original segments on disk; hide remote speech picked up again by the microphone.
     public var transcriptSegments: [MeetingSegment] { MeetingTranscript.removingEchoes(from: segments) }

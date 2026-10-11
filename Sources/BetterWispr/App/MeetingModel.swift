@@ -3,12 +3,12 @@ import BetterWisprCore
 import Observation
 
 enum MeetingActivity: Equatable {
-    case idle, starting(UUID), recording(UUID), finishing(UUID), generating(UUID)
+    case idle, starting(UUID), recording(UUID), finishing(UUID), findingSpeakers(UUID), generating(UUID)
 
     var meetingID: UUID? {
         switch self {
         case .idle: nil
-        case .starting(let id), .recording(let id), .finishing(let id), .generating(let id): id
+        case .starting(let id), .recording(let id), .finishing(let id), .findingSpeakers(let id), .generating(let id): id
         }
     }
 
@@ -49,6 +49,8 @@ final class MeetingModel {
     @ObservationIgnored private var drain: Task<Void, Never>?
     @ObservationIgnored private var work: Task<Void, Never>?
     @ObservationIgnored private var ticker: Task<Void, Never>?
+    @ObservationIgnored private var voices: SpeakerRecording?
+    @ObservationIgnored private var detection: Task<[UUID: Int], Error>?
     @ObservationIgnored private var saves: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var heard: (me: Bool, them: Bool) = (false, false)
     @ObservationIgnored private var levelsShownAt = ContinuousClock.now
@@ -86,6 +88,8 @@ final class MeetingModel {
         systemAudioIssue = nil
         showsCallAudioHint = false
         heard = (false, false)
+        voices?.discard()
+        voices = SpeakerDetection.isReady ? try? SpeakerRecording() : nil
         elapsed = 0
         pendingChunks = 0
         work = Task { [weak self] in
@@ -111,6 +115,7 @@ final class MeetingModel {
                 self.recorder.cancel()
                 self.ticker?.cancel()
                 self.discardQueue()
+                self.discardVoices()
                 self.provider = nil
                 self.activity = .idle
                 if !(error is CancellationError) { self.message = "Couldn’t start the meeting. \(error.localizedDescription)" }
@@ -125,6 +130,7 @@ final class MeetingModel {
             work?.cancel()
             recorder.cancel()
             discardQueue()
+            discardVoices()
             provider = nil
             activity = .idle
             discardIfEmpty(id)
@@ -146,6 +152,11 @@ final class MeetingModel {
             self.edit(id, save: false) { $0.duration = duration }
             self.saveNow(id)
             self.provider = nil
+            if let voices = self.voices {
+                self.voices = nil
+                await self.findSpeakers(in: id, from: voices, token: token)
+                guard self.session == token else { return }
+            }
             if self.notesAvailability == .available, self.meeting(id)?.hasContent == true {
                 await self.writeNotes(for: id, token: token)
             } else {
@@ -160,6 +171,8 @@ final class MeetingModel {
     func refreshOllamaModels() async {
         ollamaModels = (try? await Ollama.installedModels()) ?? []
     }
+
+    func skipSpeakers() { detection?.cancel() }
 
     func generateNotes(_ id: UUID) {
         guard activity == .idle else { return }
@@ -227,6 +240,7 @@ final class MeetingModel {
         work?.cancel()
         drain?.cancel()
         drain = nil
+        discardVoices()
         provider?.cancel()
         provider = nil
         queue = []
@@ -236,6 +250,33 @@ final class MeetingModel {
         for pending in Array(saves.keys) { saveNow(pending) }
         if let id { saveNow(id) }
         activity = .idle
+    }
+
+    private func findSpeakers(in id: UUID, from voices: SpeakerRecording, token: UUID) async {
+        defer { voices.discard() }
+        activity = .findingSpeakers(id)
+        let detection = Task { try await voices.participants() }
+        self.detection = detection
+        do {
+            let participants = try await detection.value
+            guard session == token else { return }
+            edit(id, save: false) { meeting in
+                for index in meeting.segments.indices { meeting.segments[index].participant = participants[meeting.segments[index].id] }
+            }
+            saveNow(id)
+        } catch {
+            guard session == token else { return }
+            if !(error is CancellationError), !detection.isCancelled {
+                message = "Couldn’t tell the speakers on the call apart. \(error.localizedDescription)"
+            }
+        }
+        self.detection = nil
+    }
+
+    private func discardVoices() {
+        detection?.cancel()
+        voices?.discard()
+        voices = nil
     }
 
     private func writeNotes(for id: UUID, token: UUID) async {
@@ -249,7 +290,7 @@ final class MeetingModel {
         let sourceFingerprint = meeting.summarySourceFingerprint
         let modelName = notesSettings.notesModelName
         do {
-            let notes = try await MeetingNotesGenerator.generate(segments: meeting.segments, userNotes: meeting.notes, settings: notesSettings) { [weak self] step, total in
+            let notes = try await MeetingNotesGenerator.generate(segments: meeting.segments, names: meeting.participantNames, userNotes: meeting.notes, settings: notesSettings) { [weak self] step, total in
                 guard let self, self.session == token else { return }
                 self.generationStep = (step, total)
             }
@@ -305,10 +346,10 @@ final class MeetingModel {
                 guard session == token else { return }
                 let text = VocabularyProcessor.apply(vocabulary, to: TranscriptCleaner.clean(raw, language: language))
                 guard !text.isEmpty else { continue }
-                edit(id, save: false) {
-                    $0.insert(MeetingSegment(speaker: chunk.speaker, start: chunk.start, duration: chunk.duration, text: text, rawText: raw))
-                }
+                let segment = MeetingSegment(speaker: chunk.speaker, start: chunk.start, duration: chunk.duration, text: text, rawText: raw)
+                edit(id, save: false) { $0.insert(segment) }
                 saveNow(id)
+                if chunk.speaker == .them, let voices { try? await voices.append(chunk.url, for: segment.id) }
             } catch {
                 guard session == token else { return }
                 if !(error is CancellationError) {

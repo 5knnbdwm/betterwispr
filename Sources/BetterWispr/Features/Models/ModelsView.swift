@@ -76,6 +76,39 @@ struct ModelsView: View {
             }
 
             Section {
+                if !SpeakerDetection.isSupported {
+                    LabeledContent("Speaker detection", value: "Needs macOS 15")
+                } else if model.speakerDetectionInstalled {
+                    Label("Speaker detection is on. After each meeting, BetterWispr tells the voices on the call apart on this Mac and labels them Speaker 1, Speaker 2 and so on. Rename them above the transcript.", systemImage: "checkmark.circle")
+                        .foregroundStyle(.secondary)
+                } else {
+                    let installation = model.installation?.id == AppModel.speakerDetectionID ? model.installation : nil
+                    let installing = installation != nil && installation?.failure == nil
+                    LabeledContent {
+                        if installing {
+                            Button("Cancel", action: model.cancelInstallation)
+                        } else {
+                            Button(installation == nil ? "Download" : "Retry") { model.installSpeakerDetection() }
+                                .disabled(model.isInstalling)
+                        }
+                    } label: {
+                        Text("Speaker detection")
+                        Text("Tells the voices on the other side of a call apart after each meeting, so the transcript and notes show who said what. Runs on this Mac.")
+                    }
+                    if let installation {
+                        if installing { ProgressView(value: installation.progress) }
+                        Text(installation.failure.map { "Download stopped: \($0)" } ?? installation.progressLabel)
+                            .font(.caption)
+                            .foregroundStyle(installing ? AnyShapeStyle(.secondary) : AnyShapeStyle(.red))
+                    }
+                }
+            } header: {
+                Text("Meeting speakers")
+            } footer: {
+                Text("Your microphone is always Me. People in the room with you share your microphone and stay part of Me.")
+            }
+
+            Section {
                 LabeledContent {
                     Button("Open Vocabulary") { model.selectedPage = .vocabulary }
                 } label: {

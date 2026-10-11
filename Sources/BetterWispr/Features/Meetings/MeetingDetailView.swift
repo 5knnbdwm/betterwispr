@@ -139,6 +139,12 @@ struct MeetingDetailView: View {
                     progress("Transcribing the last few seconds…")
                     Spacer(minLength: 0)
                 }
+            case .findingSpeakers(let active) where active == id:
+                controlBar {
+                    progress("Telling the speakers on the call apart…")
+                    Spacer(minLength: 8)
+                    Button("Skip", action: meetings.skipSpeakers)
+                }
             case .generating(let active) where active == id:
                 controlBar {
                     if let (step, total) = meetings.generationStep, total > 1 {
@@ -372,6 +378,7 @@ struct MeetingDetailView: View {
                 TextField("Find in transcript", text: $transcriptQuery)
                     .textFieldStyle(.roundedBorder)
             }
+            if !meeting.participants.isEmpty { speakers(meeting) }
         }
 
         if meeting.segments.isEmpty, !isRecording {
@@ -396,7 +403,7 @@ struct MeetingDetailView: View {
             }
             LazyVStack(alignment: .leading, spacing: 18) {
                 ForEach(segments) { segment in
-                    SegmentRow(segment: segment).id(segment.id)
+                    SegmentRow(segment: segment, label: segment.label(names: meeting.participantNames)).id(segment.id)
                 }
             }
             if isRecording { listening(meeting) }
@@ -430,6 +437,29 @@ struct MeetingDetailView: View {
             .font(.callout)
             .id(Self.listeningAnchor)
         }
+    }
+
+    private func speakers(_ meeting: Meeting) -> some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), alignment: .leading)], alignment: .leading, spacing: 8) {
+            ForEach(meeting.participants, id: \.self) { number in
+                HStack(spacing: 6) {
+                    Circle().fill(voiceColor(number)).frame(width: 6, height: 6)
+                        .accessibilityHidden(true)
+                    TextField("Speaker \(number)", text: participantName(number))
+                        .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel("Name for speaker \(number)")
+                }
+            }
+        }
+        .font(.callout)
+        .help("Name the voices on the call. Names appear in the transcript and the notes.")
+    }
+
+    private func participantName(_ number: Int) -> Binding<String> {
+        Binding(
+            get: { meetings.meeting(id)?.participantNames?[number] ?? "" },
+            set: { value in meetings.edit(id) { $0.participantNames = ($0.participantNames ?? [:]).merging([number: value]) { $1 } } }
+        )
     }
 
     private func text(_ field: WritableKeyPath<Meeting, String>) -> Binding<String> {
@@ -485,15 +515,22 @@ private struct MeetingClock: View {
     }
 }
 
+private func voiceColor(_ participant: Int?) -> Color {
+    guard let participant else { return .blue }
+    let palette: [Color] = [.blue, .orange, .purple, .pink, .teal, .brown, .indigo, .mint]
+    return palette[max(0, participant - 1) % palette.count]
+}
+
 private struct SegmentRow: View {
     let segment: MeetingSegment
+    let label: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                Circle().fill(segment.speaker == .me ? Color.green : .blue).frame(width: 6, height: 6)
+                Circle().fill(segment.speaker == .me ? Color.green : voiceColor(segment.participant)).frame(width: 6, height: 6)
                     .accessibilityHidden(true)
-                Text(segment.speaker.label).fontWeight(.semibold)
+                Text(label).fontWeight(.semibold)
                 Text(segment.timestamp).foregroundStyle(.secondary).monospacedDigit()
             }
             .font(.caption)

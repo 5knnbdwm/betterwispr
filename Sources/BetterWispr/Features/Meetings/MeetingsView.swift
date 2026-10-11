@@ -286,6 +286,7 @@ private struct NoteRow: View {
         case .recording(meeting.id): "Recording"
         case .starting(meeting.id): "Starting"
         case .finishing(meeting.id): "Transcribing"
+        case .findingSpeakers(meeting.id): "Finding speakers"
         case .generating(meeting.id): "Writing summary"
         default: nil
         }

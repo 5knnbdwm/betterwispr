@@ -1,3 +1,4 @@
+@preconcurrency import AVFoundation
 import BetterWisprCore
 import Foundation
 
@@ -18,6 +19,10 @@ func run() async throws {
           --list-models
           --download-model MODEL_ID
           --download-phrase-booster
+          --download-speaker-detection
+          --find-speakers PATH
+            Splits the file into 5-second pieces as meetings do for call audio and prints which voice
+            speaks in each. Needs macOS 15 and --download-speaker-detection.
           --transcribe-file PATH [--model MODEL_ID] [--language en] [--vocabulary "Term,Other term"]
           --bench MANIFEST.jsonl [--model MODEL_ID] [--language auto|en] [--vocabulary "Term,Other term"] [--cleanup light|medium] [--notes-model OLLAMA_MODEL]
             Each manifest line is {"id", "language", "audio", "reference"}. Prints one JSON line per clip
@@ -25,7 +30,8 @@ func run() async throws {
             --cleanup adds the app's cleanup of English text; medium edits with Apple's on-device model
             or the named Ollama model.
 
-        Default model: parakeet-v3. Downloads only run with --download-model or --download-phrase-booster.
+        Default model: parakeet-v3. Downloads only run with --download-model, --download-phrase-booster
+        or --download-speaker-detection.
         Audio transcription loads existing local assets and never downloads them.
         """)
         return
@@ -39,6 +45,15 @@ func run() async throws {
     if arguments == ["--download-phrase-booster"] {
         try await ParakeetProvider.installPhraseBooster()
         print("Installed the Parakeet phrase booster at \(ParakeetProvider.phraseBoosterDirectory.path).")
+        return
+    }
+    if arguments == ["--download-speaker-detection"] {
+        try await SpeakerDetection.install()
+        print("Installed speaker detection at \(SpeakerDetection.directory.path).")
+        return
+    }
+    if arguments.count == 2, arguments[0] == "--find-speakers" {
+        try await findSpeakers(in: URL(fileURLWithPath: arguments[1]))
         return
     }
     var options: [String: String] = [:]
@@ -112,6 +127,31 @@ struct BenchResult: Codable {
     let seconds: Double
     var cleaned: String?
     var cleanupSeconds: Double?
+}
+
+@MainActor
+func findSpeakers(in url: URL) async throws {
+    guard SpeakerDetection.isReady else { throw CLIError.usage("Speaker detection needs macOS 15. Install it with --download-speaker-detection.") }
+    let voices = try SpeakerRecording()
+    defer { voices.discard() }
+    let source = try AVAudioFile(forReading: url)
+    let format = source.processingFormat
+    let frames = AVAudioFrameCount(format.sampleRate * 5)
+    var starts: [(segment: UUID, start: TimeInterval)] = []
+    while source.framePosition < source.length, let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames) {
+        let start = Double(source.framePosition) / format.sampleRate
+        try source.read(into: buffer, frameCount: frames)
+        let piece = FileManager.default.temporaryDirectory.appending(path: "betterwispr-meeting-\(UUID().uuidString).caf")
+        defer { try? FileManager.default.removeItem(at: piece) }
+        try AVAudioFile(forWriting: piece, settings: format.settings, commonFormat: format.commonFormat, interleaved: format.isInterleaved).write(from: buffer)
+        let segment = UUID()
+        try await voices.append(piece, for: segment)
+        starts.append((segment, start))
+    }
+    let participants = try await voices.participants()
+    for (segment, start) in starts {
+        print(String(format: "%02d:%02d\t", Int(start) / 60, Int(start) % 60) + (participants[segment].map { "Speaker \($0)" } ?? "no voice"))
+    }
 }
 
 /// Transcribes every manifest clip with the prepared provider, one JSON line per clip on stdout.
