@@ -71,7 +71,8 @@ optional; cards fall back to an initial. The source label and link come from
 "Post link unavailable". There is no X API, embed script,
 provider, or network fetch for testimonials. An empty list renders nothing;
 one to five posts use a responsive grid, and six or more use
-two scrolling rows with pause controls and a static reduced-motion layout.
+two scrolling rows that pause on hover or keyboard focus, with a static
+reduced-motion layout.
 
 `apps/web/src/components/ui/cards.tsx` contains the reusable component.
 `apps/web/src/components/ui/demo.tsx` exports a labeled preview with fictional

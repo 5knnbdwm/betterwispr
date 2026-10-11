@@ -195,7 +195,6 @@ try {
   const scrolling = renderTestimonials(Array.from({ length: 6 }, () => testimonial));
   assert.equal((scrolling.match(/<blockquote/g) ?? []).length, 12);
   assert.equal((scrolling.match(/aria-hidden="true" inert=""/g) ?? []).length, 2, "Marquee copies are hidden from assistive technology and keyboard navigation");
-  assert.ok(scrolling.includes('aria-pressed="false"'), "Scrolling has a pause control");
   const { default: TestimonialsDemo } = await vite.ssrLoadModule("/src/components/ui/demo.tsx");
   const demo = renderToStaticMarkup(createElement(TestimonialsDemo));
   assert.ok(demo.includes("not real endorsements") && !demo.includes("<a "));

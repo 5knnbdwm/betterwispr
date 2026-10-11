@@ -83,7 +83,7 @@
     height: auto;
     flex-shrink: 0;
   }
-  .testimonials-marquee:is(:hover, :focus-within, [data-paused="true"]) .testimonials-track {
+  .testimonials-marquee:is(:hover, :focus-within) .testimonials-track {
     animation-play-state: paused;
   }
   .testimonials-window:focus-within {
@@ -105,8 +105,7 @@
   .testimonials-track .testimonial-card {
     width: auto;
   }
-  .testimonials-group[aria-hidden="true"],
-  .testimonials-controls {
+  .testimonials-group[aria-hidden="true"] {
     display: none;
   }
 }

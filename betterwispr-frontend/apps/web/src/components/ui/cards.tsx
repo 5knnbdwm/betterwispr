@@ -1,6 +1,5 @@
 import { cn } from "@betterwispr-frontend/ui/lib/utils";
-import { ArrowUpRight, Pause, Play } from "lucide-react";
-import { useState } from "react";
+import { ArrowUpRight } from "lucide-react";
 
 export type Testimonial = {
   name: string;
@@ -82,7 +81,6 @@ export default function Testimonials({
   testimonials: readonly Testimonial[];
   preview?: boolean;
 }) {
-  const [paused, setPaused] = useState(false);
   if (testimonials.length === 0) return null;
 
   const scrolling = testimonials.length >= 6;
@@ -108,39 +106,25 @@ export default function Testimonials({
         </div>
 
         {scrolling ? (
-          <div className="testimonials-marquee mt-10" data-paused={paused}>
-            <div className="space-y-4">
-              {[testimonials.slice(0, midpoint), testimonials.slice(midpoint)].map((row, index) => (
-                <div className="testimonials-window overflow-hidden" key={index}>
-                  <div className={cn("testimonials-track flex w-max", index === 1 && "testimonials-track-reverse")}>
-                    {[false, true].map((duplicate) => (
-                      <div
-                        key={String(duplicate)}
-                        className="testimonials-group flex gap-4 pr-4"
-                        aria-hidden={duplicate || undefined}
-                        inert={duplicate || undefined}
-                      >
-                        {row.map((testimonial, cardIndex) => (
-                          <TestimonialCard key={cardIndex} testimonial={testimonial} preview={preview} />
-                        ))}
-                      </div>
-                    ))}
-                  </div>
+          <div className="testimonials-marquee mt-10 space-y-4">
+            {[testimonials.slice(0, midpoint), testimonials.slice(midpoint)].map((row, index) => (
+              <div className="testimonials-window overflow-hidden" key={index}>
+                <div className={cn("testimonials-track flex w-max", index === 1 && "testimonials-track-reverse")}>
+                  {[false, true].map((duplicate) => (
+                    <div
+                      key={String(duplicate)}
+                      className="testimonials-group flex gap-4 pr-4"
+                      aria-hidden={duplicate || undefined}
+                      inert={duplicate || undefined}
+                    >
+                      {row.map((testimonial, cardIndex) => (
+                        <TestimonialCard key={cardIndex} testimonial={testimonial} preview={preview} />
+                      ))}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-            <div className="testimonials-controls mt-6 flex justify-center">
-              <button
-                type="button"
-                aria-pressed={paused}
-                aria-label="Pause testimonial scrolling"
-                onClick={() => setPaused(!paused)}
-                className="inline-flex min-h-11 items-center gap-2 rounded-full border border-zinc-200 bg-white px-4 text-xs font-medium text-zinc-600 hover:bg-zinc-100"
-              >
-                {paused ? <Play className="size-3.5" aria-hidden="true" /> : <Pause className="size-3.5" aria-hidden="true" />}
-                {paused ? "Resume scrolling" : "Pause scrolling"}
-              </button>
-            </div>
+              </div>
+            ))}
           </div>
         ) : (
           <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
