@@ -211,6 +211,7 @@ import Testing
     #expect(await model.prompts.count == 3)
     #expect(notes.title == "Launch plan")
     #expect(notes.summary.keyPoints == ["Ship Friday"])
+    #expect(notes.summary.decisions == ["Ship on Friday", "No new hires until March"])
     #expect(notes.summary.actionItems.map(\.text) == ["Me: send the deck"])
 }
 
@@ -248,7 +249,8 @@ private actor FakeNotesModel: NotesLanguageModel {
     func draft(_ prompt: String) -> NotesDraft {
         prompts.append(prompt)
         return NotesDraft(title: "  Launch plan\n", overview: "We planned the launch.", keyPoints: ["Ship Friday", "  "],
-                          decisions: [], actionItems: ["Me: send the deck", ""])
+                          decisions: ["None", "No decision was made on pricing", "Ship on Friday", "No new hires until March"],
+                          actionItems: ["Me: send the deck", "", "No action items."])
     }
 }
 
