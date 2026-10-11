@@ -11,6 +11,9 @@ All notable changes to BetterWispr are listed here. The format follows
 - Name the speakers. Fields above the transcript let you type a name for each detected speaker, and the name replaces "Speaker 2" in the transcript, in Copy and Copy transcript, and in notes you generate after that. Renaming marks the summary as out of date so you can regenerate it with the names.
 - `BetterWisprCLI --download-speaker-detection` installs the speaker detection models, and `--find-speakers PATH` splits an audio file into 5-second pieces and prints which speaker talks in each.
 
+### Changed
+- Parakeet Ultra is now the recommended model in setup and is listed above Parakeet TDT v3 in Models. On 300 recorded video-call segments in Indian, Nigerian and US English, it got 14.45% of words wrong against 15.96% for Parakeet TDT v3, at the same speed, with the same 25 languages. Dictation and meeting notes both use it once selected. The model you use now does not change on its own: download Parakeet Ultra in Models and choose it to switch.
+
 ### Fixed
 - Light cleanup now turns "I live in Delhi no sorry I live in Ahmedabad" into "I live in Ahmedabad". A "no sorry" or "sorry, no" counts as a correction even when the speech model writes no commas, and a correction can restart on "I" or "we" when the word after it repeats too. "Should we go, no, we should stay" and "I said no sorry I can't come" stay as you said them.
 

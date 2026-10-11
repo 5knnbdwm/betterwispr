@@ -3,6 +3,7 @@ import json, re, subprocess, time, urllib.error, sys, urllib.request, urllib.par
 from pathlib import Path
 
 OUT = Path(sys.argv[1])
+OUT.mkdir(parents=True, exist_ok=True)
 PER_LANG = int(sys.argv[2]) if len(sys.argv) > 2 else 40
 ACCENTS = [("en-IN", "Indian English"), ("en-NG", "Nigerian English"), ("en-US", "Mainstream US English")]
 UNSCORABLE = re.compile(r"<(?:OVERLAP|FOREIGN|DTMF|NO-SPEECH)>|IGNORE_TIME_SEGMENT")

@@ -52,7 +52,7 @@ struct OnboardingView: View {
         _step = State(initialValue: OnboardingStep(rawValue: model.settings.onboardingStep) ?? .welcome)
     }
 
-    private var recommended: SpeechModel? { model.models.first { $0.id == "parakeet-v3" } }
+    private var recommended: SpeechModel? { model.models.first { $0.id == "parakeet-ultra" } }
     private var installation: ModelInstallation? { model.installation?.id == recommended?.id ? model.installation : nil }
     private var shortcut: String { model.settings.shortcut.displayName }
 

@@ -293,6 +293,29 @@ references, not dictation, and each accent has few speakers.
   and 0.016 s / 0.040 s for 110M. Preparing each model took 4 to 22 s on the
   first load after the rebuild and 0.20 to 0.26 s when run again.
 
+## Parakeet Ultra on conversational English, 2026-10-11
+
+Measured on an Apple M5 with macOS 27.0.1, a release build of `BetterWisprCLI`
+from commit 089b2f5 plus the uncommitted 0.1.5 changes, FluidAudio 0.17.5 and
+Light cleanup, on the same 300 EdAcc segments as above, fetched again with
+`scripts/fetch_bench_corpus.py --accents`. v3 reproduced its earlier row exactly,
+so the two runs share clips and scoring.
+
+| Accent | v3 | v3, Light | Ultra | Ultra, Light | Ultra minus v3, 95% interval |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Indian English | 14.51% | 13.65% | 13.42% | 13.36% | -2.16 to +0.06 |
+| Nigerian English | 16.42% | 17.98% | 14.41% | 16.83% | -3.22 to -0.98 |
+| Mainstream US English | 16.78% | 14.83% | 15.46% | 14.25% | -2.36 to -0.31 |
+| All | 15.96% | 15.66% | 14.45% | 14.95% | -2.14 to -0.86 |
+
+- Intervals are a 2000-sample bootstrap over segments of the recognition WER
+  difference. Ultra had fewer errors on 75 segments, more on 28 and the same on 197.
+- Recognition p50 / p95 was 0.041 s / 0.114 s for v3 and 0.041 s / 0.112 s for
+  Ultra, so Ultra costs no speed. Preparing Ultra from the cache took 0.30 s.
+- On this evidence Ultra replaced v3 as the recommended model. The meeting
+  notetaker transcribes 3 to 11 second chunks of call audio, close to these
+  segments, but no meeting recording was scored.
+
 ## Phrase booster floor, 2026-10-10
 
 Measured on the same Mac with release builds of `BetterWisprCLI`, Parakeet v3,
