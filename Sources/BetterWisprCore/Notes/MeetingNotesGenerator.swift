@@ -298,6 +298,6 @@ enum NotesWriter {
 
     /// Drops filler such as "None" or "No decisions were made" that small models write instead of an empty list.
     private static func listItem(_ text: String) -> String? {
-        nonEmpty(text).flatMap { $0.contains(/^(none|n\/a|nothing)\b|^no (explicit |final |clear |specific )?(decisions?|action items?|tasks?|follow-ups?)\b/.ignoresCase()) ? nil : $0 }
+        nonEmpty(text).flatMap { $0.contains(/^(none|n\/a|nothing)\b(?! of\b)|^no (explicit |final |clear |specific )?(decisions?|action items?|tasks?|follow-ups?)\b/.ignoresCase()) ? nil : $0 }
     }
 }
