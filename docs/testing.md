@@ -19,9 +19,12 @@ Speaker detection and notes writer. [Accuracy](accuracy.md) has the numbers.
   Ultra, scored by `scripts/evaluate_meetings.py`. It replaces
   `--find-speakers` from the check below. Rebuilding the corpus with
   `fetch_bench_corpus.py --meetings` gave the same AMI speaker turns and the
-  same number of samples, with a few samples differing by 1 in 16 bits.
+  same number of samples, with a few samples differing by 1 in 16 bits. The
+  scored EdAcc calls came from an earlier fetcher, and the rebuilt ones scored
+  within 0.3 points of them.
 - `--meeting SEGMENTS.jsonl --notes` with Apple Intelligence on seven meetings,
-  three runs each, before and after the notes changes.
+  three runs each, before and after the notes changes. The filler filter was
+  checked against every decision and action item from those runs and 21 more.
 - Light cleanup re-run on the raw text of 290 dictations saved on this Mac.
 - `swift build`, `swift test`, `python3 Tests/evaluate_check.py`,
   `python3 Tests/release_check.py` and `./scripts/build-app.sh` passed on a

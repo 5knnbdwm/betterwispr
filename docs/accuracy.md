@@ -507,6 +507,10 @@ speaker, the most attribution can reach with one label per segment.
 - Mixed headsets are cleaner than a laptop microphone in a room, and the EdAcc
   calls are rejoined turns rather than continuous call audio. Neither corpus
   went through the app's live capture.
+- The EdAcc rows were scored on a corpus built by an earlier version of the
+  fetcher. Rebuilt with the committed `--meetings`, Ultra with the split scored
+  14.20% WER, 13.36% raw WER, 97.9% accuracy, 94.1% purity and 93.2%
+  attribution, each within 0.3 points of its row.
 
 ## Meeting notes, 2026-10-12
 
@@ -537,7 +541,12 @@ file.
 - The notes prompt now defines a decision as something the group agreed on and
   an action item as a follow-up someone took on, and gives Me a task only when
   Me's own words take it on. Items such as "None" or "No decisions were made",
-  which the model wrote instead of an empty list, are dropped.
+  which the model wrote instead of an empty list, are dropped. An item that
+  starts with "None of", such as "None of the current vendors will be renewed",
+  stays, but a real decision that starts with "Nothing" or "No decision" is
+  still dropped. Every decision and action item starting with "no", "none" or
+  "nothing" in these runs, in the drafts made while changing the notes and in
+  21 more runs was filler, and the filter drops all of them.
 - IS1009a got worse on misattribution, 4 before and 12 after across three
   runs. Every run before and after wrote "12.50 euro" as 1250.
 - One judge model scored the notes, and no person checked its counts.
