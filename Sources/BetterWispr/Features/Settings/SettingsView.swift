@@ -141,7 +141,7 @@ struct SettingsView: View {
         (code: "en", name: "English"), (code: "hi", name: "Hindi"), (code: "es", name: "Spanish"),
         (code: "fr", name: "French"), (code: "de", name: "German"), (code: "it", name: "Italian"),
         (code: "pt", name: "Portuguese"), (code: "ja", name: "Japanese"), (code: "ko", name: "Korean"),
-        (code: "zh", name: "Chinese"), (code: "ar", name: "Arabic"),
+        (code: "zh", name: "Chinese"), (code: "ar", name: "Arabic"), (code: "tr", name: "Turkish"),
     ]
 
     private var languageChoices: [(code: String, name: String)] {
