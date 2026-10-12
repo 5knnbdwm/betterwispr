@@ -33,6 +33,7 @@ All notable changes to BetterWispr are listed here. The format follows
 - Meeting notes stick to what was said. The notes model listed things that already happened in the meeting, such as introductions, as action items, gave Me tasks Me never took on, and wrote "No explicit decisions were made" as a decision. Notes now count only what someone agreed or took on, and drop items that only say there were none, while keeping real ones such as "None of the current vendors will be renewed". On seven recorded meetings, three notes each, an AI judge reading the transcripts found 1.3 unsupported claims per set of notes against 4.1 before, and 0.2 filler items against 1.4.
 - Long meetings no longer fail with "The model couldn't condense this meeting enough" on Apple Intelligence. Asked to shorten the transcript, the model copied its lines back, so it never got shorter; 2 of 3 runs on a 10-minute four-person meeting failed. It now writes a short summary of each part in its own words.
 - Learn from my corrections now notices a fix even when you also changed text elsewhere in the same field, and in web fields that report spaces and line breaks differently from the pasted text. Before, either case made it miss the fix.
+- Fixing a dictation in History no longer moves the cursor to the end after every key you press. Text typed in the middle now goes where the cursor is.
 
 ## [0.1.4] - 2026-10-10
 
