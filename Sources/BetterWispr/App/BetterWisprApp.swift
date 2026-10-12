@@ -17,7 +17,6 @@ struct BetterWisprApp: App {
                         .transition(.opacity)
                 }
             }
-            .onAppear { delegate.start() }
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                 delegate.model.refreshPermissions()
             }
@@ -145,6 +144,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var capsule: CapsuleController?
     private var notetaker: NotetakerController?
     private var started = false
+
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        model.applyDockVisibility()
+    }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        start()
+        if model.settings.showInDock { NSApplication.shared.activate(ignoringOtherApps: true) }
+    }
 
     func start() {
         guard !started else { return }

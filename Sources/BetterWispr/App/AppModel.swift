@@ -937,6 +937,7 @@ final class AppModel {
     }
 
     func saveSettings() {
+        if startsServices { applyDockVisibility() }
         do {
             let registered = SMAppService.mainApp.status == .enabled
             if settings.launchAtLogin != registered {
@@ -951,6 +952,16 @@ final class AppModel {
         applyAppearance()
         if startsServices { meetingDetector.isEnabled = settings.detectMeetings }
         onPresentationChange?()
+    }
+
+    func applyDockVisibility() {
+        let application = NSApplication.shared
+        let policy: NSApplication.ActivationPolicy = settings.showInDock ? .regular : .accessory
+        guard application.activationPolicy() != policy else { return }
+        if !application.setActivationPolicy(policy) {
+            settings.showInDock = application.activationPolicy() == .regular
+            statusMessage = "Could not change Dock visibility. Try restarting BetterWispr."
+        }
     }
 
     private func applyAppearance() {

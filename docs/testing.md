@@ -42,6 +42,22 @@ and Recommended badge.
 - [ ] Dictate "Let's meet at 5, no, at 6 pm" with Light cleanup. Expect "Let's
   meet at 6 pm".
 
+## Dock visibility check, 2026-10-11
+
+On arm64 macOS 26.6.1, `swift build`, all 110 tests in `swift test`, and
+`./scripts/build-app.sh` passed. Settings tests cover the visible-Dock default
+for older workspaces and persistence of the hidden preference. A live launch of
+`.build/out/Products/Debug/BetterWispr.app` with `showInDock: false` finished
+launching and reported `.accessory` activation policy through
+`NSRunningApplication`. The rebuilt app was left running with that preference
+off. The visible preference also produced `.regular` during an earlier launch
+probe. A probe attempting another Carbon hotkey registration was inconclusive;
+it does not establish whether the app receives Option–Space events.
+
+Not exercised: changing the toggle through the UI, reopening from the menu bar,
+dictation/paste with the dashboard closed, login-item launch, or macOS 14.
+UI automation was not enabled for this session.
+
 ## Speaker detection check, 2026-10-11, version 0.1.5
 
 macOS 27.0.1. `swift run BetterWisprCLI --download-speaker-detection` installed
@@ -545,6 +561,13 @@ retries. They do not access Keychain, mount disk images or submit to Apple.
 
 ## Recording, capsule and cancellation
 
+- [ ] Turn off Settings → App → Show in Dock. The Dock icon disappears while
+  the menu bar icon remains. Close the dashboard and dictate into TextEdit with
+  ⌥ Space in hold and toggle modes; the capsule must not steal focus and paste
+  must still reach TextEdit. Reopen Dashboard and Settings from the menu bar.
+  Quit and relaunch; Dock visibility stays off and the shortcut works. Turn
+  Show in Dock back on; the icon returns and stays on after relaunch. Repeat
+  with Open at login enabled after logging in.
 - [ ] Focus a TextEdit document, press **Option–Space**, speak a distinctive sentence,
   and press it again. The capsule appears at bottom center without stealing focus;
   level animation responds to actual microphone input. Final text is recoverable.

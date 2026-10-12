@@ -91,6 +91,8 @@ struct SettingsView: View {
                 }
 
                 SettingsSection("App") {
+                    SettingToggle("Show in Dock", caption: "When off, use the menu bar to open BetterWispr. Your dictation shortcut still works.", isOn: setting(\.showInDock))
+                    RowDivider()
                     SettingToggle("Dictation sounds", caption: "Soft cues when you finish, cancel or need attention. Quiet during meeting capture.", isOn: setting(\.soundEffects))
                     RowDivider()
                     SettingToggle("Floating recording capsule", caption: "A small voice control at the bottom of your screen.", isOn: setting(\.showCapsule))
