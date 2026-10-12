@@ -44,7 +44,10 @@ Sources/
    Entries written as a voice command ("question mark", "at the rate") are not
    hints, because boosting command words drops neighbouring words.
    Provider partial callbacks are provisional text during recognition, not audio
-   streaming while capture is still running.
+   streaming while capture is still running. The Parakeet live preview is the
+   one exception: `LiveTranscriber` re-recognizes the unconfirmed tail of the
+   16 kHz capture copy about once a second while recording and shows the
+   agreed words in the capsule, but the pasted text is always this batch pass.
 5. Post-process the recognized text in a fixed order. Auto cleanup **None**
    only trims; **Light** (the default) removes English filled pauses and
    unpunctuated stutters. Apply vocabulary entries written as a voice command,
@@ -53,13 +56,23 @@ Sources/
    and Auto. For English
    text, **Medium** then asks the notes model the user chose in Models (Apple
    Intelligence, Ollama, a signed-in CLI or an API connection) for a clarity edit
-   with `TranscriptPolisher` instructions. The edit is bounded by a timeout and
+   with `TranscriptPolisher` instructions, plus the selected text, clipboard and
+   window text when "Use screen context" is on. The edit is bounded by a timeout and
    rejected when it answers the dictation, adds new words or changes length too
    much; any failure keeps the Light text, and Medium never picks a different
    model than the one selected.
    Next apply the writing tone chosen for the destination app's style context
-   (`AppCategory` maps bundle IDs; browsers count as Other because the website is
-   not visible). Vocabulary runs last so it can restore names a tone lowercased.
+   (`AppCategory` maps bundle IDs; browsers count as Other). A `WritingMode`
+   can override cleanup, tone, screen context and Medium instructions. A spoken
+   trigger word at the start or end of the dictation picks a mode first, then
+   the website open in a supported browser (`WebsiteReader` reads its address
+   through Accessibility and never stores it), then the destination app. The
+   website is read while the microphone starts, and recording begins only once
+   the mode is known; an unknown address captures no screen context. Screen
+   context is captured for the mode chosen at the start, so a trigger word can
+   turn it off but not on. A saved mode with an unknown cleanup or tone makes the
+   workspace unreadable and leaves the file untouched.
+   Vocabulary runs last so it can restore names a tone lowercased.
    Keep both raw and final text, plus the destination bundle ID and vocabulary
    fix count for Insights; save a transcript only when history is enabled.
 6. Deliver through clipboard/guarded paste when enabled. Only paste if the

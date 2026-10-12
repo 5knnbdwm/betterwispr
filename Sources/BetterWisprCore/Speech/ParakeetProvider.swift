@@ -12,6 +12,7 @@ public final class ParakeetProvider: SpeechProvider {
     private var loadedModelID: String?
     private var preparing = false
     private var transcriptionTask: Task<String, any Error>?
+    private var livePass: Task<LivePass, any Error>?
     private var loadedVersion: AsrModelVersion?
     private var phraseBooster: CtcModels?
     private var boostingSession: (terms: [String], session: VocabularyBoostingSession)?
@@ -131,7 +132,7 @@ public final class ParakeetProvider: SpeechProvider {
 
     public func prepare(model: SpeechModel, download: Bool) async throws {
         guard let source = Self.source(for: model) else { throw SpeechError.invalidModel }
-        guard !preparing, transcriptionTask == nil else { throw SpeechError.busy }
+        guard !preparing, transcriptionTask == nil, livePass == nil else { throw SpeechError.busy }
         if loadedModelID == model.id, manager != nil { onProgress?(1); return }
         preparing = true
         defer { preparing = false }
@@ -216,6 +217,7 @@ public final class ParakeetProvider: SpeechProvider {
 
     public func transcribe(audioURL: URL, language: String?, vocabulary: [String]) async throws -> String {
         guard let manager, !preparing else { throw SpeechError.notPrepared }
+        if let livePass { _ = try? await livePass.value }
         guard transcriptionTask == nil else { throw SpeechError.busy }
         guard audioURL.isFileURL, FileManager.default.fileExists(atPath: audioURL.path) else { throw SpeechError.audioUnavailable }
         try Task.checkCancellation()
@@ -238,8 +240,30 @@ public final class ParakeetProvider: SpeechProvider {
         return try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
     }
 
+    /// One recognizer pass for the live preview; word timings are relative to `samples`.
+    public func liveTranscribe(_ samples: [Float], language: String?) async throws -> LivePass {
+        guard let manager, !preparing else { throw SpeechError.notPrepared }
+        guard transcriptionTask == nil, livePass == nil else { throw SpeechError.busy }
+        let hint = Self.hint(for: language)
+        let task = Task {
+            var state = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
+            let result = try await manager.transcribe(samples, decoderState: &state, language: hint)
+            try Task.checkCancellation()
+            return LivePass(words: TimedWord.words(from: result.tokenTimings ?? []), confidence: result.confidence)
+        }
+        livePass = task
+        defer { livePass = nil }
+        return try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
+    }
+
+    /// 16 kHz mono samples of a file, for feeding recorded audio through the live preview.
+    public nonisolated static func samples(of url: URL) throws -> [Float] {
+        try AudioConverter().resampleAudioFile(url)
+    }
+
     public func cancel() {
         transcriptionTask?.cancel()
+        livePass?.cancel()
     }
 
     private func boostingSession(for terms: [String]) async -> VocabularyBoostingSession? {

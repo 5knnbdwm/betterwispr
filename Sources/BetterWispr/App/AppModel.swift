@@ -39,17 +39,24 @@ final class DictationRecording {
     let settings: AppSettings
     let vocabulary: [VocabularyEntry]
     let target: NSRunningApplication?
+    let mode: WritingMode?
+    let context: Task<DictationContext, Never>?
 
-    init(audio: RecordedAudio, model: SpeechModel, settings: AppSettings,
-         vocabulary: [VocabularyEntry], target: NSRunningApplication?) {
+    init(audio: RecordedAudio, model: SpeechModel, settings: AppSettings, vocabulary: [VocabularyEntry],
+         target: NSRunningApplication?, mode: WritingMode? = nil, context: Task<DictationContext, Never>? = nil) {
         self.audio = audio
         self.model = model
         self.settings = settings
         self.vocabulary = vocabulary
         self.target = target
+        self.mode = mode
+        self.context = context
     }
 
-    deinit { try? FileManager.default.removeItem(at: audio.url) }
+    deinit {
+        context?.cancel()
+        try? FileManager.default.removeItem(at: audio.url)
+    }
 }
 
 struct ModelInstallation: Equatable {
@@ -85,6 +92,8 @@ final class AppModel {
     var canUndoCancellation: Bool { phase == .cancelled && cancelledRecording != nil }
     var statusMessage = ""
     var partialTranscript = ""
+    /// Preview only; the pasted text always comes from the batch recognition.
+    var liveTranscript = LiveTranscript()
     var voiceLevels = VoiceLevels()
     var isHeldSession = false
     var recordingDuration: TimeInterval = 0
@@ -120,12 +129,16 @@ final class AppModel {
     @ObservationIgnored private var preparedModelID: String?
     @ObservationIgnored private var loading: (id: String, task: Task<Void, any Error>)?
     @ObservationIgnored private var operation: Task<Void, Never>?
+    @ObservationIgnored private var warmUp: Task<Void, Never>?
     @ObservationIgnored private var installTask: Task<Void, Never>?
     @ObservationIgnored private var ticker: Task<Void, Never>?
+    @ObservationIgnored private var live: LiveTranscriber?
     @ObservationIgnored private var cardDismissal: Task<Void, Never>?
     @ObservationIgnored private var shortcutPressedAt: Date?
     @ObservationIgnored private var generation = UUID()
     @ObservationIgnored private var targetApplication: NSRunningApplication?
+    @ObservationIgnored private var writingMode: WritingMode?
+    @ObservationIgnored private var dictationContext: Task<DictationContext, Never>?
     @ObservationIgnored private var activeRecording: DictationRecording?
     @ObservationIgnored private var feedbackSound: NSSound?
     @ObservationIgnored private var storageIsReadable = true
@@ -181,6 +194,11 @@ final class AppModel {
         globalShortcut.onPress = { [weak self] in self?.shortcutPressed() }
         globalShortcut.onRelease = { [weak self] in self?.shortcutReleased() }
         warmUpSelectedModel()
+        let warmUpAfterWake: @Sendable (Notification) -> Void = { [weak self] _ in
+            MainActor.assumeIsolated { self?.warmUpSelectedModel(after: .seconds(3)) }
+        }
+        _ = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main, using: warmUpAfterWake)
+        _ = DistributedNotificationCenter.default().addObserver(forName: .init("com.apple.screenIsUnlocked"), object: nil, queue: .main, using: warmUpAfterWake)
     }
 
     func shortcutPressed() {
@@ -244,15 +262,30 @@ final class AppModel {
             return
         }
         targetApplication = NSWorkspace.shared.frontmostApplication
+        let modes = settings.modes
+        let website = modes.needsWebsite ? targetApplication.flatMap(WebsiteReader.read) : nil
+        writingMode = modes.match(app: targetApplication?.bundleIdentifier)?.mode
+        dictationContext?.cancel()
+        dictationContext = website == nil ? captureContext(for: settings.applying(writingMode)) : nil
         isHeldSession = held
         let token = UUID()
         generation = token
         phase = .preparing
         statusMessage = "Starting microphone…"
         partialTranscript = ""
+        liveTranscript = LiveTranscript()
         recordingDuration = 0
         let model = selectedModel
-        operation = Task { [weak self] in
+        let live = model.engine == .parakeet && settings.showLiveText ? LiveTranscriber() : nil
+        live?.onUpdate = { [weak self] transcript in
+            guard let self, self.generation == token else { return }
+            self.liveTranscript = transcript
+        }
+        live?.beginBuffering()
+        self.live = live
+        var onSamples: (@Sendable ([Float]) -> Void)?
+        if let live { onSamples = { samples in Task { @MainActor in live.append(samples) } } }
+        operation = Task { [weak self, onSamples] in
             guard let self else { return }
             do {
                 try Task.checkCancellation()
@@ -266,13 +299,21 @@ final class AppModel {
                 self.recorder.silenceThreshold = self.settings.silenceThreshold
                 self.recorder.microphone = self.settings.microphone
                 self.statusMessage = "Starting microphone…"
-                try await self.recorder.start()
+                try await self.recorder.start(onSamples: onSamples)
+                let url = await website?.value
                 try Task.checkCancellation()
                 guard self.generation == token else { return }
+                if let url, let app = self.targetApplication {
+                    self.writingMode = modes.match(url: url, app: app.bundleIdentifier)?.mode
+                    self.dictationContext = self.captureContext(for: self.settings.applying(self.writingMode))
+                }
                 self.microphoneGranted = true
                 self.phase = .recording
                 let shortcut = self.settings.shortcut.displayName
                 self.statusMessage = self.isHeldSession ? "Listening. Release \(shortcut) to finish." : "Listening. Press \(shortcut) or click ✓ to finish."
+                self.warmUpSelectedModel()
+                self.warmUpNotesModel(token: token)
+                self.startLivePreview(live, model: model, token: token)
                 let started = Date()
                 self.ticker = Task { [weak self] in
                     while !Task.isCancelled {
@@ -286,9 +327,29 @@ final class AppModel {
             } catch {
                 guard self.generation == token else { return }
                 self.recorder.cancel()
+                self.endLivePreview()
+                self.dictationContext.take()?.cancel()
                 self.fail(DictationFailure(title: "Couldn’t start dictation.", message: error.localizedDescription))
             }
         }
+    }
+
+    /// Runs preview passes once the warm-up load has finished; it never starts a load itself.
+    private func startLivePreview(_ live: LiveTranscriber?, model: SpeechModel, token: UUID) {
+        guard let live else { return }
+        let language = settings.language == "auto" ? nil : settings.language
+        Task { @MainActor [weak self] in
+            if let loading = self?.loading, loading.id == model.id { _ = try? await loading.task.value }
+            guard let self, self.generation == token, self.preparedModelID == model.id,
+                  let parakeet = self.provider as? ParakeetProvider else { return }
+            live.start { try await parakeet.liveTranscribe($0, language: language) }
+        }
+    }
+
+    private func endLivePreview() {
+        live?.cancel()
+        live = nil
+        liveTranscript = LiveTranscript()
     }
 
     private func finishRecording() {
@@ -301,12 +362,17 @@ final class AppModel {
         let settings = settings
         let entries = vocabulary
         let target = targetApplication
+        let mode = writingMode
+        let context = dictationContext.take()
+        let live = live
         phase = .transcribing
         statusMessage = "Finishing recording…"
         operation = Task { [weak self] in
             guard let self else { return }
             do {
                 let audio = try await self.recorder.finish()
+                await live?.stop()
+                if self.live === live { self.live = nil }
                 guard self.generation == token, !Task.isCancelled else {
                     try? FileManager.default.removeItem(at: audio.url)
                     return
@@ -319,10 +385,11 @@ final class AppModel {
                 }
                 self.playFeedback(.finished)
                 self.transcribe(DictationRecording(audio: audio, model: model, settings: settings,
-                                                  vocabulary: entries, target: target))
+                                                  vocabulary: entries, target: target, mode: mode, context: context))
             } catch {
                 guard self.generation == token else { return }
                 self.recorder.cancel()
+                self.endLivePreview()
                 self.fail(DictationFailure(title: "Couldn’t finish recording.", message: error.localizedDescription))
             }
         }
@@ -333,12 +400,10 @@ final class AppModel {
         activeRecording = recording
         let audio = recording.audio
         let model = recording.model
-        let writingSettings = recording.settings
-        let language = writingSettings.language == "auto" ? nil : writingSettings.language
+        let language = recording.settings.language == "auto" ? nil : recording.settings.language
         let entries = recording.vocabulary
-        let cleanup = writingSettings.cleanup
+        let context = recording.context
         let appBundleID = recording.target?.bundleIdentifier
-        let tone = writingSettings.tone(for: AppCategory(bundleID: appBundleID).style)
         phase = .transcribing
         statusMessage = model.engine == .api ? "Transcribing with \(model.name)…" : "Transcribing on your Mac…"
         operation = Task { [weak self] in
@@ -348,7 +413,7 @@ final class AppModel {
             guard let self else { return }
             do {
                 try Task.checkCancellation()
-                try await self.prepare(model, language: writingSettings.language)
+                try await self.prepare(model, language: recording.settings.language)
                 try Task.checkCancellation()
                 guard self.generation == token, let provider = self.provider else { return }
                 let recognitionStarted = ContinuousClock.now
@@ -356,7 +421,16 @@ final class AppModel {
                 Logger(subsystem: "org.betterwispr.app", category: "DictationTiming").notice("Recognition completed: elapsed=\(String(describing: recognitionStarted.duration(to: .now)), privacy: .public) empty=\(raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)")
                 try Task.checkCancellation()
                 guard self.generation == token else { return }
-                let cleaned = cleanup == .none ? raw.trimmingCharacters(in: .whitespacesAndNewlines) : TranscriptCleaner.clean(raw, language: language)
+                let lightlyCleaned = TranscriptCleaner.clean(raw, language: language)
+                let trigger = recording.settings.modes.match(transcript: lightlyCleaned)
+                let mode = trigger?.mode ?? recording.mode
+                let writingSettings = recording.settings.applying(mode)
+                let cleanup = writingSettings.cleanup
+                let tone = writingSettings.tone(for: AppCategory(bundleID: appBundleID).style)
+                let base = cleanup == .none ? raw.trimmingCharacters(in: .whitespacesAndNewlines) : lightlyCleaned
+                let cleaned = trigger.flatMap { [$0.mode].match(transcript: base)?.transcript } ?? base
+                let sharesContext = recording.settings.sharesContext(startedIn: recording.mode, trigger: trigger?.mode)
+                if !sharesContext { context?.cancel() }
                 let heard = VocabularyProcessor.correctedCommands(entries, in: cleaned)
                 var spoken = language == nil || language?.hasPrefix("en") == true ? VoiceCommands.apply(heard.text) : heard.text
                 let english = TranscriptCleaner.isEnglish(spoken, language: language)
@@ -364,7 +438,9 @@ final class AppModel {
                     spoken = email
                 } else if english, cleanup == .medium, MeetingNotesGenerator.availability(settings: writingSettings) == .available {
                     self.statusMessage = "Editing with \(writingSettings.notesModelName)…"
-                    let polished = await TranscriptPolisher.polish(spoken, settings: writingSettings)
+                    let polished = await TranscriptPolisher.polish(spoken, settings: writingSettings, vocabulary: VocabularyProcessor.hints(entries),
+                                                                   context: sharesContext ? await context?.value(within: .seconds(1)) : nil,
+                                                                   instructions: mode?.instructions ?? "")
                     try Task.checkCancellation()
                     guard self.generation == token else { return }
                     spoken = StyleFormatter.apply(tone, to: polished ?? spoken)
@@ -399,7 +475,7 @@ final class AppModel {
                     case .pasted:
                         self.phase = .idle
                         if writingSettings.learnCorrections, let app = recording.target {
-                            self.correctionWatcher.watch(text, in: app) { [weak self] in self?.learn($0) }
+                            self.correctionWatcher.watch(text, in: app) { [weak self] in self?.learn(from: $0, to: $1) }
                         }
                     case .copied: self.present(.completed("Copied to clipboard"), for: 1.6)
                     case nil: self.present(.completed("Transcript ready"), for: 1.6)
@@ -418,8 +494,8 @@ final class AppModel {
         guard isBusy else { return }
         let recoverable: DictationRecording?
         if phase == .recording, let audio = try? recorder.stop() {
-            let recording = DictationRecording(audio: audio, model: selectedModel, settings: settings,
-                                              vocabulary: vocabulary, target: targetApplication)
+            let recording = DictationRecording(audio: audio, model: selectedModel, settings: settings, vocabulary: vocabulary,
+                                              target: targetApplication, mode: writingMode, context: dictationContext.take())
             recoverable = audio.hasSpeech ? recording : nil
         } else {
             recoverable = activeRecording
@@ -443,12 +519,15 @@ final class AppModel {
         generation = UUID()
         shortcutPressedAt = nil
         correctionWatcher.stop()
+        dictationContext.take()?.cancel()
         operation?.cancel()
         operation = nil
         ticker?.cancel()
         ticker = nil
+        warmUp?.cancel()
         provider?.cancel()
         recorder.cancel()
+        endLivePreview()
         activeRecording = nil
         cancelledRecording = nil
         feedbackSound?.stop()
@@ -471,6 +550,8 @@ final class AppModel {
         }
         let token = generation
         if preparedModelID != model.id || provider == nil { try await load(model).value }
+        warmUp?.cancel()
+        await warmUp?.value
         try Task.checkCancellation()
         guard generation == token, let provider else { throw CancellationError() }
         observe(provider, token: token)
@@ -493,10 +574,43 @@ final class AppModel {
         return task
     }
 
-    private func warmUpSelectedModel() {
+    /// Loads the selected local model and, when idle, transcribes a second of quiet noise and discards the text.
+    private func warmUpSelectedModel(after delay: Duration = .zero) {
         let model = selectedModel
-        guard model.engine != .apple, model.engine != .api, isModelInstalled(model), preparedModelID != model.id else { return }
-        load(model)
+        guard model.engine != .apple, model.engine != .api, isModelInstalled(model) else { return }
+        guard !isBusy else {
+            if preparedModelID != model.id { load(model) }
+            return
+        }
+        warmUp?.cancel()
+        warmUp = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard let self, !Task.isCancelled, self.selectedModel.id == model.id else { return }
+            if self.preparedModelID != model.id { try? await self.load(model).value }
+            guard !Task.isCancelled, !self.isBusy, self.preparedModelID == model.id, let provider = self.provider,
+                  let clip = try? WarmUpClip.url() else { return }
+            let started = ContinuousClock.now
+            let finished = (try? await provider.transcribe(audioURL: clip, language: nil, vocabulary: [])) != nil
+            Logger(subsystem: "org.betterwispr.app", category: "DictationTiming").notice("Warm-up \(finished ? "completed" : "stopped", privacy: .public): model=\(model.id, privacy: .public) elapsed=\(String(describing: started.duration(to: .now)), privacy: .public)")
+        }
+    }
+
+    /// Loads the dictation editing model while the user speaks, unless the recording ends within 450 ms.
+    private func warmUpNotesModel(token: UUID) {
+        Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(450))
+            guard let self, self.generation == token, self.phase == .recording else { return }
+            let settings = self.settings.applying(self.writingMode)
+            guard settings.cleanup == .medium, settings.language == "auto" || settings.language.hasPrefix("en"),
+                  MeetingNotesGenerator.availability(settings: settings) == .available else { return }
+            await MeetingNotesGenerator.warmUp(settings: settings)
+        }
+    }
+
+    /// Starts reading screen context when these settings send it to an available notes model during Medium cleanup.
+    private func captureContext(for settings: AppSettings) -> Task<DictationContext, Never>? {
+        guard settings.useScreenContext, settings.cleanup == .medium, MeetingNotesGenerator.availability(settings: settings) == .available else { return nil }
+        return targetApplication.map { DictationContext.capture(from: $0, recognizingScreen: settings.recognizeScreenText) }
     }
 
     private func observe(_ provider: any SpeechProvider, token: UUID) {
@@ -721,7 +835,7 @@ final class AppModel {
             ToastWindow.shared.show(Toast(failure: "Couldn’t save edit", error))
             return
         }
-        if settings.learnCorrections { learn(CorrectionLearner.corrections(from: transcript.text, to: text)) }
+        if settings.learnCorrections { learn(from: transcript.text, to: text) }
     }
 
     func restoreOriginal(_ transcript: Transcript) {
@@ -735,23 +849,37 @@ final class AppModel {
         }
     }
 
-    private func learn(_ corrections: [LearnedCorrection]) {
-        let known = Set(vocabulary.flatMap { [$0.phrase.lowercased(), $0.replacement.lowercased()] })
-        let previous = vocabulary
-        var added: [String] = []
-        for correction in corrections where vocabulary.count < 200
-            && !known.contains(correction.heard.lowercased()) && !known.contains(correction.corrected.lowercased()) {
-            vocabulary.append(CorrectionLearner.isCommon(correction.heard)
-                ? VocabularyEntry(phrase: correction.corrected, replacement: "", learned: true)
-                : VocabularyEntry(phrase: correction.heard, replacement: correction.corrected, learned: true))
-            added.append("“\(correction.corrected)”")
+    private func learn(from original: String, to edited: String) {
+        let candidates = CorrectionLearner.corrections(from: original, to: edited)
+        guard !candidates.isEmpty else { return }
+        let settings = settings
+        Task { [weak self] in
+            let reviewed = await CorrectionReviewer.review(candidates, from: original, to: edited, settings: settings)
+            self?.learn(reviewed ?? candidates.map { .replacementAndVocabulary(heard: $0.heard, corrected: $0.corrected) })
         }
+    }
+
+    private func learn(_ decisions: [CorrectionDecision]) {
+        guard settings.learnCorrections else { return }
+        let added = CorrectionDecision.entries(for: decisions, in: vocabulary)
         guard !added.isEmpty else { return }
+        let previous = vocabulary
+        vocabulary += added
         do {
             try persist()
-            ToastWindow.shared.show(Toast(title: "Learned \(added.joined(separator: ", "))",
+            let ids = Set(added.map(\.id))
+            ToastWindow.shared.show(Toast(title: "Learned \(added.map { "“\($0.replacement.isEmpty ? $0.phrase : $0.replacement)”" }.joined(separator: ", "))",
                                           message: "BetterWispr will spell it this way next time. Manage it in Vocabulary.",
-                                          systemImage: "sparkles"))
+                                          systemImage: "sparkles",
+                                          action: Toast.Action(title: "Undo") { [weak self] in
+                                              guard let self else { return }
+                                              let learned = vocabulary
+                                              vocabulary.removeAll { ids.contains($0.id) }
+                                              do { try persist() } catch {
+                                                  vocabulary = learned
+                                                  ToastWindow.shared.show(Toast(failure: "Couldn’t undo", error))
+                                              }
+                                          }))
         } catch {
             vocabulary = previous
         }

@@ -109,15 +109,152 @@ keep phrases like "the Oxford comma" as prose, turn "at the rate KV" into "@KV"
 and add the # and % symbols and spoken email addresses. `SpokenNumbers.swift`
 is original BetterWispr code.
 
+`Sources/BetterWisprCore/Speech/WordAgreementEngine.swift` and
+`Sources/BetterWisprCore/Speech/LiveTranscriber.swift` adapt the streaming
+word-agreement preview from [VoiceInk](https://github.com/Beingpax/VoiceInk),
+revision `c09cc1f677f40f2ee665843a61f07670210f012e`, GPL-3.0, files
+`VoiceInk/Infrastructure/Providers/Transcription/FluidAudio/Streaming/WordAgreementEngine.swift`
+and
+`VoiceInk/Infrastructure/Providers/Transcription/FluidAudio/Streaming/FluidAudioStreamingProvider.swift`,
+plus the startup buffering of `RealtimeAudioChunkGate` in
+`VoiceInk/Features/Recording/Workflows/VoiceInkEngine.swift`. The repository
+owner allowed copying VoiceInk code for this feature. Kept: the longest common
+prefix over normalized words, three agreeing passes, the five-word minimum, the
+third-last sentence ender as the confirmation cut, the pass and boundary
+confidence thresholds, the SentencePiece token merge, and the one-second pass
+over audio after the hypothesis start with a second of trailing silence and a
+fresh decoder state. Changed: the engine is a value type with fixed thresholds
+that returns confirmed and provisional text; the provider's locks, buffer
+trimming and event stream became a main-actor state machine (idle, buffering,
+running, stopping, stopped) over a capped sample buffer; each pass runs through
+`ParakeetProvider.liveTranscribe` under the existing busy guard; and the
+preview never reaches the pasted text, history or correction learning.
+
 `Sources/BetterWisprCore/Transcription/CorrectionLearner.swift` ports
 [`src/utils/correctionLearner.js`](https://github.com/OpenWhispr/openwhispr/blob/4881a74d7273e3d12ca91a0b46204ad80ea03e9a/src/utils/correctionLearner.js)
 from OpenWhispr, revision `4881a74d7273e3d12ca91a0b46204ad80ea03e9a`, MIT,
 copyright 2024 OpenWhispr Team, retained in the source. It keeps the word-level
 LCS diff, the rewrite cutoff, the common-word list and the 0.65 edit-distance
 ratio, and adds multi-word substitutions and case-only fixes such as "kv" to "KV".
-`Sources/BetterWisprCore/Integrations/CorrectionWatcher.swift` is written for
-BetterWispr after the arm-after-paste approach used by Scribe and OpenWhispr;
-no upstream code is copied into it.
+`Sources/BetterWisprCore/Integrations/CorrectionWatcher.swift` arms after a paste,
+as Scribe and OpenWhispr do, and finds the edited dictation with code adapted from
+[VoiceInk](https://github.com/Beingpax/VoiceInk), revision
+`c09cc1f677f40f2ee665843a61f07670210f012e`, GPL-3.0.
+`CorrectionWatcher.edit(of:from:to:)` adapts the 16-character anchors of
+`VoiceInk/Features/Dictionary/AutoLearn/FinalSnapshotDiffEngine.swift`: each side
+of the dictation must appear exactly once in the final text, the right side must
+not come before the left, and an empty side means the field boundary.
+`CorrectionWatcher.comparable(_:)` adapts `AutoLearnTextNormalizer.accessibilityComparable`
+from `VoiceInk/Features/Dictionary/AutoLearn/AutoLearnTypes.swift`. Changes keep
+BetterWispr's polling and settle rules instead of VoiceInk's focus-change
+snapshots, and normalize both the pasted text and every field read.
+
+`Sources/BetterWisprCore/Transcription/CorrectionReviewer.swift` adapts the review
+prompt and the reply validation of
+`VoiceInk/Features/Dictionary/AutoLearn/AutoLearnAIReviewer.swift` from the same
+VoiceInk revision, GPL-3.0. It reviews only the corrections `CorrectionLearner`
+already accepted, only for English text at Medium cleanup with a ready notes
+model, and sends each edit with up to three words on each side. Changes ask for
+exactly one decision per candidate and drop batch canonicalization, and allow a
+misheard brand or product such as "post hog" to "PostHog". The review can only
+narrow what the rules found: each returned term must be whole words of its excerpt
+that include the rules' own term, everyday words are rejected, and terms are capped
+at 100 characters to match Vocabulary instead of VoiceInk's 256. Two deliberate
+divergences from VoiceInk's validation: a case-only replacement such as "posthog"
+to "PostHog" is learned as vocabulary instead of being rejected, and a reply
+wrapped in a code fence is accepted instead of being rejected. Any invalid reply
+counts as no review, so BetterWispr learns by its rules alone. The Undo action on the
+"Learned" toast follows VoiceInk's undo for learned words in
+`VoiceInk/Features/Dictionary/AutoLearn/AutoLearnService.swift`; no code is
+copied for it.
+
+The speech model warm-up in `Sources/BetterWispr/App/AppModel.swift` and
+`Sources/BetterWisprCore/Speech/WarmUpClip.swift` adapts
+`VoiceInk/App/Lifecycle/ModelPrewarmService.swift` and
+`VoiceInk/Infrastructure/SystemIntegration/Lifecycle/LifecycleObserver.swift`
+from [VoiceInk](https://github.com/Beingpax/VoiceInk), revision
+`c09cc1f677f40f2ee665843a61f07670210f012e`, GPL-3.0. It keeps the throwaway
+transcription of a local model after launch and 3 seconds after wake or screen
+unlock. Changes replace the bundled sound with a generated second of quiet
+noise, also warm after a model switch, run only while no dictation is in
+progress and make the next dictation cancel and wait for the warm-up instead of
+sharing the model. Loading the editing model 450 ms into a recording follows
+`VoiceInk/Features/Recording/Workflows/VoiceInkEngine.swift`; BetterWispr loads
+an Ollama model with an empty chat request at the edit's context length, so
+Ollama does not load it again for the edit, prewarms Apple Intelligence and
+leaves API and CLI models alone.
+`APINotesModel.lowLatencyFields` adapts the per-model reasoning settings in
+`VoiceInk/Infrastructure/Providers/Enhancement/ReasoningConfig.swift` and the
+throughput routing in
+`VoiceInk/Infrastructure/Providers/Enhancement/OpenRouterRequestPolicy.swift`.
+Changes match on the endpoint host as well as the model, send the fields only
+for dictation edits, skip OpenRouter's `:nitro` endpoints and pass
+`--effort low` to Claude Code or `model_reasoning_effort="low"` to Codex.
+
+`Sources/BetterWisprCore/Transcription/TranscriptPolisher.swift` adapts the AI
+enhancement prompt of [VoiceInk](https://github.com/Beingpax/VoiceInk) revision
+`c09cc1f677f40f2ee665843a61f07670210f012e`, GPL-3.0. Its system prompt is the
+`SYSTEM_INSTRUCTIONS` template from
+[`VoiceInk/Core/Enhancement/AIPrompts.swift`](https://github.com/Beingpax/VoiceInk/blob/c09cc1f677f40f2ee665843a61f07670210f012e/VoiceInk/Core/Enhancement/AIPrompts.swift)
+with the Default prompt from
+[`VoiceInk/Features/Enhancement/Templates/PromptTemplates.swift`](https://github.com/Beingpax/VoiceInk/blob/c09cc1f677f40f2ee665843a61f07670210f012e/VoiceInk/Features/Enhancement/Templates/PromptTemplates.swift)
+inlined as its task instructions. The vocabulary and context sections follow
+[`VoiceInk/Features/Enhancement/Workflows/AIEnhancementService.swift`](https://github.com/Beingpax/VoiceInk/blob/c09cc1f677f40f2ee665843a61f07670210f012e/VoiceInk/Features/Enhancement/Workflows/AIEnhancementService.swift)
+and the reply filter follows
+[`VoiceInk/Core/Enhancement/AIEnhancementOutputFilter.swift`](https://github.com/Beingpax/VoiceInk/blob/c09cc1f677f40f2ee665843a61f07670210f012e/VoiceInk/Core/Enhancement/AIEnhancementOutputFilter.swift).
+Changes remove the prompt's own tags from vocabulary, context and transcript text,
+add a one-line reminder after the transcript to return only the cleaned text,
+which llama3.1:8b otherwise prefaced with commentary, cap each context part at a
+word boundary, drop window and then clipboard text to
+fit Apple's smaller context window after counting the vocabulary and mode
+instructions, give a notes CLI only the fixed instructions as its system prompt
+and send the vocabulary, mode instructions and context with the transcript, so
+none of it reaches Claude Code's command line, and keep BetterWispr's check that
+rejects replies that are not edits, which now ignores list markers. On timeouts
+and transient network errors it makes up to three attempts of 7 seconds plus 1
+second per 10 words each; CLI models get one attempt of 10 seconds plus 1 second
+per 10 words. A failure keeps the light cleanup.
+`Sources/BetterWisprCore/Integrations/ContextCapture.swift` adapts the window
+matching and Vision text recognition of
+[`VoiceInk/Infrastructure/SystemIntegration/ScreenCapture/ScreenCaptureService.swift`](https://github.com/Beingpax/VoiceInk/blob/c09cc1f677f40f2ee665843a61f07670210f012e/VoiceInk/Infrastructure/SystemIntegration/ScreenCapture/ScreenCaptureService.swift)
+at the same revision. Changes read the focused window's Accessibility text first
+and recognize screen text only when that finds under 200 characters, the user
+turned screen text on and Screen Recording is already allowed. Dictation never
+asks for Screen Recording. Capture skips secure fields, reads nothing while secure
+input is on and ignores clipboard items marked concealed, transient or
+auto-generated. Context capture is off by default and runs only for Medium cleanup.
+`DictationContext.swift` and `AccessibilityReader.swift` are original BetterWispr
+code.
+
+`Sources/BetterWisprCore/Domain/WritingMode.swift` adapts writing modes per app
+and per website from
+[`VoiceInk/Features/Modes/State/ModeConfig.swift`](https://github.com/Beingpax/VoiceInk/blob/c09cc1f677f40f2ee665843a61f07670210f012e/VoiceInk/Features/Modes/State/ModeConfig.swift)
+and spoken trigger words from
+[`VoiceInk/Features/Modes/Models/ModeTriggerWordDetectionService.swift`](https://github.com/Beingpax/VoiceInk/blob/c09cc1f677f40f2ee665843a61f07670210f012e/VoiceInk/Features/Modes/Models/ModeTriggerWordDetectionService.swift)
+in [VoiceInk](https://github.com/Beingpax/VoiceInk) (GPL-3.0) at the same
+revision. Kept: a trigger word wins over a website and a website over an app,
+the longest trigger word is tried first, and the word is removed from the start
+or end of the dictation as a whole word. Changes resolve the three tiers from
+one table that only counts enabled modes, keep the sentence's closing period,
+question mark or exclamation mark when a trailing trigger word is removed, and
+match websites by host or subdomain plus a path prefix instead of VoiceInk's
+substring check, so `x.com` no longer matches `dropbox.com`. A mode only
+overrides cleanup, tone, screen context and Medium instructions; its unset
+fields inherit the app's settings. `Sources/BetterWisprCore/Integrations/WebsiteReader.swift`
+takes its browser list from
+[`VoiceInk/Infrastructure/SystemIntegration/Context/BrowserURLService.swift`](https://github.com/Beingpax/VoiceInk/blob/c09cc1f677f40f2ee665843a61f07670210f012e/VoiceInk/Infrastructure/SystemIntegration/Context/BrowserURLService.swift)
+but replaces its AppleScript with Accessibility reads, so BetterWispr asks for no
+Automation permission. It takes the window's document address, then walks up from
+the focused element to the outermost web area so an iframe's address is ignored,
+then falls back to the window's first web area when focus is in the toolbar. It
+reads the address only while some enabled mode lists a website, reads it while
+the microphone starts, waits at most half a second, and never stores, logs or
+sends it. Recording starts only after the mode is known, and an unknown address
+captures no screen context. Changes also leave capitalization alone when a
+trailing trigger word is removed, let a trigger word turn screen context off but
+not on, accept `*.github.com` and `github.com/org/*` patterns, and make a saved
+mode with an unknown cleanup or tone leave the workspace unreadable and untouched
+instead of dropping the value.
 
 ## Runtime engines and alternatives reviewed
 
@@ -131,8 +268,8 @@ preparation. VoiceInk revision `c09cc1f677f40f2ee665843a61f07670210f012e`'s
 was reviewed for prepared capture and shutdown draining. BetterWispr implements
 readiness and timestamp-boundary completion with an input-only Core Audio queue
 shared by dictation and meetings. Apple Audio Queue Services supplies buffer
-ownership and callback dispatch instead of adding a custom real-time ring buffer. No source was copied or translated from either project;
-in particular, no GPL VoiceInk code is incorporated.
+ownership and callback dispatch instead of adding a custom real-time ring buffer. No recorder source was copied or translated from either project;
+the VoiceInk code adapted elsewhere is listed in the entries above.
 
 | Project | Upstream terms | Use in this project / useful pattern |
 | --- | --- | --- |
@@ -140,7 +277,7 @@ in particular, no GPL VoiceInk code is incorporated.
 | [FluidAudio](https://github.com/FluidInference/FluidAudio) | [Apache-2.0](https://github.com/FluidInference/FluidAudio/blob/main/LICENSE) | Core ML Parakeet TDT inference, used for the Parakeet models. |
 | [whisper.cpp](https://github.com/ggml-org/whisper.cpp) | [MIT](https://github.com/ggml-org/whisper.cpp/blob/master/LICENSE) | Local C/C++ inference and CLI integration; useful for a separately installed local engine and GGML models. |
 | [Handy](https://github.com/cjpais/Handy) | [MIT](https://github.com/cjpais/Handy/blob/afe5a6310534ffb178794365f31abb8b9fd435a7/LICENSE) | Reviewed its separation of recording, model management and transcription. Its [VAD smoother](https://github.com/cjpais/Handy/blob/afe5a6310534ffb178794365f31abb8b9fd435a7/src-tauri/src/audio_toolkit/vad/smoothed.rs) buffers speech onset and trailing frames. No Handy source is vendored by this research task. |
-| [VoiceInk](https://github.com/Beingpax/VoiceInk) | [GPL-3.0](https://github.com/Beingpax/VoiceInk/blob/main/LICENSE) | Product/reference research only. Its per-app Power Mode informed the idea of per-app writing styles; the style rules and app registry were written for BetterWispr. No source copied into this Apache-2.0 application. |
+| [VoiceInk](https://github.com/Beingpax/VoiceInk) | [GPL-3.0](https://github.com/Beingpax/VoiceInk/blob/main/LICENSE) | Adapted at revision `c09cc1f677f40f2ee665843a61f07670210f012e`, as described above: the dictation edit prompt with vocabulary, selected text, clipboard and window context; AutoLearn's anchored edit reading, AI reviewer and Undo; the speech and editing model warm-ups and low-latency reasoning settings; the Parakeet word-agreement live preview; and writing modes per app, per website and by trigger word. Its per-app Power Mode also informed the per-app writing styles, whose rules and app registry were written for BetterWispr. |
 | [Muesli](https://github.com/Muesli-HQ/muesli) | MIT | Native meeting recorder. Its Core Audio system recorder is adapted for meeting notes, as described above. |
 | [AudioCap](https://github.com/insidegui/AudioCap) | BSD-2-Clause | Minimal process tap sample. Its tap and aggregate device setup is adapted for meeting notes, as described above. |
 | [OpenOats](https://github.com/yazinsai/OpenOats) | MIT | Reviewed for labelling the microphone as Me and system audio as Them, and for removing microphone text that repeats overlapping remote speech. BetterWispr's word-run echo filter is original code. No source copied. |

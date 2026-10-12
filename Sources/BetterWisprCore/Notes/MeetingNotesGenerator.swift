@@ -76,22 +76,38 @@ public enum MeetingNotesGenerator {
         return .unavailable("Apple Intelligence needs macOS 26. Choose Claude Code, Codex, Ollama or an API connection in Models.")
     }
 
-    static func languageModel(_ settings: AppSettings, instructions: String = NotesWriter.instructions) throws -> any NotesLanguageModel {
+    /// `lowLatency` asks API and CLI models for minimal reasoning; meeting notes keep the default requests.
+    static func languageModel(_ settings: AppSettings, instructions: String = NotesWriter.instructions,
+                              lowLatency: Bool = false) throws -> any NotesLanguageModel {
         switch settings.notesSelection {
         case .ollama(let name): return OllamaNotesModel(name: name, instructions: instructions)
         case .connection(let id):
             guard let connection = settings.notesConnections.first(where: { $0.id == id }) else {
                 throw MeetingNotesError.unavailable("Choose a notes connection in Models.")
             }
-            return APINotesModel(connection: connection, instructions: instructions)
+            return APINotesModel(connection: connection, instructions: instructions, lowLatency: lowLatency)
         case .cli(let cli):
-            return CLINotesModel(cli: cli, model: settings.cliModel(cli), instructions: instructions)
+            return CLINotesModel(cli: cli, model: settings.cliModel(cli), instructions: instructions, lowLatency: lowLatency)
         case .apple: break
         }
         #if canImport(FoundationModels)
         if #available(macOS 26.0, *) { return AppleNotesModel(instructions: instructions) }
         #endif
         throw MeetingNotesError.unavailable(appleAvailability.message)
+    }
+
+    /// Loads the selected Ollama or Apple model into memory before a dictation edit. Sends no text; API and CLI models need nothing.
+    public static func warmUp(settings: AppSettings) async {
+        switch settings.notesSelection {
+        case .ollama(let name): _ = try? await Ollama.send("chat", ["model": name, "messages": [], "options": ["num_ctx": Ollama.contextLength]], timeout: 60)
+        case .apple:
+            #if canImport(FoundationModels)
+            if #available(macOS 26.0, *), appleAvailability == .available {
+                LanguageModelSession(instructions: TranscriptPolisher.instructions).prewarm()
+            }
+            #endif
+        case .connection, .cli: break
+        }
     }
 }
 

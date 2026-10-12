@@ -32,7 +32,7 @@ public enum AppCategory: String, CaseIterable, Sendable {
         "it.bloop.airmail2": .email, "org.mozilla.thunderbird": .email,
     ]
 
-    /// Browsers and unknown apps are `other` because the website in use is not inspected.
+    /// Browsers and unknown apps are `other`; a `WritingMode` that lists the website or app sets a tone for it instead.
     public init(bundleID: String?) {
         self = bundleID.flatMap { Self.registry[$0] } ?? .other
     }

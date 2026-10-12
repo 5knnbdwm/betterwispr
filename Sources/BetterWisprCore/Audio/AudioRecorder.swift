@@ -40,6 +40,7 @@ public final class AudioRecorder {
     private var recoveryAttempts = 0
     private var recoveryError: (any Error)?
     private var writer: RecordingWriter?
+    private var tap: LiveSampleTap?
     private var progress: AudioCaptureProgress?
     private var recordingURL: URL?
     private var starting = false
@@ -48,7 +49,8 @@ public final class AudioRecorder {
 
     public init() {}
 
-    public func start() async throws {
+    /// `onSamples` receives 16 kHz mono copies of each buffer on the capture worker; the recorded file is unchanged.
+    public func start(onSamples: (@Sendable ([Float]) -> Void)? = nil) async throws {
         guard writer == nil, !starting, !changingInput else { throw AudioRecordingError.alreadyRecording }
         starting = true
         defer { starting = false }
@@ -65,6 +67,7 @@ public final class AudioRecorder {
         guard allowed else { throw AudioRecordingError.permissionDenied }
         recordingURL = FileManager.default.temporaryDirectory.appending(path: "betterwispr-\(UUID().uuidString).caf")
         meter = VoiceLevelMeter()
+        tap = onSamples.map(LiveSampleTap.init)
         let progress = AudioCaptureProgress()
         self.progress = progress
         inputObserver = AudioInputObserver { [weak self] in
@@ -129,10 +132,12 @@ public final class AudioRecorder {
         let writer = try self.writer ?? RecordingWriter(url: url, format: format, threshold: silenceThreshold)
         let sampleRate = format.sampleRate
         let capture = progress.begin()
+        let tap = tap
         inputObserver?.observeDevice(input.deviceID)
         try await input.start { @Sendable [weak self] buffer, time in
             let end = AudioCaptureProgress.endTime(time, frames: buffer.frameLength, sampleRate: sampleRate)
             let loudness = writer.write(buffer)
+            tap?.receive(buffer)
             let step = Double(buffer.frameLength) / sampleRate / Double(max(1, loudness.count))
             Task { @MainActor [weak self] in
                 guard let self, self.recordingID == id, progress.generation == capture else { return }
@@ -189,6 +194,7 @@ public final class AudioRecorder {
         recoveryAttempts = 0
         recoveryError = nil
         writer = nil
+        tap = nil
         recordingURL = nil
         recordingID = nil
         onLevel?(VoiceLevels())
@@ -282,8 +288,7 @@ final class RecordingWriter: @unchecked Sendable {
     private var activeFrames: AVAudioFramePosition = 0
     private var maximumRMS: Float = 0
     private var error: (any Error)?
-    private var converter: AVAudioConverter?
-    private var pending: AVAudioPCMBuffer?
+    private let formatter = FormatConverter()
     private let sampleRate: Double
     private let threshold: Float
 
@@ -299,7 +304,7 @@ final class RecordingWriter: @unchecked Sendable {
         guard let file, error == nil, input.frameLength > 0 else { return [] }
         let buffer: AVAudioPCMBuffer
         do {
-            buffer = try converted(input, to: file.processingFormat)
+            buffer = try formatter.convert(input, to: file.processingFormat)
             guard buffer.frameLength > 0 else { return [] }
             try file.write(from: buffer)
         } catch {
@@ -313,37 +318,6 @@ final class RecordingWriter: @unchecked Sendable {
         for slice in slices where slice.rms >= threshold { activeFrames += AVAudioFramePosition(slice.frames) }
         return slices.map(\.rms)
     }
-
-    /// Converts a microphone that switched format mid-recording, such as a Bluetooth headset, into the file's format.
-    private func converted(_ buffer: AVAudioPCMBuffer, to format: AVAudioFormat) throws -> AVAudioPCMBuffer {
-        guard buffer.format != format else {
-            converter = nil
-            return buffer
-        }
-        if converter?.inputFormat != buffer.format {
-            converter = AVAudioConverter(from: buffer.format, to: format)
-            converter?.primeMethod = .none
-        }
-        let capacity = AVAudioFrameCount((Double(buffer.frameLength) * format.sampleRate / buffer.format.sampleRate).rounded(.up))
-        guard let converter, let output = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: capacity) else {
-            throw AudioRecordingError.unavailable
-        }
-        pending = buffer
-        defer { pending = nil }
-        var error: NSError?
-        let status = converter.convert(to: output, error: &error) { _, status in
-            guard let input = self.pending else {
-                status.pointee = .noDataNow
-                return nil
-            }
-            self.pending = nil
-            status.pointee = .haveData
-            return input
-        }
-        if status == .error { throw error ?? AudioRecordingError.unavailable }
-        return output
-    }
-
 
     func finish() -> (duration: TimeInterval, hasSpeech: Bool, error: (any Error)?) {
         lock.lock()
