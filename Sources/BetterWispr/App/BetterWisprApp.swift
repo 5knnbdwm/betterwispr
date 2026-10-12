@@ -151,6 +151,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         start()
+        if model.settings.showInDock { NSApplication.shared.activate(ignoringOtherApps: true) }
     }
 
     func start() {
