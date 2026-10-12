@@ -87,13 +87,15 @@ struct SettingsView: View {
                     RowDivider()
                     SettingToggle("Copy to clipboard", caption: "Keep each dictation ready to paste again. When off, your clipboard is left as it was.", isOn: setting(\.copyToClipboard))
                     RowDivider()
-                    SettingToggle("Learn from my corrections", caption: "Words you fix in History, or in the text field within 30 seconds of a paste, are added to Vocabulary.", isOn: setting(\.learnCorrections))
+                    SettingToggle("Learn from my corrections", caption: "Words you fix in History, or in the text field within 30 seconds of a paste, are added to Vocabulary. With Medium cleanup, each English fix and a few words around it are first reviewed by the selected notes model.", isOn: setting(\.learnCorrections))
                 }
 
                 SettingsSection("App") {
                     SettingToggle("Dictation sounds", caption: "Soft cues when you finish, cancel or need attention. Quiet during meeting capture.", isOn: setting(\.soundEffects))
                     RowDivider()
                     SettingToggle("Floating recording capsule", caption: "A small voice control at the bottom of your screen.", isOn: setting(\.showCapsule))
+                    RowDivider()
+                    SettingToggle("Show words as you speak", caption: "Previews Parakeet’s recognition in the capsule while you record. The pasted text is still the full recognition.", isOn: setting(\.showLiveText))
                     RowDivider()
                     SettingToggle("Detect meetings", caption: "Offer the notetaker when Zoom, Google Meet, Teams, a Slack huddle or another call starts using the microphone. Calls in a browser need Accessibility.", isOn: setting(\.detectMeetings))
                     RowDivider()

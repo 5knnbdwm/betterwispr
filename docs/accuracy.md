@@ -319,6 +319,71 @@ so the two runs share clips and scoring.
   notetaker transcribes 3 to 11 second chunks of call audio, close to these
   segments. Recorded meetings are scored under Meetings and speakers below.
 
+## Trailing silence and VAD before Parakeet, 2026-10-12
+
+Measured on an Apple M5 with macOS 27.0.1, release builds of `BetterWisprCLI`
+from commit 18bbac4, FluidAudio 0.17.5, `--language en` and Light cleanup, on
+the same 300 EdAcc segments as above. VoiceInk appends one second of silence
+before transcribing, and the question was whether Parakeet gains from it. In
+VoiceInk's source the 16,000-sample pad sits on the Nemotron streaming path
+only. Its Parakeet path runs FluidAudio's Silero VAD at threshold 0.7, joins
+the speech segments and pads only up to FluidAudio's minimum length. Both ideas
+were measured anyway, because FluidAudio masks its own 15 s zero padding by the
+original length, so appended zeros are decoded as audio.
+
+Each variant replaced the plain Parakeet path in a bench-only build. The
+variants were the resampled samples with 16,000 zeros appended, and VAD
+(threshold 0.7, FluidAudio's segmentation defaults) followed by the same
+padding. A control that passed the resampled samples without padding
+reproduced the unchanged URL path on every clip, so resampling itself changes
+nothing. The unchanged path reproduced itself exactly on three runs.
+
+| Accent | Ultra | Padded | Padded minus Ultra, 95% interval | VAD, padded | VAD minus Ultra, 95% interval |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Indian English | 13.42% | 13.42% | -0.60 to +0.75 | 13.48% | -0.58 to +0.82 |
+| Nigerian English | 14.41% | 15.05% | -0.08 to +1.38 | 15.05% | -0.10 to +1.38 |
+| Mainstream US English | 15.46% | 16.09% | -0.22 to +1.59 | 15.94% | -0.52 to +1.54 |
+| All | 14.45% | 14.90% | +0.02 to +0.91 | 14.87% | -0.05 to +0.89 |
+
+| Accent | v3 | Padded | Padded minus v3, 95% interval | VAD, padded | VAD minus v3, 95% interval |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Indian English | 14.51% | 14.62% | -0.63 to +0.86 | 14.68% | -0.63 to +0.97 |
+| Nigerian English | 16.42% | 16.33% | -1.10 to +0.92 | 16.79% | -0.70 to +1.39 |
+| Mainstream US English | 16.78% | 18.21% | +0.14 to +3.10 | 18.15% | +0.11 to +3.08 |
+| All | 15.96% | 16.43% | -0.16 to +1.17 | 16.60% | +0.00 to +1.34 |
+
+- Intervals are a 2000-sample bootstrap over segments of the recognition WER
+  difference. Padding gave Ultra fewer errors on 25 segments, more on 36 and
+  the same on 239. VAD with padding gave 31, 42 and 227. For v3 the counts are
+  31, 43 and 226 with padding and 33, 52 and 215 with VAD. With Light cleanup
+  every difference stays positive: +0.45 for padded Ultra, +0.65 for VAD Ultra,
+  +0.63 and +0.79 for v3.
+- The loss sits in 5 to 15 s segments, where the appended second is no longer
+  masked. Ultra went from 11.15% to 11.90% there, with 7 segments better and 20
+  worse. Segments over 15 s moved by less than 0.3 points either way. Segments
+  under 2 s did not change with Ultra, but with v3 three of them collapsed.
+  "They just have to like keep it." became "Yeah." and "Okay, no, it's it's
+  okay." became empty.
+- Other changes are formatting flips rather than recognition. With padded Ultra
+  "C eleven dash P two" became "C11 dash P2" and "a hundred percent" became
+  "100%". The one clear gain, "Hawaii." becoming "to think is made in Hawaii.",
+  is a single segment.
+- VAD removed audio from 13 of 300 segments and emptied one 0.4 s segment. The
+  other 287 only received the padding, so VAD with padding differs from padding
+  alone on 20 segments, -0.21 to +0.14 points. The EdAcc segments are already
+  cut to speech, so this corpus cannot show what VAD does to the room tone a
+  dictation recording keeps around the hotkey press and release.
+- Recognition p50 / p95 stayed between 0.065 s / 0.140 s and 0.105 s / 0.248 s
+  for every variant, including identical baseline runs, with the Mac at a load
+  average of 4 to 6 on 10 cores from parallel builds. No speed claim is made.
+- VAD needs the `silero-vad` CoreML model, which FluidAudio downloads on first
+  use. For the bench it was fetched into a temporary directory, never into the
+  app's model folder.
+- Nothing shipped. The rule for keeping a variant was an upper bound at or
+  below +0.3 points with a mean no worse than the baseline on Ultra. Padding is
+  +0.45 with an upper bound of +0.91 and VAD is +0.41 with +0.89. The provider
+  is unchanged.
+
 ## Phrase booster floor, 2026-10-10
 
 Measured on the same Mac with release builds of `BetterWisprCLI`, Parakeet v3,

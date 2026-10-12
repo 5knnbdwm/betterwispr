@@ -414,10 +414,10 @@ private func jsonDroppingKey(_ value: some Encodable, _ key: String) throws -> D
     return try JSONSerialization.data(withJSONObject: object)
 }
 
-@Test func correctionWatcherOnlyReadsEditsInsideTheDictation() {
+@Test func correctionWatcherReadsTheDictationUpToItsUnchangedNeighbours() {
     #expect(CorrectionWatcher.edit(of: "ping kv now", from: "Hi. ping kv now", to: "Hi. ping KV now") == "ping KV now")
     #expect(CorrectionWatcher.edit(of: "ping kv now", from: "Hi. ping kv now", to: "Hey. ping kv now") == nil)
-    #expect(CorrectionWatcher.edit(of: "ping kv now", from: "ping kv now", to: "ping kv now please") == nil)
+    #expect(CorrectionWatcher.edit(of: "ping kv now", from: "ping kv now", to: "ping kv now please") == "ping kv now please")
 }
 
 @Test func correctionWatcherLearnsSettledOrSentTextOnly() {

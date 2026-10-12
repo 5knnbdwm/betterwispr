@@ -2,6 +2,8 @@ import Foundation
 
 public enum Ollama {
     static let api = URL(string: "http://127.0.0.1:11434/api/")!
+    /// Ollama reloads a model whose context length differs from the last request, so every request sends the same one.
+    static let contextLength = 8192
 
     /// Lists models stored in Ollama on this Mac that can write text, leaving out cloud and embedding models.
     public static func installedModels() async throws -> [String] {
@@ -74,7 +76,7 @@ struct OllamaNotesModel: NotesLanguageModel {
         var body: [String: Any] = [
             "model": name, "stream": false, "think": false,
             "messages": [["role": "system", "content": instructions], ["role": "user", "content": prompt]],
-            "options": ["temperature": 0.3, "num_ctx": 8192],
+            "options": ["temperature": 0.3, "num_ctx": Ollama.contextLength],
         ]
         if let format { body["format"] = format }
         let data = try await Ollama.send("chat", body, timeout: 600)
