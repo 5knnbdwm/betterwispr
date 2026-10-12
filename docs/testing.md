@@ -561,7 +561,7 @@ retries. They do not access Keychain, mount disk images or submit to Apple.
 
 ## Recording, capsule and cancellation
 
-- [ ] Turn off Settings → App → Show in Dock. The Dock icon disappears while
+- [ ] Leave Settings → App → Show in Dock off, the default. The Dock icon stays hidden while
   the menu bar icon remains. Close the dashboard and dictate into TextEdit with
   ⌥ Space in hold and toggle modes; the capsule must not steal focus and paste
   must still reach TextEdit. Reopen Dashboard and Settings from the menu bar.

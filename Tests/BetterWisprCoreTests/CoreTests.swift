@@ -18,7 +18,7 @@ import Testing
     let store = LocalStore(directory: folder)
     #expect(try store.load() == SavedState())
     var state = SavedState()
-    state.settings.showInDock = false
+    state.settings.showInDock = true
     state.history = [Transcript(text: "Hello", rawText: "hello", duration: 2, modelName: "Test", language: "en")]
     try store.save(state)
     #expect(try store.load() == state)
@@ -34,7 +34,7 @@ import Testing
     #expect(settings.dictationMode == .hold)
     #expect(!settings.copyToClipboard)
     #expect(settings.soundEffects)
-    #expect(settings.showInDock)
+    #expect(!settings.showInDock)
     #expect(settings.theme == .dark)
     #expect(settings.shortcut == .optionSpace)
     #expect(settings.microphone == nil)
@@ -46,7 +46,7 @@ import Testing
     toggled.onboardingStep = 2
     toggled.copyToClipboard = true
     toggled.soundEffects = false
-    toggled.showInDock = false
+    toggled.showInDock = true
     toggled.theme = .system
     toggled.microphone = AudioInputDevice(id: "AppleUSBAudioEngine:Shure:MV7:1", name: "Shure MV7")
     #expect(try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(toggled)) == toggled)

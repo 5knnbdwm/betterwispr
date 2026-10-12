@@ -32,7 +32,7 @@ Sources/
 
 The menu bar and global shortcut remain available after the last window closes.
 The app delegate starts shortcut and panel services at launch, independently of
-dashboard presentation. `AppSettings.showInDock` defaults to true for new and
+dashboard presentation. `AppSettings.showInDock` defaults to false for new and
 older workspaces. The bundle launches as an `LSUIElement` agent to avoid a Dock
 icon flashing when the saved preference is off; the delegate restores `.regular`
 or `.accessory` activation policy before launch finishes. Settings changes apply
