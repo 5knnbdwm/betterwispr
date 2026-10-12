@@ -21,6 +21,7 @@ struct CLINotesModel: NotesLanguageModel {
     let cli: NotesCLI
     let model: String
     var instructions = NotesWriter.instructions
+    var lowLatency = false
 
     func respond(to prompt: String) async throws -> String {
         try await response(to: prompt).text
@@ -38,20 +39,6 @@ struct CLINotesModel: NotesLanguageModel {
                 throw MeetingNotesError.unavailable("Sign in to your Claude subscription with claude auth login in Terminal.")
             }
         }
-        let arguments: [String]
-        switch cli {
-        case .claudeCode:
-            arguments = ["--print", "--output-format", "json", "--no-session-persistence", "--safe-mode",
-                         "--tools", "", "--strict-mcp-config", "--disable-slash-commands",
-                         "--system-prompt", instructions]
-        case .codex:
-            arguments = ["--no-daemon", "exec", "--ignore-user-config", "--skip-git-repo-check", "--ephemeral",
-                         "--sandbox", "read-only", "--color", "never", "-c", "approval_policy=\"never\"",
-                         "-c", "forced_login_method=\"chatgpt\"", "-c", "project_doc_max_bytes=0",
-                         "-c", "web_search=\"disabled\"", "-c", "history.persistence=\"none\"",
-                         "--disable", "shell_tool", "--disable", "apps", "--disable", "plugins",
-                         "--disable", "multi_agent", "--disable", "hooks", "--disable", "skill_search"]
-        }
         let chosen = model.trimmingCharacters(in: .whitespacesAndNewlines)
         guard chosen.count <= 200, !chosen.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else {
             throw MeetingNotesError.unavailable("Enter a model ID of at most 200 characters without control characters.")
@@ -67,6 +54,23 @@ struct CLINotesModel: NotesLanguageModel {
             return (text, "\(cli.name) · \(actual.isEmpty ? chosen : actual)")
         }
         return (output, "\(cli.name) · \(chosen)")
+    }
+
+    var arguments: [String] {
+        switch cli {
+        case .claudeCode:
+            ["--print", "--output-format", "json", "--no-session-persistence", "--safe-mode",
+             "--tools", "", "--strict-mcp-config", "--disable-slash-commands",
+             "--system-prompt", instructions] + (lowLatency ? ["--effort", "low"] : [])
+        case .codex:
+            ["--no-daemon", "exec", "--ignore-user-config", "--skip-git-repo-check", "--ephemeral",
+             "--sandbox", "read-only", "--color", "never", "-c", "approval_policy=\"never\"",
+             "-c", "forced_login_method=\"chatgpt\"", "-c", "project_doc_max_bytes=0",
+             "-c", "web_search=\"disabled\"", "-c", "history.persistence=\"none\"",
+             "--disable", "shell_tool", "--disable", "apps", "--disable", "plugins",
+             "--disable", "multi_agent", "--disable", "hooks", "--disable", "skill_search"]
+                + (lowLatency ? ["-c", "model_reasoning_effort=\"low\""] : [])
+        }
     }
 
     func draft(_ prompt: String) async throws -> NotesDraft {

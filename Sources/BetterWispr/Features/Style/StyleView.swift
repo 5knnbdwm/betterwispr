@@ -25,7 +25,7 @@ private extension StyleContext {
         case .personal: "WhatsApp, Telegram, Discord, Messages, Signal and Messenger."
         case .work: "Slack, Microsoft Teams, Zoom, Webex and Mattermost."
         case .email: "Mail, Outlook, Superhuman, Spark, Mimestream, Airmail and Thunderbird."
-        case .other: "ChatGPT, Claude, Cursor, Notes, Notion, browsers and every other app. Browsers use this tone because BetterWispr can’t see which website is open. Tones only change English dictation."
+        case .other: "ChatGPT, Claude, Cursor, Notes, Notion, browsers and every other app. Browsers use this tone unless a mode below lists the website. Tones only change English dictation."
         }
     }
 
@@ -39,7 +39,7 @@ private extension StyleContext {
     }
 }
 
-private extension StyleTone {
+extension StyleTone {
     var title: String {
         switch self {
         case .formal: "Formal"
@@ -59,14 +59,14 @@ private extension StyleTone {
     }
 }
 
-private extension CleanupLevel {
+extension CleanupLevel {
     var title: String { rawValue.capitalized }
 
     var detail: String {
         switch self {
         case .none: "Keeps exactly what you said, including filler words."
         case .light: "Removes filler words like “um” and “you know”, stutters like “we we”, and corrections like “at 5, no, at 6”."
-        case .medium: "Also edits English dictation for clarity and conciseness with your notes model."
+        case .medium: "Also has your notes model fix self-corrections, numbers, punctuation and spoken lists in English dictation."
         }
     }
 }
@@ -117,6 +117,14 @@ struct StyleView: View {
                         .padding(.horizontal, 16)
                         .padding(.vertical, 11)
                         .transition(.opacity)
+                        RowDivider()
+                        SettingToggle("Use screen context", caption: Self.screenContextCaption, isOn: setting(\.useScreenContext).animation(reveal))
+                            .transition(.opacity)
+                        if model.settings.useScreenContext {
+                            RowDivider()
+                            SettingToggle("Read window text from the screen", caption: screenTextCaption, isOn: recognizeScreenText)
+                                .transition(.opacity)
+                        }
                     }
                 } footer: {
                     Text(cleanupFooter)
@@ -130,6 +138,8 @@ struct StyleView: View {
                         }
                     }
                 }
+
+                ModesSection(model: model)
             }
             .padding(.horizontal, 28)
             .padding(.vertical, 24)
@@ -191,7 +201,7 @@ struct StyleView: View {
         switch model.settings.cleanup {
         case .none: Self.spokenSample
         case .light: TranscriptCleaner.clean(Self.spokenSample, language: "en")
-        case .medium: "Hey Sam, are we still on for lunch? We should leave early to beat the traffic."
+        case .medium: "Hey Sam, are we still on for lunch? I think we should leave early to beat the traffic."
         }
     }
 
@@ -222,6 +232,21 @@ struct StyleView: View {
     private func tone(_ context: StyleContext) -> Binding<StyleTone> {
         Binding(get: { model.settings.tone(for: context) },
                 set: { model.settings.styles[context] = $0; model.saveSettings() })
+    }
+
+    private static let screenContextCaption = "Sends your selected text, your clipboard and the text of the window you dictate into to your notes model with each Medium dictation, so it can spell what you see. Your notes model may be a cloud service. Nothing is read while a password field is active, and clipboard items marked as passwords are skipped."
+
+    private var screenTextCaption: String {
+        let status = CGPreflightScreenCaptureAccess() ? "Screen Recording is allowed." : "Needs Screen Recording. Allow BetterWispr under Privacy & Security, Screen & System Audio Recording in System Settings, then reopen BetterWispr."
+        return "When an app shares too little text, reads its window from a screenshot on this Mac and sends that text to your notes model too, which may be a cloud service. \(status)"
+    }
+
+    private var recognizeScreenText: Binding<Bool> {
+        Binding(get: { model.settings.recognizeScreenText }, set: { isOn in
+            model.settings.recognizeScreenText = isOn
+            model.saveSettings()
+            if isOn, !CGPreflightScreenCaptureAccess() { CGRequestScreenCaptureAccess() }
+        })
     }
 
     private func setting<Value>(_ keyPath: WritableKeyPath<AppSettings, Value>) -> Binding<Value> {

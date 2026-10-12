@@ -20,6 +20,9 @@ func run() async throws {
           --download-phrase-booster
           --download-speaker-detection
           --transcribe-file PATH [--model MODEL_ID] [--language en] [--vocabulary "Term,Other term"]
+          --live-file PATH [--model MODEL_ID] [--language en]
+            Feeds the file through the Parakeet live preview in real time, printing each confirmed | provisional
+            update with its pass latency, then the batch transcription of the same file.
           --meeting PATH [--model MODEL_ID] [--language en] [--vocabulary "Term,Other term"] [--notes OUT.md] [--notes-model OLLAMA_MODEL]
             Plays the file through the meeting chunker as call audio, transcribes each chunk as meetings do and
             prints one JSON segment per line. Speaker detection labels voices when it is installed (macOS 15).
@@ -57,15 +60,15 @@ func run() async throws {
     var index = 0
     while index < arguments.count {
         let option = arguments[index]
-        guard ["--download-model", "--transcribe-file", "--bench", "--meeting", "--notes", "--model", "--language", "--vocabulary", "--cleanup", "--notes-model"].contains(option),
+        guard ["--download-model", "--transcribe-file", "--live-file", "--bench", "--meeting", "--notes", "--model", "--language", "--vocabulary", "--cleanup", "--notes-model"].contains(option),
               index + 1 < arguments.count, !arguments[index + 1].hasPrefix("--"), options[option] == nil else {
             throw CLIError.usage("Invalid or repeated argument: \(option). Run --help for usage.")
         }
         options[option] = arguments[index + 1]
         index += 2
     }
-    guard options["--download-model"] != nil || options["--transcribe-file"] != nil || options["--bench"] != nil || options["--meeting"] != nil else {
-        throw CLIError.usage("Choose --download-model, --transcribe-file, --bench or --meeting.")
+    guard options["--download-model"] != nil || options["--transcribe-file"] != nil || options["--live-file"] != nil || options["--bench"] != nil || options["--meeting"] != nil else {
+        throw CLIError.usage("Choose --download-model, --transcribe-file, --live-file, --bench or --meeting.")
     }
     if let downloadID = options["--download-model"], let modelID = options["--model"], downloadID != modelID {
         throw CLIError.usage("Download and transcription must select the same model.")
@@ -104,6 +107,10 @@ func run() async throws {
         try await meeting(URL(fileURLWithPath: (path as NSString).expandingTildeInPath), provider: provider,
                           language: options["--language"].flatMap { $0 == "auto" ? nil : $0 }, vocabulary: vocabulary,
                           notes: options["--notes"].map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }, settings: settings)
+    } else if let path = options["--live-file"] {
+        guard let parakeet = provider as? ParakeetProvider else { throw CLIError.usage("--live-file needs a Parakeet model.") }
+        try await live(URL(fileURLWithPath: (path as NSString).expandingTildeInPath), provider: parakeet,
+                       language: options["--language"].flatMap { $0 == "auto" ? nil : $0 })
     } else if let path = options["--transcribe-file"] {
         let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
         let language = options["--language"].flatMap { $0 == "auto" ? nil : $0 }
@@ -197,13 +204,37 @@ func bench(manifest: URL, provider: any SpeechProvider, language: String?, vocab
             let cleaning = clock.now
             var cleaned = TranscriptCleaner.clean(hypothesis, language: spoken)
             if settings.cleanup == .medium, TranscriptCleaner.isEnglish(cleaned, language: spoken) {
-                cleaned = await TranscriptPolisher.polish(cleaned, settings: settings) ?? cleaned
+                cleaned = await TranscriptPolisher.polish(cleaned, settings: settings, vocabulary: vocabulary, context: nil) ?? cleaned
             }
             result.cleaned = cleaned
             result.cleanupSeconds = seconds(cleaning.duration(to: clock.now))
         }
         print(String(decoding: try encoder.encode(result), as: UTF8.self))
     }
+}
+
+/// Plays a file into the live preview at real-time pace in 100 ms chunks, then runs the batch pass on the same file.
+@MainActor
+func live(_ url: URL, provider: ParakeetProvider, language: String?) async throws {
+    let samples = try ParakeetProvider.samples(of: url)
+    let transcriber = LiveTranscriber()
+    let clock = ContinuousClock()
+    let started = clock.now
+    transcriber.onUpdate = { [weak transcriber] transcript in
+        let elapsed = String(format: "%5.1f", seconds(started.duration(to: clock.now)))
+        let pass = String(format: "%.2f", seconds(transcriber?.lastPass ?? .zero))
+        print("\(elapsed) s  pass \(pass) s  \(transcript.confirmed) | \(transcript.hypothesis)")
+    }
+    transcriber.beginBuffering()
+    transcriber.start { try await provider.liveTranscribe($0, language: language) }
+    let chunk = LiveTranscriber.sampleRate / 10
+    for start in stride(from: 0, to: samples.count, by: chunk) {
+        transcriber.append(Array(samples[start..<min(start + chunk, samples.count)]))
+        try await Task.sleep(for: .milliseconds(100))
+    }
+    await transcriber.stop()
+    print("live:  \(transcriber.transcript.confirmed) | \(transcriber.transcript.hypothesis)")
+    print("batch: \(try await provider.transcribe(audioURL: url, language: language, vocabulary: []))")
 }
 
 func seconds(_ duration: Duration) -> Double {

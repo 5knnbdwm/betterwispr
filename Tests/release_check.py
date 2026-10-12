@@ -126,35 +126,44 @@ echo 'sparkle:edSignature="test-signature" length="7"' ''')
     assert not (root / "release/appcast.xml").exists()
 
     # Exercise the real packaging wrapper: retry only Finder busy, cap retries,
-    # and never replace an existing DMG with failed/unverified output.
+    # always eject the image, and never replace an existing DMG with
+    # failed/unverified output.
     shutil.copy2(SOURCE / "scripts/create-dmg.sh", root / "scripts/create-dmg.sh")
+    volume = root / "volume"
     stub("bin/ditto", 'cp -R "$1" "$2"')
     stub("bin/sleep", 'exit 0')
     stub("bin/hdiutil", 'exit "${CHECK_VERIFY_STATUS:-0}"')
-    stub("bin/create-dmg", '''attempt=0
-[[ ! -f "$CHECK_ATTEMPTS" ]] || attempt=$(cat "$CHECK_ATTEMPTS")
-attempt=$((attempt + 1))
+    stub("bin/diskutil", f'''printf 'diskutil %s\\n' "$*" >> "$CHECK_LOG"
+case "$1 $2" in
+    'image create') printf new-dmg > "$5" ;;
+    'image attach') mkdir -p {volume}; printf '/dev/disk9 \\tGUID_partition_scheme\\n/dev/disk10s1\\tApple_APFS_Volume\\t%s\\n' {volume} ;;
+    eject*) exit "${{CHECK_EJECT_STATUS:-0}}" ;;
+esac''')
+    stub("bin/osascript", '''attempt=$(( $(cat "$CHECK_ATTEMPTS") + 1 ))
 echo "$attempt" > "$CHECK_ATTEMPTS"
 if [[ $attempt -le "$CHECK_FAILURES" ]]; then
     echo "$CHECK_ERROR" >&2
-    exit "$CHECK_DMG_STATUS"
+    exit 1
 fi
-printf new-dmg > "${@: -2:1}"''')
-    for failures, error, status, verify, expected_attempts, expected_status in (
-        (0, "", 64, 0, 1, 0),
-        (1, "Finder is busy. (-15260)", 64, 0, 2, 0),
-        (9, "Finder is busy. (-15260)", 64, 0, 3, 64),
-        (1, "Not authorized (-1743)", 64, 0, 1, 64),
-        (1, "Finder is busy. (-15260); detach failed", 16, 0, 1, 16),
-        (0, "", 64, 1, 1, 1),
+[[ -n "${CHECK_NO_DS_STORE:-}" ]] || touch "$2/.DS_Store"''')
+    for failures, error, eject, verify, no_ds_store, expected_attempts, expected_status in (
+        (0, "", 0, 0, "", 1, 0),
+        (1, "Finder is busy. (-15260)", 0, 0, "", 2, 0),
+        (9, "Finder is busy. (-15260)", 0, 0, "", 3, 1),
+        (1, "Not authorized (-1743)", 0, 0, "", 1, 1),
+        (0, "", 0, 0, "1", 1, 1),
+        (0, "", 16, 0, "", 1, 16),
+        (0, "", 0, 1, "", 1, 1),
     ):
         (root / "attempts").write_text("0")
+        shutil.rmtree(volume, ignore_errors=True)
         dmg.write_text("previous release")
         result = run("bash", "scripts/create-dmg.sh", ".build/arm64-apple-macosx/release/BetterWispr.app", str(dmg),
-                     CHECK_FAILURES=str(failures), CHECK_ERROR=error,
-                     CHECK_DMG_STATUS=str(status), CHECK_VERIFY_STATUS=str(verify))
+                     CHECK_FAILURES=str(failures), CHECK_ERROR=error, CHECK_EJECT_STATUS=str(eject),
+                     CHECK_VERIFY_STATUS=str(verify), CHECK_NO_DS_STORE=no_ds_store)
         assert result.returncode == expected_status, result.stdout + result.stderr
         assert int((root / "attempts").read_text()) == expected_attempts
+        assert "diskutil eject /dev/disk9" in calls(), calls()
         assert dmg.read_text() == ("new-dmg" if expected_status == 0 else "previous release")
         assert not list((root / "release").glob(".dmg-build.*"))
 

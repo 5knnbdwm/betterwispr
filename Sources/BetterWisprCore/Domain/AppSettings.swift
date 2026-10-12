@@ -21,6 +21,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var copyToClipboard: Bool = false
     public var saveHistory: Bool = true
     public var showCapsule: Bool = true
+    /// Shows Parakeet's provisional words in the capsule while recording.
+    public var showLiveText: Bool = true
     public var soundEffects: Bool = true
     /// Offers the notetaker when a known call app or web meeting starts recording.
     public var detectMeetings: Bool = true
@@ -32,8 +34,14 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var shortcut: DictationShortcut = .optionSpace
     public var learnCorrections: Bool = true
     public var cleanup: CleanupLevel = .light
+    /// Sends selected text, clipboard text and the focused window's text to the notes model during Medium cleanup.
+    public var useScreenContext: Bool = false
+    /// Reads window text from pixels when the app exposes too little through Accessibility; needs Screen Recording.
+    public var recognizeScreenText: Bool = false
     /// Missing contexts use `.formal`, which leaves the transcript as recognized.
     public var styles: [StyleContext: StyleTone] = [:]
+    /// Checked in order; see `[WritingMode].match`.
+    public var modes: [WritingMode] = []
     /// Nil uses Automatic: the macOS default input, or the built-in mic instead of a Bluetooth headset while the lid is open.
     public var microphone: AudioInputDevice?
     /// The Ollama model that writes meeting notes; nil uses Apple Intelligence.
@@ -95,6 +103,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         copyToClipboard = try container.decodeIfPresent(Bool.self, forKey: .copyToClipboard) ?? false
         saveHistory = try container.decode(Bool.self, forKey: .saveHistory)
         showCapsule = try container.decode(Bool.self, forKey: .showCapsule)
+        showLiveText = try container.decodeIfPresent(Bool.self, forKey: .showLiveText) ?? true
         soundEffects = try container.decodeIfPresent(Bool.self, forKey: .soundEffects) ?? true
         detectMeetings = try container.decodeIfPresent(Bool.self, forKey: .detectMeetings) ?? true
         theme = try container.decodeIfPresent(AppTheme.self, forKey: .theme) ?? .dark
@@ -106,7 +115,10 @@ public struct AppSettings: Codable, Equatable, Sendable {
         microphone = try container.decodeIfPresent(AudioInputDevice.self, forKey: .microphone)
         learnCorrections = try container.decodeIfPresent(Bool.self, forKey: .learnCorrections) ?? true
         cleanup = try container.decodeIfPresent(CleanupLevel.self, forKey: .cleanup) ?? .light
+        useScreenContext = try container.decodeIfPresent(Bool.self, forKey: .useScreenContext) ?? false
+        recognizeScreenText = try container.decodeIfPresent(Bool.self, forKey: .recognizeScreenText) ?? false
         styles = try container.decodeIfPresent([StyleContext: StyleTone].self, forKey: .styles) ?? [:]
+        modes = try container.decodeIfPresent([WritingMode].self, forKey: .modes) ?? []
         notesModel = try container.decodeIfPresent(String.self, forKey: .notesModel)
         completedOnboardingVersion = try container.decodeIfPresent(Int.self, forKey: .completedOnboardingVersion) ?? 0
         onboardingStep = try container.decodeIfPresent(Int.self, forKey: .onboardingStep) ?? 0

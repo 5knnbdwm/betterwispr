@@ -1,13 +1,16 @@
 # Local transcription accuracy
 
-Research reviewed 2026-10-08. The only measured accuracy numbers are the
-read-speech Parakeet TDT v3 baseline and the cleanup experiment below. There is
-still no benchmark of natural dictation.
+Research reviewed 2026-10-08. Measured below are read speech, accented
+video-call conversation, held-out Indian English, recorded meetings with speaker
+labels, meeting notes judged against their transcripts, and Light cleanup on 290
+dictations saved on the development Mac. Recognition accuracy on natural
+dictation is still not measured: BetterWispr keeps no dictation audio, so there
+is nothing to score a reference against.
 The goal is to reduce real dictation errors on the user's hardware and languages;
 neither a model leaderboard nor a paper justifies claiming "best accuracy" for
 this application. A network-denied Tiny-model file smoke test and digital-silence
 check passed; [the validation record](testing.md) documents their narrow scope.
-The corpus work below remains a measurement plan, not benchmark results.
+The consented dictation corpus under Reproducible evaluation remains a plan.
 
 ## What the evidence supports
 
@@ -314,7 +317,72 @@ so the two runs share clips and scoring.
   Ultra, so Ultra costs no speed. Preparing Ultra from the cache took 0.30 s.
 - On this evidence Ultra replaced v3 as the recommended model. The meeting
   notetaker transcribes 3 to 11 second chunks of call audio, close to these
-  segments, but no meeting recording was scored.
+  segments. Recorded meetings are scored under Meetings and speakers below.
+
+## Trailing silence and VAD before Parakeet, 2026-10-12
+
+Measured on an Apple M5 with macOS 27.0.1, release builds of `BetterWisprCLI`
+from commit 18bbac4, FluidAudio 0.17.5, `--language en` and Light cleanup, on
+the same 300 EdAcc segments as above. VoiceInk appends one second of silence
+before transcribing, and the question was whether Parakeet gains from it. In
+VoiceInk's source the 16,000-sample pad sits on the Nemotron streaming path
+only. Its Parakeet path runs FluidAudio's Silero VAD at threshold 0.7, joins
+the speech segments and pads only up to FluidAudio's minimum length. Both ideas
+were measured anyway, because FluidAudio masks its own 15 s zero padding by the
+original length, so appended zeros are decoded as audio.
+
+Each variant replaced the plain Parakeet path in a bench-only build. The
+variants were the resampled samples with 16,000 zeros appended, and VAD
+(threshold 0.7, FluidAudio's segmentation defaults) followed by the same
+padding. A control that passed the resampled samples without padding
+reproduced the unchanged URL path on every clip, so resampling itself changes
+nothing. The unchanged path reproduced itself exactly on three runs.
+
+| Accent | Ultra | Padded | Padded minus Ultra, 95% interval | VAD, padded | VAD minus Ultra, 95% interval |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Indian English | 13.42% | 13.42% | -0.60 to +0.75 | 13.48% | -0.58 to +0.82 |
+| Nigerian English | 14.41% | 15.05% | -0.08 to +1.38 | 15.05% | -0.10 to +1.38 |
+| Mainstream US English | 15.46% | 16.09% | -0.22 to +1.59 | 15.94% | -0.52 to +1.54 |
+| All | 14.45% | 14.90% | +0.02 to +0.91 | 14.87% | -0.05 to +0.89 |
+
+| Accent | v3 | Padded | Padded minus v3, 95% interval | VAD, padded | VAD minus v3, 95% interval |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Indian English | 14.51% | 14.62% | -0.63 to +0.86 | 14.68% | -0.63 to +0.97 |
+| Nigerian English | 16.42% | 16.33% | -1.10 to +0.92 | 16.79% | -0.70 to +1.39 |
+| Mainstream US English | 16.78% | 18.21% | +0.14 to +3.10 | 18.15% | +0.11 to +3.08 |
+| All | 15.96% | 16.43% | -0.16 to +1.17 | 16.60% | +0.00 to +1.34 |
+
+- Intervals are a 2000-sample bootstrap over segments of the recognition WER
+  difference. Padding gave Ultra fewer errors on 25 segments, more on 36 and
+  the same on 239. VAD with padding gave 31, 42 and 227. For v3 the counts are
+  31, 43 and 226 with padding and 33, 52 and 215 with VAD. With Light cleanup
+  every difference stays positive: +0.45 for padded Ultra, +0.65 for VAD Ultra,
+  +0.63 and +0.79 for v3.
+- The loss sits in 5 to 15 s segments, where the appended second is no longer
+  masked. Ultra went from 11.15% to 11.90% there, with 7 segments better and 20
+  worse. Segments over 15 s moved by less than 0.3 points either way. Segments
+  under 2 s did not change with Ultra, but with v3 three of them collapsed.
+  "They just have to like keep it." became "Yeah." and "Okay, no, it's it's
+  okay." became empty.
+- Other changes are formatting flips rather than recognition. With padded Ultra
+  "C eleven dash P two" became "C11 dash P2" and "a hundred percent" became
+  "100%". The one clear gain, "Hawaii." becoming "to think is made in Hawaii.",
+  is a single segment.
+- VAD removed audio from 13 of 300 segments and emptied one 0.4 s segment. The
+  other 287 only received the padding, so VAD with padding differs from padding
+  alone on 20 segments, -0.21 to +0.14 points. The EdAcc segments are already
+  cut to speech, so this corpus cannot show what VAD does to the room tone a
+  dictation recording keeps around the hotkey press and release.
+- Recognition p50 / p95 stayed between 0.065 s / 0.140 s and 0.105 s / 0.248 s
+  for every variant, including identical baseline runs, with the Mac at a load
+  average of 4 to 6 on 10 cores from parallel builds. No speed claim is made.
+- VAD needs the `silero-vad` CoreML model, which FluidAudio downloads on first
+  use. For the bench it was fetched into a temporary directory, never into the
+  app's model folder.
+- Nothing shipped. The rule for keeping a variant was an upper bound at or
+  below +0.3 points with a mean no worse than the baseline on Ultra. Padding is
+  +0.45 with an upper bound of +0.91 and VAD is +0.41 with +0.89. The provider
+  is unchanged.
 
 ## Phrase booster floor, 2026-10-10
 
@@ -366,6 +434,188 @@ English and Light cleanup, using `--bench MANIFEST --model parakeet-v3
   the weight for short terms, or both, left absent WER at 17.33% to 17.42% and
   present WER at 16.90%, so neither is used.
 
+## Held-out Indian English, 2026-10-12
+
+Measured on an Apple M5 with macOS 27.0.1, release builds of `BetterWisprCLI`
+with the 0.1.5 changes, FluidAudio 0.17.5, `--language en` and Light cleanup.
+The corpus is every Indian English segment in the EdAcc validation and test
+splits with at least four words that the 100 segments above did not use: 597
+segments and 12,757 scored words. The segments are new but the speakers are
+not, because EdAcc has few Indian English speakers.
+
+| Text scored | v3 | Ultra | Ultra minus v3, 95% interval |
+| --- | ---: | ---: | ---: |
+| Recognition | 12.33% | 11.51% | -1.33 to -0.38 |
+| Light cleanup | 12.11% | 12.05% | -0.63 to +0.41 |
+
+- Intervals are a 2000-sample bootstrap over segments. Shared speakers make
+  segments less independent than the bootstrap assumes, so the true intervals
+  are wider. Ultra had fewer recognition errors on 115 segments, more on 60 and
+  the same on 422.
+- Light cleanup cancels Ultra's lead on this set. EdAcc references drop fillers
+  but keep repeated words and phrases such as "you know". v3 writes more
+  fillers, so cleanup removed 408 fillers and 403 other words from v3 output,
+  against 330 and 426 from Ultra. Removing a filler fixes an error against these
+  references; removing anything else adds one. Apart from the two repairs below,
+  this is a reference convention, not a cleanup fault.
+
+## Light cleanup audit, 2026-10-12
+
+Every segment that Light cleanup changed in the held-out Ultra output was read
+against its reference. Two self-correction repairs deleted words the speaker
+meant: "in the last book, no, the whole thing with the houses" and "closest to
+like, I mean, the first one was obviously very close". Both restart on a recent
+word, which was all the repair rule asked for. A real correction such as "to
+Pune, sorry, no, to Delhi" ends its clause about as soon as the words it
+replaces. The rule now also requires the repair to reach a clause break or the
+end of the text within one word more than the words it drops.
+
+- On held-out Ultra the change touched only those 2 segments, and cleaned WER
+  fell from 12.12% to 12.05%. It changed no v3 segment. Tests cover both
+  lookalikes and "Let's meet at 5, no, at 6 pm."
+- Light cleanup was also run on the raw text of 290 dictations saved on the
+  development Mac, 35.6 minutes in total. It changed 115 of them and removed 380
+  of 5,566 words. Reading every edit found none that dropped meaning, and the
+  repair change altered none of them. These dictations have no audio, so their
+  recognition WER is not verified.
+
+## Phrase booster on held-out speech, 2026-10-12
+
+The 0.65 floor above was chosen on the sets it was tested on. It was checked on
+the 597 held-out segments with the same 20 absent terms and 12 terms those
+segments say (Diwali, YouTube, Rowling, Wonderland, COVID, Kerala, Mumbai,
+Disney, Google, Christmas, Shakespeare, Hindi). A swap now counts as true when
+applying it alone lowers that segment's edit distance to the reference, and
+false when it raises it. The earlier count called a swap true when its new words
+appeared anywhere in the reference, which scored "Christian countries" to
+"Christmas countries" as true in a sentence that also says Christmas.
+
+| Model and terms | No vocabulary | Floor 0.65 (0.1.4), WER and true / false | With the spelling guard |
+| --- | ---: | ---: | ---: |
+| v3, absent | 12.33% | 12.42%, 0 / 11 | 12.33%, 0 / 0 |
+| v3, present | 12.33% | 12.41%, 0 / 10 | 12.34%, 0 / 1 |
+| Ultra, absent | 11.51% | 11.61%, 0 / 12 | 11.51%, 0 / 0 |
+| Ultra, present | 11.51% | 11.58%, 1 / 10 | 11.51%, 1 / 1 |
+
+- WER is recognition WER. Floor 0.65 alone raised it on all four runs, with
+  every 95% interval above zero (0.02 to 0.17 points). It replaced ordinary
+  words that sound like a term, such as growing with Rowling and Hindus with
+  Hindi.
+- The spelling guard keeps the decoded words when they already contain the
+  term, or when macOS spell checking accepts them and their letters are less
+  than 75% alike to the term. A misspelled name still changes, as "Rivali" did
+  to Diwali.
+- On the earlier sets the guard removed every false swap. Synthetic went from
+  38 true / 7 false to 37 / 0 for v3 and from 35 / 7 to 34 / 0 for Ultra; the
+  false swaps wrote Claude where the speaker said "cloud". Absent went from 4
+  false and 1 neutral to none for both models. Present went from 4 / 4 to 3 / 2
+  for v3 and from 3 / 4 to 3 / 2 for Ultra, and the two left are "Dragon" to
+  "Eragon". The fixes lost were "vessel" to Vercel in one synthetic clip and
+  "era one" to Eragon for v3.
+- The 0.75 threshold was set after the held-out term lists had been seen, so
+  the held-out result is not blind. Spell checking uses the macOS English
+  dictionary, which includes words the user has taught macOS.
+
+## Meetings and speakers, 2026-10-12
+
+Measured on an Apple M5 with macOS 27.0.1, release builds of `BetterWisprCLI`
+with the 0.1.5 changes, FluidAudio 0.17.5, `--language en` and Light cleanup.
+`--meeting` plays a file through the app's meeting chunker as call audio,
+transcribes each chunk as a meeting does and labels voices with Speaker
+detection. `scripts/evaluate_meetings.py` scores the segments against
+speaker-timed references. `scripts/fetch_bench_corpus.py DIR --meetings` builds
+two corpora:
+
+- **AMI.** The first 10 minutes of four test meetings (ES2004a, IS1009a,
+  TS3003a, EN2002a), four speakers each, every headset mixed into one track at
+  its original time, so speakers overlap as they did in the room. 5,917
+  reference words.
+- **EdAcc.** Up to 5 minutes from each of six two-person video calls (C05, C09,
+  C29, C34, C36, C41), turns joined with 0.3 s gaps. 5,008 reference words.
+
+WER is on cleaned text and raw WER on the recognized text. Voices are paired
+with reference speakers one to one, choosing the pairing that credits the most
+words. Accuracy is the share of words in segments labelled with the voice
+paired to the segment's main speaker. Attribution credits each segment by how
+much of it the paired speaker said, so a chunk that holds two speakers loses
+the words of the second. Purity is the share of each segment said by its main
+speaker, the most attribution can reach with one label per segment.
+
+| AMI, 4 meetings | WER | Raw WER | Accuracy | Purity | Attribution |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| v3 | 25.65% | 26.64% | 92.8% | 81.0% | 78.6% |
+| Ultra, chunks as 0.1.4 | 22.76% | 22.87% | 91.8% | 79.7% | 77.3% |
+| Ultra, split at voice changes | 23.20% | 23.39% | 95.4% | 84.9% | 82.4% |
+
+| EdAcc, 6 calls, Ultra | WER | Raw WER | Accuracy | Purity | Attribution |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Chunks as 0.1.4 | 13.72% | 13.02% | 92.8% | 86.7% | 85.1% |
+| Split at voice changes | 14.08% | 13.32% | 98.1% | 93.8% | 93.3% |
+
+- A chunk ends at a 0.6 s pause once it is at least 3 s long, or at 20 s, so
+  one chunk often held two speakers under one label. BetterWispr now cuts a chunk where
+  Speaker detection hears the voice change and transcribes each piece again.
+  Turns shorter than 1 s stay with their neighbour. Attribution rose on all six
+  calls and on three of the four meetings, and WER rose by about 0.4 points
+  because the pieces are shorter. TS3003a, mostly one speaker, fell from 96.0%
+  to 95.2%. No interval was computed for these differences.
+- Shorter chunks were tried first and not kept. On AMI a 0.3 s pause with a 3 s
+  minimum gave 23.3% WER and 80.4% attribution, and a 0.2 s pause with a 1 s
+  minimum gave 27.1% and 82.6%. Shortest turns of 0.5 s and 2 s gave 82.6% and
+  80.9% attribution, against 82.4% at 1 s.
+- Per AMI meeting with the split: ES2004a 20.2% WER and 79.9% attribution,
+  IS1009a 21.8% and 82.5%, TS3003a 13.5% and 95.2% with one speaker saying 96%
+  of the words, EN2002a 30.8% and 76.6%.
+- Speaker detection found 4 voices for the 2 people in call C05. Splitting
+  sends each piece through recognition again, which adds requests and cost when
+  an API connection is selected.
+- Mixed headsets are cleaner than a laptop microphone in a room, and the EdAcc
+  calls are rejoined turns rather than continuous call audio. Neither corpus
+  went through the app's live capture.
+- The EdAcc rows were scored on a corpus built by an earlier version of the
+  fetcher. Rebuilt with the committed `--meetings`, Ultra with the split scored
+  14.20% WER, 13.36% raw WER, 97.9% accuracy, 94.1% purity and 93.2%
+  attribution, each within 0.3 points of its row.
+
+## Meeting notes, 2026-10-12
+
+Notes came from Apple Intelligence through `BetterWisprCLI --meeting
+SEGMENTS.jsonl --notes OUT.md`, on the Ultra segments of seven meetings, three
+runs each, with the builds before and after the notes changes. Three meetings
+(IS1009a, ES2004a, EN2002a) were used while making the changes and four
+(TS3003a, C05, C09, C41) were held out. One Claude model judged each file blind
+against its transcript, with before and after shuffled as A and B per meeting.
+It counted claims the transcript does not support, filler items such as "No
+explicit decisions were made", statements given to the wrong person, factual
+errors and missed follow-ups, and rated usefulness from 1 to 5. Numbers are per
+file.
+
+| Measure | Before, all (19 files) | After, all (21) | Before, held out (12) | After, held out (12) |
+| --- | ---: | ---: | ---: | ---: |
+| Unsupported claims | 4.05 | 1.33 | 2.75 | 0.58 |
+| Filler items | 1.37 | 0.24 | 1.75 | 0.25 |
+| Misattributed | 2.16 | 0.95 | 2.25 | 0.33 |
+| Factual errors | 0.42 | 0.29 | 0.25 | 0.17 |
+| Missed follow-ups | 0.11 | 0.19 | 0.08 | 0.17 |
+| Usefulness | 2.53 | 3.29 | 2.67 | 3.83 |
+
+- Before the changes, 2 of 3 EN2002a runs failed with "couldn't condense". The
+  condense prompt made the model copy transcript lines, so each round came back
+  as long as it went in. Condensing now asks for a third-person summary with a
+  word target, and never writes as Me.
+- The notes prompt now defines a decision as something the group agreed on and
+  an action item as a follow-up someone took on, and gives Me a task only when
+  Me's own words take it on. Items such as "None" or "No decisions were made",
+  which the model wrote instead of an empty list, are dropped. An item that
+  starts with "None of", such as "None of the current vendors will be renewed",
+  stays, but a real decision that starts with "Nothing" or "No decision" is
+  still dropped. Every decision and action item starting with "no", "none" or
+  "nothing" in these runs, in the drafts made while changing the notes and in
+  21 more runs was filler, and the filter drops all of them.
+- IS1009a got worse on misattribution, 4 before and 12 after across three
+  runs. Every run before and after wrote "12.50 euro" as 1250.
+- One judge model scored the notes, and no person checked its counts.
+
 ## Reproducible evaluation
 
 Create a consented local corpus of natural 3–30 second dictation clips, with a
@@ -387,14 +637,19 @@ UTF-8 JSON object per line:
 ```
 
 `BetterWisprCLI --bench` writes these lines for a manifest of clips, and
-`scripts/fetch_bench_corpus.py` builds the read-speech manifest used above, or
-with `--accents` the EdAcc manifest.
+`scripts/fetch_bench_corpus.py` builds the read-speech manifest used above, with
+`--accents` the EdAcc manifest, or with `--meetings` the AMI meetings and EdAcc
+calls, each a WAV file and a JSON file of speaker turns.
 
 ```sh
 python3 -I scripts/fetch_bench_corpus.py /tmp/bench 40
 python3 -I scripts/fetch_bench_corpus.py /tmp/accents 100 --accents
+python3 -I scripts/fetch_bench_corpus.py /tmp/meetings --meetings
 swift build -c release --product BetterWisprCLI
 .build/release/BetterWisprCLI --bench /tmp/bench/manifest.jsonl --model parakeet-v3 > results.jsonl
+.build/release/BetterWisprCLI --meeting /tmp/meetings/ami-ES2004a.wav --model parakeet-ultra --language en > ES2004a.jsonl
+python3 scripts/evaluate_meetings.py /tmp/meetings/ami-ES2004a.json ES2004a.jsonl
+.build/release/BetterWisprCLI --meeting ES2004a.jsonl --notes ES2004a.md
 python3 scripts/evaluate_transcripts.py results.jsonl --group language
 python3 scripts/evaluate_transcripts.py /path/to/pairs.jsonl
 python3 scripts/evaluate_transcripts.py /path/to/pairs.jsonl --raw

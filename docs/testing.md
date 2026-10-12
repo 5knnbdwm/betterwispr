@@ -6,6 +6,42 @@ version, Mac model, input device, engine/model and date for future runs. A
 successful build does not verify microphone capture, clipboard behavior or
 general recognition accuracy.
 
+## Accuracy and meetings check, 2026-10-12, version 0.1.5
+
+Apple M5, macOS 27.0.1, release builds of `BetterWisprCLI`. Every check below
+ran through the CLI, which reuses the app's providers, cleanup, meeting chunker,
+Speaker detection and notes writer. [Accuracy](accuracy.md) has the numbers.
+
+- `--bench` on 597 held-out EdAcc segments with Parakeet v3 and Ultra, Light
+  cleanup, with and without vocabulary, before and after the phrase booster and
+  cleanup changes.
+- `--meeting` on four 10-minute AMI meetings and six EdAcc calls with v3 and
+  Ultra, scored by `scripts/evaluate_meetings.py`. It replaces
+  `--find-speakers` from the check below. Rebuilding the corpus with
+  `fetch_bench_corpus.py --meetings` gave the same AMI speaker turns and the
+  same number of samples, with a few samples differing by 1 in 16 bits. The
+  scored EdAcc calls came from an earlier fetcher, and the rebuilt ones scored
+  within 0.3 points of them.
+- `--meeting SEGMENTS.jsonl --notes` with Apple Intelligence on seven meetings,
+  three runs each, before and after the notes changes. The filler filter was
+  checked against every decision and action item from those runs and 21 more.
+- Light cleanup re-run on the raw text of 290 dictations saved on this Mac.
+- `swift build`, `swift test`, `python3 Tests/evaluate_check.py`,
+  `python3 Tests/release_check.py` and `./scripts/build-app.sh` passed on a
+  copy of exactly the committed files, 111 tests in `swift test`.
+
+Not exercised in the app: the global shortcut, microphone capture and paste
+with the changed cleanup and booster, a live meeting with call audio, Speaker
+detection and notes after a real call, and the Home "Try Parakeet Ultra" detail
+and Recommended badge.
+
+- [ ] With Parakeet v3 selected, Home shows "Try Parakeet Ultra" and Models
+  marks Ultra Recommended. Nothing downloads until Download is clicked.
+- [ ] Add "Claude" to Vocabulary and dictate "it runs in the cloud". "cloud"
+  stays.
+- [ ] Dictate "Let's meet at 5, no, at 6 pm" with Light cleanup. Expect "Let's
+  meet at 6 pm".
+
 ## Dock visibility check, 2026-10-11
 
 On arm64 macOS 26.6.1, `swift build`, all 110 tests in `swift test`, and
@@ -668,10 +704,45 @@ retries. They do not access Keychain, mount disk images or submit to Apple.
 - [ ] Dictate into a chat field such as Messages or Slack, fix a word, wait about
   a second and press Return. Expect a "Learned" toast. Fixing and sending
   within a fraction of a second learns nothing, by design.
+- [ ] Click Undo on a "Learned" toast. Only the words that toast named leave
+  Vocabulary.
+- [ ] Dictate at the start of a field that already has text after it, and at
+  the end of one that has text before it, then fix a word. Both are learned.
+- [ ] With Light cleanup, dictate "we can meet today" and change "meet" to
+  "meat". It is learned. Switch to Medium with a notes model set up, delete the
+  entry and repeat: expect no toast, while a misheard name fix still shows one
+  within about 7 seconds. Stop the notes model (quit Ollama, for example) and a
+  name fix is still learned by the rules.
 - [ ] Fix a word with the pencil in History. The raw transcription stays
   unchanged and the word appears in Vocabulary as Learned.
 - [ ] Turn off "Learn from my corrections" and repeat. Nothing is learned.
 - [ ] Type in a password field after dictating. Nothing is read or learned.
+
+### Writing modes
+
+- [ ] In Style, add a mode for TextEdit with Casual tone. Dictate "Hello Sam. I
+  will call you tomorrow." into TextEdit and into Notes. Only TextEdit uses the
+  Casual tone. Turn the mode off and TextEdit uses its default tone again.
+- [ ] Add a mode for `github.com` with Medium cleanup. Dictate in a GitHub tab and
+  in another tab of Safari, Chrome, Arc and Brave. Only the GitHub tab uses the
+  mode. `gist.github.com` matches; `notgithub.com` does not. Record any browser
+  whose address is not read. Click into a page with an embedded iframe and
+  confirm the page's address, not the iframe's, picks the mode. Replace the
+  entry with `*.github.com` and confirm `gist.github.com` still matches.
+- [ ] Check that the empty Trigger word field suggests "casual mode". Give the
+  mode the trigger word "casual" and say "casual see you at five" in Notes. The
+  mode is used and "casual" is removed. "I like casual clothes" keeps the word
+  and uses no mode. "Let's keep it casual." uses the mode and types "Let's keep
+  it.", which is expected and matches VoiceInk.
+- [ ] A mode with only a trigger word shows no Screen context picker. Give the
+  `github.com` mode Medium cleanup and Screen context Off while Use screen
+  context is on. Dictate in a GitHub tab in Safari with a notes model that logs
+  requests. No selected text, clipboard or window text is sent.
+- [ ] With Medium cleanup, add the instruction "Use British spelling." Dictate
+  "the color of the organization" in the mode. Expect British spelling from the
+  notes model; outside the mode, American spelling stays.
+- [ ] Revoke Accessibility. Website modes stop matching, app modes still work and
+  dictation is not delayed by more than half a second.
 
 ## Offline models and failure recovery
 

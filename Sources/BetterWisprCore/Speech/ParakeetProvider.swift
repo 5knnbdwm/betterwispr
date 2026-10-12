@@ -1,3 +1,4 @@
+import AppKit
 import FluidAudio
 import Foundation
 
@@ -11,12 +12,14 @@ public final class ParakeetProvider: SpeechProvider {
     private var loadedModelID: String?
     private var preparing = false
     private var transcriptionTask: Task<String, any Error>?
+    private var livePass: Task<LivePass, any Error>?
     private var loadedVersion: AsrModelVersion?
     private var phraseBooster: CtcModels?
     private var boostingSession: (terms: [String], session: VocabularyBoostingSession)?
 
     nonisolated static let maximumBoostingTerms = ContextBiasingConstants.extraLargeVocabThreshold
     nonisolated static let boostingMinSimilarity: Float = 0.65
+    nonisolated static let minimumRespellingResemblance = 0.75
 
     public init(modelsDirectory: URL = WhisperKitProvider.defaultModelsDirectory) {
         self.modelsDirectory = modelsDirectory
@@ -67,18 +70,30 @@ public final class ParakeetProvider: SpeechProvider {
         return terms
     }
 
+    private nonisolated static func letters(_ text: String) -> String {
+        text.lowercased().filter { $0.isLetter || $0.isNumber }
+    }
+
     nonisolated static func alreadySaysTerm(_ replacement: (original: String, replacement: String)) -> Bool {
-        let key = { (text: String) in text.lowercased().filter { $0.isLetter || $0.isNumber } }
-        let spoken = key(replacement.original)
-        let term = key(replacement.replacement)
+        let spoken = letters(replacement.original)
+        let term = letters(replacement.replacement)
         return !term.isEmpty && spoken != term && spoken.contains(term)
     }
 
-    nonisolated static func restoringPunctuation(original: String, rescored: String, replacements: [(original: String, replacement: String)]) -> String {
+    /// Keeps the spoken words when they already hold the term, or are correctly spelled English that only loosely resembles it.
+    nonisolated static func keepsOriginal(_ replacement: (original: String, replacement: String), spelledCorrectly: Bool) -> Bool {
+        let spoken = letters(replacement.original)
+        let term = letters(replacement.replacement)
+        let resemblance = 1 - Double(StringUtils.levenshteinDistance(spoken, term)) / Double(max(1, spoken.count, term.count))
+        return alreadySaysTerm(replacement) || (spelledCorrectly && resemblance < minimumRespellingResemblance)
+    }
+
+    nonisolated static func restoringPunctuation(original: String, rescored: String,
+                                                 replacements: [(original: String, replacement: String, keepsOriginal: Bool)]) -> String {
         let originalWords = original.split(separator: " ")
         let rescoredWords = rescored.split(separator: " ")
         let spans = replacements
-            .map { (original: $0.original.split(separator: " "), replacement: $0.replacement.split(separator: " "), keepsOriginal: alreadySaysTerm($0)) }
+            .map { (original: $0.original.split(separator: " "), replacement: $0.replacement.split(separator: " "), keepsOriginal: $0.keepsOriginal) }
             .filter { !$0.original.isEmpty && !$0.replacement.isEmpty }
         var words: [String] = []
         var originalIndex = 0
@@ -106,16 +121,18 @@ public final class ParakeetProvider: SpeechProvider {
                 originalIndex += 1
                 rescoredIndex += 1
             } else {
-                return rescored
+                return spans.contains(where: \.keepsOriginal) ? original : rescored
             }
         }
-        guard originalIndex == originalWords.count, rescoredIndex == rescoredWords.count else { return rescored }
+        guard originalIndex == originalWords.count, rescoredIndex == rescoredWords.count else {
+            return spans.contains(where: \.keepsOriginal) ? original : rescored
+        }
         return words.joined(separator: " ")
     }
 
     public func prepare(model: SpeechModel, download: Bool) async throws {
         guard let source = Self.source(for: model) else { throw SpeechError.invalidModel }
-        guard !preparing, transcriptionTask == nil else { throw SpeechError.busy }
+        guard !preparing, transcriptionTask == nil, livePass == nil else { throw SpeechError.busy }
         if loadedModelID == model.id, manager != nil { onProgress?(1); return }
         preparing = true
         defer { preparing = false }
@@ -200,6 +217,7 @@ public final class ParakeetProvider: SpeechProvider {
 
     public func transcribe(audioURL: URL, language: String?, vocabulary: [String]) async throws -> String {
         guard let manager, !preparing else { throw SpeechError.notPrepared }
+        if let livePass { _ = try? await livePass.value }
         guard transcriptionTask == nil else { throw SpeechError.busy }
         guard audioURL.isFileURL, FileManager.default.fileExists(atPath: audioURL.path) else { throw SpeechError.audioUnavailable }
         try Task.checkCancellation()
@@ -222,8 +240,30 @@ public final class ParakeetProvider: SpeechProvider {
         return try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
     }
 
+    /// One recognizer pass for the live preview; word timings are relative to `samples`.
+    public func liveTranscribe(_ samples: [Float], language: String?) async throws -> LivePass {
+        guard let manager, !preparing else { throw SpeechError.notPrepared }
+        guard transcriptionTask == nil, livePass == nil else { throw SpeechError.busy }
+        let hint = Self.hint(for: language)
+        let task = Task {
+            var state = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
+            let result = try await manager.transcribe(samples, decoderState: &state, language: hint)
+            try Task.checkCancellation()
+            return LivePass(words: TimedWord.words(from: result.tokenTimings ?? []), confidence: result.confidence)
+        }
+        livePass = task
+        defer { livePass = nil }
+        return try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
+    }
+
+    /// 16 kHz mono samples of a file, for feeding recorded audio through the live preview.
+    public nonisolated static func samples(of url: URL) throws -> [Float] {
+        try AudioConverter().resampleAudioFile(url)
+    }
+
     public func cancel() {
         transcriptionTask?.cancel()
+        livePass?.cancel()
     }
 
     private func boostingSession(for terms: [String]) async -> VocabularyBoostingSession? {
@@ -249,11 +289,18 @@ public final class ParakeetProvider: SpeechProvider {
         guard language != nil || TranscriptCleaner.isEnglish(result.text, language: nil),
               let rescored = await session.rescore(text: result.text, tokenTimings: result.tokenTimings ?? [], audioSamples: samples),
               rescored.wasModified else { return (result.text, 0) }
-        let replacements = rescored.replacements.compactMap { item in
+        let candidates = rescored.replacements.compactMap { item in
             item.shouldReplace ? item.replacementWord.map { (original: item.originalWord, replacement: $0) } : nil
         }
-        return (restoringPunctuation(original: result.text, rescored: rescored.text, replacements: replacements),
-                replacements.count { $0.original != $0.replacement && !alreadySaysTerm($0) })
+        let spelling = await MainActor.run { candidates.map { isSpelledCorrectly($0.original) } }
+        let replacements = zip(candidates, spelling).map { (original: $0.original, replacement: $0.replacement, keepsOriginal: keepsOriginal($0, spelledCorrectly: $1)) }
+        let text = restoringPunctuation(original: result.text, rescored: rescored.text, replacements: replacements)
+        return (text, text == result.text ? 0 : replacements.count { $0.original != $0.replacement && !$0.keepsOriginal })
+    }
+
+    @MainActor
+    private static func isSpelledCorrectly(_ words: String) -> Bool {
+        NSSpellChecker.shared.checkSpelling(of: words, startingAt: 0, language: "en", wrap: false, inSpellDocumentWithTag: 0, wordCount: nil).location == NSNotFound
     }
 }
 

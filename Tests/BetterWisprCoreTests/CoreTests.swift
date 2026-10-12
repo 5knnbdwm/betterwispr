@@ -163,6 +163,7 @@ func standaloneModifiersRoundTripThroughSettings(keyCode: UInt32) throws {
             == "So let's say I say this sentence I want to go to Dilli. Are we processing this properly")
     #expect(TranscriptCleaner.clean("I want to go to Ahmedabad, sorry, no, to Delhi.", language: "en") == "I want to go to Delhi.")
     #expect(TranscriptCleaner.clean("Let's meet at 5, no wait, at 6", language: "en") == "Let's meet at 6")
+    #expect(TranscriptCleaner.clean("Let's meet at 5, no, at 6 pm.", language: "en") == "Let's meet at 6 pm.")
     #expect(TranscriptCleaner.clean("Send it to Sam, no, send it to Alex.", language: "en") == "Send it to Alex.")
     #expect(TranscriptCleaner.clean("Book the window seat, I mean, the aisle seat", language: "en") == "Book the aisle seat")
     #expect(TranscriptCleaner.clean("I live in Ahmedabad, sorry, in Delhi.", language: "en") == "I live in Delhi.")
@@ -179,6 +180,10 @@ func standaloneModifiersRoundTripThroughSettings(keyCode: UInt32) throws {
     #expect(TranscriptCleaner.clean("I said no sorry I can't come.", language: "en") == "I said no sorry I can't come.")
     #expect(TranscriptCleaner.clean("We booked at noon and had no wait at all.", language: "en") == "We booked at noon and had no wait at all.")
     #expect(TranscriptCleaner.clean("Is it at 5? No, at 6.", language: "en") == "Is it at 5? No, at 6.")
+    #expect(TranscriptCleaner.clean("We read it in the last book, no, the whole thing with the houses was different.", language: "en")
+            == "We read it in the last book, no, the whole thing with the houses was different.")
+    #expect(TranscriptCleaner.clean("It was the closest to like, I mean, the first one was obviously very close, but not the second.", language: "en")
+            == "It was the closest to like, I mean, the first one was obviously very close, but not the second.")
     #expect(TranscriptCleaner.clean("Thanks for coming, sorry for the wait.", language: "en") == "Thanks for coming, sorry for the wait.")
     #expect(TranscriptCleaner.clean("Go to Ahmedabad, sorry, no, Delhi", language: "en") == "Go to Ahmedabad, sorry, no, Delhi")
     #expect(TranscriptCleaner.clean("Thanks for coming sorry for the wait.", language: "en") == "Thanks for coming sorry for the wait.")
@@ -412,10 +417,10 @@ private func jsonDroppingKey(_ value: some Encodable, _ key: String) throws -> D
     return try JSONSerialization.data(withJSONObject: object)
 }
 
-@Test func correctionWatcherOnlyReadsEditsInsideTheDictation() {
+@Test func correctionWatcherReadsTheDictationUpToItsUnchangedNeighbours() {
     #expect(CorrectionWatcher.edit(of: "ping kv now", from: "Hi. ping kv now", to: "Hi. ping KV now") == "ping KV now")
     #expect(CorrectionWatcher.edit(of: "ping kv now", from: "Hi. ping kv now", to: "Hey. ping kv now") == nil)
-    #expect(CorrectionWatcher.edit(of: "ping kv now", from: "ping kv now", to: "ping kv now please") == nil)
+    #expect(CorrectionWatcher.edit(of: "ping kv now", from: "ping kv now", to: "ping kv now please") == "ping kv now please")
 }
 
 @Test func correctionWatcherLearnsSettledOrSentTextOnly() {

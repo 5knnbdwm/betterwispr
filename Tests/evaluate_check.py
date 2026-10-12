@@ -9,6 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
+from evaluate_meetings import best_match, score
 from evaluate_transcripts import edit_distance, evaluate, normalize
 
 
@@ -43,6 +44,24 @@ for invalid in ([], [{}], [{"reference": "a", "hypothesis": None}], ["not an obj
     else:
         raise AssertionError("invalid input accepted")
 
+call = {"id": "call", "turns": [{"speaker": "A", "start": 0, "end": 5, "text": "Hello there."},
+                                {"speaker": "B", "start": 5, "end": 10, "text": "Good morning."}]}
+
+
+def segment(start, participant, text, duration=5, raw=None):
+    return {"start": start, "duration": duration, "participant": participant, "text": text, "rawText": raw or text}
+
+
+row = score(call, [segment(5, 1, "good morning"), segment(0, 2, "hello their")])
+assert row["wer"] == 0.25 and row["mixed_segments"] == 0
+assert row["speaker_accuracy"] == row["speaker_attribution"] == row["speaker_purity"] == 1
+row = score(call, [segment(0, 1, "hello there"), segment(5, 1, "good morning")])
+assert row["voices_found"] == 1 and row["speaker_accuracy"] == 0.5
+row = score(call, [segment(0, 1, "hello there good morning", duration=10, raw="um hello there good morning")])
+assert row["raw_wer"] == 0.25 and row["mixed_segments"] == 1
+assert row["speaker_purity"] == row["speaker_attribution"] == 0.5
+assert best_match([[1, 0], [0, 2], [3, 0]]) == 5 and best_match([[1, 4]]) == 4
+
 with tempfile.TemporaryDirectory() as folder:
     data = Path(folder) / "pairs.jsonl"
     data.write_text("\n".join(json.dumps(pair) for pair in pairs), encoding="utf-8")
@@ -57,4 +76,4 @@ with tempfile.TemporaryDirectory() as folder:
     output = subprocess.run(command, capture_output=True, text=True)
     assert output.returncode == 1 and "line 1: invalid JSON" in output.stderr
 
-print("Evaluation checks passed (WER, CER, Unicode, silence, validation, CLI, groups).")
+print("Evaluation checks passed (WER, CER, Unicode, silence, validation, CLI, groups, meeting speakers).")

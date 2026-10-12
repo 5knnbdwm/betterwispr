@@ -39,6 +39,9 @@ struct CapsuleView: View {
             if !showsCard, let target = hover.target {
                 tooltip(for: target)
             }
+            if model.isBusy, !model.liveTranscript.isEmpty {
+                livePreview
+            }
             surface
         }
         .padding(.bottom, 16)
@@ -49,6 +52,7 @@ struct CapsuleView: View {
         .animation(spring, value: model.phase)
         .animation(spring, value: model.isHeldSession)
         .animation(spring, value: model.meetings.activity)
+        .animation(spring, value: model.liveTranscript.isEmpty)
         .animation(spring, value: failure)
         .animation(spring, value: meetingPrompt)
         .animation(spring, value: hover.isHovering)
@@ -380,6 +384,29 @@ struct CapsuleView: View {
             .capsuleRegion(.microphone)
             meetingButton
         }
+    }
+
+    /// Confirmed words stay bright and the provisional tail is dimmed; only the newest two lines show.
+    private var livePreview: some View {
+        let live = model.liveTranscript
+        let separator = live.confirmed.isEmpty || live.hypothesis.isEmpty ? "" : " "
+        return (Text(live.confirmed).foregroundStyle(.white.opacity(0.92))
+            + Text(separator)
+            + Text(live.hypothesis).foregroundStyle(.white.opacity(0.5)))
+            .font(.system(size: 13))
+            .lineLimit(2)
+            .truncationMode(.head)
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: 360, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background { CapsuleGlass(cornerRadius: 14) }
+            .allowsHitTesting(false)
+            .transition(swap)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Live preview")
+            .accessibilityValue(live.confirmed + separator + live.hypothesis)
     }
 
     private var dictationPill: some View {
