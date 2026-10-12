@@ -15,6 +15,7 @@ All notable changes to BetterWispr are listed here. The format follows
 - Use screen context, under Style, off by default. With Medium cleanup it sends your selected text, your clipboard and the text of the window you dictate into to your notes model, so it can spell what you see. Your notes model may be a cloud service. Nothing is read while a password field is active, and clipboard items marked as passwords are skipped. Read window text from the screen, also off by default, reads the window from a screenshot when an app shares under 200 characters through Accessibility. It needs Screen Recording, and dictation never asks for it.
 - Show words as you speak, in Settings > App and on by default. With a Parakeet model the capsule shows your words while you record, confirmed words bright and the newest guess dimmed, two lines at a time. The pasted text is still the recognition of the whole recording, and the preview never reaches History or correction learning.
 - `BetterWisprCLI --live-file PATH [--model ID] [--language en]` plays an audio file through the live preview in real time with a Parakeet model, prints each confirmed and provisional update with the time its pass took, then prints the full transcription.
+- Spoken language in Settings offers Turkish, for Apple on-device, Whisper and OpenAI-compatible connections. Parakeet models do not list it, and Sarvam and Smallest AI do not support it.
 - Show in Dock, in Settings > App and on by default. Turn it off to hide the Dock icon while BetterWispr keeps running: your dictation shortcut still works, and the menu bar icon opens the dashboard or quits. The change applies right away and stays after a restart.
 
 ### Changed
@@ -34,6 +35,7 @@ All notable changes to BetterWispr are listed here. The format follows
 - Meeting notes stick to what was said. The notes model listed things that already happened in the meeting, such as introductions, as action items, gave Me tasks Me never took on, and wrote "No explicit decisions were made" as a decision. Notes now count only what someone agreed or took on, and drop items that only say there were none, while keeping real ones such as "None of the current vendors will be renewed". On seven recorded meetings, three notes each, an AI judge reading the transcripts found 1.3 unsupported claims per set of notes against 4.1 before, and 0.2 filler items against 1.4.
 - Long meetings no longer fail with "The model couldn't condense this meeting enough" on Apple Intelligence. Asked to shorten the transcript, the model copied its lines back, so it never got shorter; 2 of 3 runs on a 10-minute four-person meeting failed. It now writes a short summary of each part in its own words.
 - Learn from my corrections now notices a fix even when you also changed text elsewhere in the same field, and in web fields that report spaces and line breaks differently from the pasted text. Before, either case made it miss the fix.
+- Fixing a dictation in History no longer moves the cursor to the end after every key you press. Text typed in the middle now goes where the cursor is.
 
 ## [0.1.4] - 2026-10-10
 

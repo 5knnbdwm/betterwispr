@@ -101,21 +101,21 @@ struct TranscriptRow: View {
             .font(.caption)
             .foregroundStyle(.secondary)
             .buttonStyle(.borderless)
-            if let draft, let onEdit {
-                TextEditor(text: Binding(get: { draft }, set: { self.draft = $0 }))
+            if let text = Binding($draft), let onEdit {
+                TextEditor(text: text)
                     .font(.body)
                     .frame(minHeight: 60)
                     .accessibilityLabel("Dictation text")
                 HStack {
                     Spacer()
-                    Button("Cancel") { self.draft = nil }
+                    Button("Cancel") { draft = nil }
                         .keyboardShortcut(.cancelAction)
                     Button("Save") {
-                        onEdit(draft)
-                        self.draft = nil
+                        onEdit(text.wrappedValue)
+                        draft = nil
                     }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(text.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
                 .controlSize(.small)
             } else {
