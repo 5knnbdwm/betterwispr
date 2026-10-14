@@ -1015,7 +1015,26 @@ final class AppModel {
         accessibilityGranted = AXIsProcessTrustedWithOptions([key: true] as CFDictionary)
     }
 
+    /// Turning the integration on asks for Calendar access; a denial turns it back off and opens Privacy settings.
+    func useCalendar(_ isOn: Bool) {
+        settings.useCalendar = isOn
+        saveSettings()
+        guard isOn else { return }
+        Task {
+            calendarGranted = await calendarEvents.requestAccess()
+            guard calendarGranted else {
+                settings.useCalendar = false
+                saveSettings()
+                NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars")!)
+                return
+            }
+            calendarAccounts = calendarEvents.accounts()
+        }
+    }
+
     func refreshPermissions() {
+        calendarGranted = CalendarEvents.isAuthorized
+        calendarAccounts = settings.useCalendar && calendarGranted ? calendarEvents.accounts() : []
         microphoneGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
         let previouslyGranted = accessibilityGranted
         accessibilityGranted = AXIsProcessTrusted()
