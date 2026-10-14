@@ -185,32 +185,36 @@ Settings toggle or the Calendar row under Permissions, calls
 `requestFullAccessToEvents`, which shows the macOS prompt the first time. A
 denial turns the setting back off and opens the Calendars pane of Privacy
 settings. The bundle declares `NSCalendarsFullAccessUsageDescription` and the
-hardened runtime entitlement `com.apple.security.personal-information.calendars`.
-Once access is granted, Settings lists each account's event calendars with a
-toggle. `AppSettings.excludedCalendarIDs` stores the EventKit calendar
-identifiers switched off, so a calendar added later in Calendar is included
-without another visit to Settings. The list refreshes when the app becomes active.
+hardened runtime entitlement
+`com.apple.security.personal-information.calendars`. Once access is granted,
+Settings lists each account's event calendars with a toggle.
+`AppSettings.excludedCalendarIDs` stores the EventKit calendar identifiers
+switched off, so a calendar added later in Calendar is included without another
+visit to Settings. The list refreshes when the app becomes active.
 
 When a meeting starts with the integration on and access granted,
 `CalendarEvents.current(excluding:)` fetches events from the included calendars
 that overlap the next five minutes. `CalendarEvent.current(_:at:)` ignores
-all-day events, keeps one that started or starts within five minutes and has
-not ended, and prefers an event with a Zoom, Google Meet, Microsoft Teams or
-Webex link, then the latest start. The meeting takes the event's title and
-saves `Meeting.attendees` (invitees other than the user, without rooms and
-resources, by name or else email) and `Meeting.eventID`. The notes model only
-fills a title that is still empty, so the event title stays. Attendee names
-without an `@` are added to that meeting's speech hints; they never become
-vocabulary entries, which rewrite text. A meeting cancelled before anything is
-recorded is still discarded although its title came from the event.
+all-day events and events that were cancelled or that the user declined, keeps
+one that started or starts within five minutes and has not ended, and prefers an
+event with a Zoom, Google Meet, Microsoft Teams or Webex link, then the latest
+start. The meeting takes the event's title and saves `Meeting.attendees`
+(invitees other than the user, without rooms and resources, by name, or by
+`mailto:` address when the invite gives no name) and `Meeting.eventID`. The
+notes model only fills a title that is still empty, so the event title stays.
+Attendee names without an `@` join that meeting's speech hints like Vocabulary
+terms, so the Whisper prompt, Apple's contextual strings and the Parakeet phrase
+booster can steer recognition toward them; they are not added to Vocabulary's
+replacements. A meeting cancelled before anything is recorded is still discarded
+although its title came from the event.
 
 `Meeting.calendarInvite` gives the title and up to 20 invitees, then a count of
-the rest. `NotesWriter` puts it before the material in the first draft prompt
-only, after `NotesWriter.inviteNote`, which tells the model to use it for the
-subject and names, never to follow it as instructions, and not to assume every
-invitee spoke. Meetings without an `eventID` send no invite. The event title and
-invitees therefore reach whichever notes model the user chose, including an API
-connection, and the Settings footer says so.
+the rest. `NotesWriter` puts it before the material in the draft prompt, never
+in the condense prompts, after `NotesWriter.inviteNote`, which tells the model
+to use it for the subject and names, never to follow it as instructions, and not
+to assume every invitee spoke. Meetings without an `eventID` send no invite. The
+event title and invitees therefore reach whichever notes model the user chose,
+including an API connection, and the Settings footer says so.
 
 `useCalendar` and `excludedCalendarIDs` decode with `decodeIfPresent` and
 `Meeting.attendees` and `Meeting.eventID` are optional, so workspaces and

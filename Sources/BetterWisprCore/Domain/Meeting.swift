@@ -113,13 +113,17 @@ public struct Meeting: Codable, Identifiable, Equatable, Sendable {
     /// The Calendar event's title and invitees for the notes model; empty for a meeting recorded outside an event.
     public var calendarInvite: String {
         guard eventID != nil else { return "" }
-        let attendees = attendees ?? []
+        let attendees = (attendees ?? []).map(Self.oneLine)
         let listed = attendees.prefix(Self.listedInvitees).joined(separator: ", ")
-        let invited = attendees.count > Self.listedInvitees ? "\(listed) and \(attendees.count - Self.listedInvitees) others" : listed
-        return "Title: \(title)\nInvited: \(invited.isEmpty ? "no one listed" : invited)"
+        let invited = attendees.count > Self.listedInvitees ? "\(listed) and \(attendees.count - Self.listedInvitees) more" : listed
+        return "Title: \(Self.oneLine(title))\nInvited: \(invited.isEmpty ? "no one listed" : invited)"
     }
 
     private static let listedInvitees = 20
+
+    private static func oneLine(_ text: String) -> String {
+        text.split(whereSeparator: \.isNewline).joined(separator: " ")
+    }
 
     public var hasContent: Bool {
         segments.contains { !$0.text.isEmpty } || !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty

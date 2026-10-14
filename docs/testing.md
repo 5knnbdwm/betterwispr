@@ -1020,13 +1020,16 @@ you, and a subscribed calendar. Reset the permission first with
 - [ ] Reset the permission, turn Use Calendar on and deny. The toggle turns back
   off, the Calendars pane of Privacy settings opens, and starting a meeting gives
   an untitled note as before. The Calendar row under Permissions opens the same pane.
+  Allow BetterWispr there without quitting it, come back and turn Use Calendar on.
+  The calendars appear without a relaunch.
 - [ ] Grant access, then create a timed event starting in three minutes with two
   invitees and a Zoom link. Start a meeting. The note takes the event title, and
   the meeting header lists the invitees, without you and without rooms. Stop it.
   The written notes keep the event title. Record whether the summary names the
   invitees who spoke and leaves out those who did not; do not assume either way.
 - [ ] Overlap that event with one without a video link that started later. The
-  meeting takes the event with the Zoom link.
+  meeting takes the event with the Zoom link. Decline the Zoom event, or have its
+  organizer cancel it, and start again. The meeting takes the other event.
 - [ ] Turn off the event's calendar in Settings and start a meeting. The note is
   untitled and lists no one. Turn it back on and relaunch; the choice persists.
 - [ ] Repeat the event check with an event on a shared calendar and on a

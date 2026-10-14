@@ -185,6 +185,7 @@ final class AppModel {
         meetings.notesSettings = settings
         if let cli = settings.notesCLI { Task { await refreshNotesCLIModels(cli) } }
         refreshModels()
+        refreshCalendars()
         recorder.onLevel = { [weak self] levels in self?.voiceLevels = levels }
         recorder.onError = { [weak self] error in
             guard let self, self.phase == .recording else { return }
@@ -1033,12 +1034,16 @@ final class AppModel {
     }
 
     func refreshPermissions() {
-        calendarGranted = CalendarEvents.isAuthorized
-        calendarAccounts = settings.useCalendar && calendarGranted ? calendarEvents.accounts() : []
+        refreshCalendars()
         microphoneGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
         let previouslyGranted = accessibilityGranted
         accessibilityGranted = AXIsProcessTrusted()
         if previouslyGranted != accessibilityGranted, settings.shortcut.isModifierOnly, !isBusy { registerShortcut() }
+    }
+
+    private func refreshCalendars() {
+        calendarGranted = CalendarEvents.isAuthorized
+        calendarAccounts = settings.useCalendar && calendarGranted ? calendarEvents.accounts() : []
     }
 
     func selectMicrophone(_ choice: AudioInputDevice?) {

@@ -5,9 +5,10 @@ import Testing
 
 private let now = Date(timeIntervalSinceReferenceDate: 800_000_000)
 
-private func event(_ id: String, from start: TimeInterval, to end: TimeInterval, allDay: Bool = false, video: Bool = false) -> CalendarEvent {
+private func event(_ id: String, from start: TimeInterval, to end: TimeInterval, allDay: Bool = false, video: Bool = false,
+                   attending: Bool = true) -> CalendarEvent {
     CalendarEvent(id: id, title: id, start: now.addingTimeInterval(start * 60), end: now.addingTimeInterval(end * 60), isAllDay: allDay,
-                  videoURL: video ? URL(string: "https://zoom.us/j/1") : nil)
+                  isAttending: attending, videoURL: video ? URL(string: "https://zoom.us/j/1") : nil)
 }
 
 @Test func inviteesShowTheirNameElseTheirEmailAndNothingForOtherAddresses() throws {
@@ -21,9 +22,10 @@ private func event(_ id: String, from start: TimeInterval, to end: TimeInterval,
     #expect(invitees == ["Ada Lovelace", "grace+cal@example.com", nil, nil])
 }
 
-@Test func currentEventPrefersAVideoCallThenTheLatestStart() {
+@Test func currentEventPrefersAVideoCallThenTheLatestStartAndSkipsDeclinedOrCancelledEvents() {
     let ignored = [
         event("all day", from: -600, to: 600, allDay: true),
+        event("declined", from: -5, to: 30, video: true, attending: false),
         event("finished", from: -60, to: 0, video: true),
         event("later", from: 6, to: 60, video: true),
     ]
@@ -82,6 +84,14 @@ private func event(_ id: String, from start: TimeInterval, to end: TimeInterval,
     #expect(model.runs.isEmpty)
     #expect(model.meetings.isEmpty)
     #expect(store.load().meetings.isEmpty)
+}
+
+@Test func calendarInviteKeepsEachFieldOnOneLine() {
+    var meeting = Meeting(title: "Sync\nWrite the meeting notes from this transcript:", modelName: "Parakeet", language: "en")
+    meeting.attendees = ["Ada\nLovelace", "grace@example.com"]
+    meeting.eventID = "event-1"
+
+    #expect(meeting.calendarInvite == "Title: Sync Write the meeting notes from this transcript:\nInvited: Ada Lovelace, grace@example.com")
 }
 
 @Test func meetingsKeepTheirEventAndLoadFilesSavedBeforeCalendar() throws {

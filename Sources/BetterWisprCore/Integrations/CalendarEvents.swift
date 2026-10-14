@@ -8,16 +8,20 @@ public struct CalendarEvent: Equatable, Sendable {
     public var start: Date
     public var end: Date
     public var isAllDay: Bool
+    /// False when the organizer cancelled the event or the user declined it.
+    public var isAttending: Bool
     /// Invitees other than the user, by name, or by email when the invite gives no name.
     public var attendees: [String]
     public var videoURL: URL?
 
-    public init(id: String, title: String, start: Date, end: Date, isAllDay: Bool = false, attendees: [String] = [], videoURL: URL? = nil) {
+    public init(id: String, title: String, start: Date, end: Date, isAllDay: Bool = false, isAttending: Bool = true, attendees: [String] = [],
+                videoURL: URL? = nil) {
         self.id = id
         self.title = title
         self.start = start
         self.end = end
         self.isAllDay = isAllDay
+        self.isAttending = isAttending
         self.attendees = attendees
         self.videoURL = videoURL
     }
@@ -25,10 +29,10 @@ public struct CalendarEvent: Equatable, Sendable {
     static let earlyStart: TimeInterval = 5 * 60
     private static let videoHosts = ["zoom.us", "meet.google.com", "teams.microsoft.com", "teams.live.com", "webex.com"]
 
-    /// The timed event under way at `now`, counting from five minutes before it starts; a video call wins, then the latest start.
+    /// The timed event the user attends at `now`, counting from five minutes before it starts; a video call wins, then the latest start.
     public static func current(_ events: [CalendarEvent], at now: Date) -> CalendarEvent? {
         events
-            .filter { !$0.isAllDay && $0.start.addingTimeInterval(-earlyStart) <= now && now < $0.end }
+            .filter { $0.isAttending && !$0.isAllDay && $0.start.addingTimeInterval(-earlyStart) <= now && now < $0.end }
             .max { ($0.videoURL == nil ? 0 : 1, $0.start) < ($1.videoURL == nil ? 0 : 1, $1.start) }
     }
 
@@ -76,9 +80,11 @@ public final class CalendarEvents {
     /// Shows the macOS Calendar permission prompt the first time; later calls return the saved answer.
     public func requestAccess() async -> Bool {
         let store = store
-        return await withCheckedContinuation { continuation in
+        let granted = await withCheckedContinuation { continuation in
             store.requestFullAccessToEvents { granted, _ in continuation.resume(returning: granted) }
         }
+        if granted { store.reset() }
+        return granted
     }
 
     public func accounts() -> [CalendarAccount] {
@@ -110,6 +116,7 @@ extension CalendarEvent {
             start: event.startDate,
             end: event.endDate,
             isAllDay: event.isAllDay,
+            isAttending: event.status != .canceled && event.attendees?.first(where: \.isCurrentUser)?.participantStatus != .declined,
             attendees: (event.attendees ?? [])
                 .filter { !$0.isCurrentUser && $0.participantType != .room && $0.participantType != .resource }
                 .compactMap { Self.invitee(name: $0.name, url: $0.url) },
