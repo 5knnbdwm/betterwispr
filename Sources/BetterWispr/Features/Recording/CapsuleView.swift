@@ -135,6 +135,9 @@ struct CapsuleView: View {
             if target == .microphone {
                 Text(model.settings.shortcut.displayName).fontWeight(.semibold)
             }
+            if target == .dictation {
+                Text("Esc to cancel").foregroundStyle(.secondary)
+            }
         }
         .font(.system(size: 11, weight: .medium))
         .foregroundStyle(.white)
