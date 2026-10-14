@@ -55,7 +55,8 @@ public struct DictationShortcut: Codable, Equatable, Sendable {
 
     public var cancelModifiers: [ShortcutModifiers] {
         let held = modifiers.union(Self.modifier(for: keyCode) ?? [])
-        return held.isEmpty || keyCode == UInt32(kVK_Escape) ? [[]] : [[], held]
+        guard !held.isEmpty, !held.contains(.command), keyCode != UInt32(kVK_Escape) else { return [[]] }
+        return [[], held]
     }
 
     private init(validKeyCode keyCode: UInt32, modifiers: ShortcutModifiers, key: String) {

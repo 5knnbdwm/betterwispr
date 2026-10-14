@@ -588,7 +588,8 @@ retries. They do not access Keychain, mount disk images or submit to Apple.
 - [ ] With TextEdit focused, speak and press Escape during toggle-mode recording,
   during transcription, and while still holding ⌥ Space in hold mode. Each shows
   "Transcript cancelled" with Undo and pastes nothing. Once the capsule is idle,
-  Escape reaches TextEdit again. Escape never stops a running notetaker.
+  Escape reaches TextEdit again. Escape never stops a running notetaker. With a
+  ⌘ ⌥ dictation shortcut, ⌘ ⌥ Escape still opens Force Quit while dictating.
 - [ ] Hold mode: hold ⌥ Space, speak, release. The 96 × 28 point glass capsule
   shows only the wider waveform, with no cancel or finish buttons. Text is
   inserted once. Tap ⌥ Space briefly; recording stays active hands-free and

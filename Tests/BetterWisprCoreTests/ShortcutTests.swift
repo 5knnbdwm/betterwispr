@@ -42,16 +42,18 @@ import Testing
     #expect(transitions == [true, false, true, false])
 }
 
-@Test func escapeCancelsUnderTheModifiersStillHeldFromTheDictationShortcut() throws {
+@Test func escapeCancelsUnderTheModifiersStillHeldFromTheDictationShortcutExceptCommand() throws {
     let rightCommand = try #require(DictationShortcut(keyCode: UInt32(kVK_RightCommand), modifiers: [], key: "Right Command"))
     let f5 = try #require(DictationShortcut(keyCode: UInt32(kVK_F5), modifiers: [], key: "F5"))
     let optionEscape = try #require(DictationShortcut(keyCode: UInt32(kVK_Escape), modifiers: .option, key: "Esc"))
-    let commandShiftD = try #require(DictationShortcut(keyCode: UInt32(kVK_ANSI_D), modifiers: [.command, .shift], key: "D"))
+    let controlShiftD = try #require(DictationShortcut(keyCode: UInt32(kVK_ANSI_D), modifiers: [.control, .shift], key: "D"))
+    let commandOptionD = try #require(DictationShortcut(keyCode: UInt32(kVK_ANSI_D), modifiers: [.command, .option], key: "D"))
     #expect(DictationShortcut.optionSpace.cancelModifiers == [[], .option])
-    #expect(rightCommand.cancelModifiers == [[], .command])
+    #expect(controlShiftD.cancelModifiers == [[], [.control, .shift]])
+    #expect(rightCommand.cancelModifiers == [[]])
+    #expect(commandOptionD.cancelModifiers == [[]])
     #expect(f5.cancelModifiers == [[]])
     #expect(optionEscape.cancelModifiers == [[]])
-    #expect(commandShiftD.cancelModifiers == [[], [.command, .shift]])
 }
 
 @Test @MainActor func eachShortcutAnswersOnlyItsOwnCarbonHotKey() throws {

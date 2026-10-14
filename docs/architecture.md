@@ -42,7 +42,8 @@ the policy immediately and persist through the existing workspace store.
    Settings) starts a session. Capture the previously focused external app before
    showing the nonactivating capsule. While the session is preparing, recording
    or transcribing, a second Carbon hot key makes Escape (also with the dictation
-   shortcut's held modifiers) cancel it from any app through the same Undo path;
+   shortcut's held modifiers unless they include Command, so Command-Option-Escape
+   stays Force Quit) cancel it from any app through the same Undo path;
    it is unregistered as soon as the session leaves those phases, so other apps
    keep Escape.
 2. Validate the selected provider and check microphone permission. Apple speech
