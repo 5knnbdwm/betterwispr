@@ -1,16 +1,18 @@
 import Foundation
+import SpeakerKit
 import Testing
 @testable import BetterWisprCore
 
-private func turn(_ voice: String, _ start: TimeInterval, _ end: TimeInterval) -> VoiceTurn {
-    VoiceTurn(voice: voice, start: start, end: end)
+private func turn(_ voice: Int, _ start: Float, _ end: Float) -> SpeakerSegment {
+    SpeakerSegment(speaker: .speakerId(voice), startTime: start, endTime: end, frameRate: 1)
 }
 
 @Test func speakerDetectionSplitsSegmentsAtVoiceChangesAndFoldsShortInterjections() {
     let ids = (0..<8).map { _ in UUID() }
     let turns = [
-        turn("S1", 50, 53), turn("S2", 55, 60), turn("S3", 0, 5), turn("S1", 5, 12), turn("S3", 12, 20), turn("S9", 40, 40.5), turn("S8", 40.5, 42),
-        turn("S1", 70, 75), turn("S2", 75, 75.4), turn("S1", 75.4, 80), turn("S1", 90, 96), turn("S2", 95, 100),
+        turn(1, 50, 53), turn(2, 55, 60), turn(3, 0, 5), turn(1, 5, 12), turn(3, 12, 20), turn(9, 40, 40.5), turn(8, 40.5, 42),
+        turn(1, 70, 75), turn(2, 75, 75.4), turn(1, 75.4, 80), turn(1, 90, 96), turn(2, 95, 100),
+        SpeakerSegment(speaker: .noMatch, startTime: 20, endTime: 25, frameRate: 1),
     ]
     let placements = [
         SpeakerRecording.Placement(segment: ids[0], start: 0, end: 4),
@@ -25,14 +27,14 @@ private func turn(_ voice: String, _ start: TimeInterval, _ end: TimeInterval) -
 
     let voices = SpeakerDetection.voiceTurns(turns: turns, placements: placements, shortest: 1)
 
-    #expect(voices[ids[0]] == [VoiceTurn(voice: "S3", start: 0, end: 4)])
-    #expect(voices[ids[1]] == [VoiceTurn(voice: "S1", start: 0, end: 5.5)])
-    #expect(voices[ids[2]] == [VoiceTurn(voice: "S1", start: 0, end: 2), VoiceTurn(voice: "S3", start: 2, end: 10)])
+    #expect(voices[ids[0]] == [VoiceTurn(voice: "3", start: 0, end: 4)])
+    #expect(voices[ids[1]] == [VoiceTurn(voice: "1", start: 0, end: 5.5)])
+    #expect(voices[ids[2]] == [VoiceTurn(voice: "1", start: 0, end: 2), VoiceTurn(voice: "3", start: 2, end: 10)])
     #expect(voices[ids[3]] == nil)
-    #expect(voices[ids[4]] == [VoiceTurn(voice: "S8", start: 0, end: 2)])
-    #expect(voices[ids[5]] == [VoiceTurn(voice: "S1", start: 0, end: 4), VoiceTurn(voice: "S2", start: 4, end: 10)])
-    #expect(voices[ids[6]] == [VoiceTurn(voice: "S1", start: 0, end: 10)])
-    #expect(voices[ids[7]] == [VoiceTurn(voice: "S1", start: 0, end: 6), VoiceTurn(voice: "S2", start: 6, end: 10)])
+    #expect(voices[ids[4]] == [VoiceTurn(voice: "8", start: 0, end: 2)])
+    #expect(voices[ids[5]] == [VoiceTurn(voice: "1", start: 0, end: 4), VoiceTurn(voice: "2", start: 4, end: 10)])
+    #expect(voices[ids[6]] == [VoiceTurn(voice: "1", start: 0, end: 10)])
+    #expect(voices[ids[7]] == [VoiceTurn(voice: "1", start: 0, end: 6), VoiceTurn(voice: "2", start: 6, end: 10)])
     #expect(SpeakerDetection.voiceTurns(turns: [], placements: placements).isEmpty)
 }
 

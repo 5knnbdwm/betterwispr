@@ -38,7 +38,7 @@ public enum SpeakerDetection {
             throw WhisperKitProvider.readableDownloadError(error)
         }
         try Task.checkCancellation()
-        _ = try await diarizer(from: directory)
+        _ = try await installedDiarizer(from: directory)
         try Task.checkCancellation()
         try Data(revision.utf8).write(to: directory.appending(path: ".betterwispr-installed"), options: .atomic)
         let legacy = URL.applicationSupportDirectory.appending(path: "FluidAudio/Models/speaker-diarization", directoryHint: .isDirectory)
@@ -47,8 +47,7 @@ public enum SpeakerDetection {
         }
     }
 
-    /// Loads only files already on disk, so a missing or damaged model fails instead of downloading again.
-    static func diarizer(from directory: URL) async throws -> SpeakerKitDiarizer {
+    static func installedDiarizer(from directory: URL) async throws -> SpeakerKitDiarizer {
         let diarizer = SpeakerKitDiarizer.pyannote(
             config: PyannoteConfig(modelFolder: directory.path, download: false, load: false, verbose: false),
             segmenterModelInfo: segmenter, embedderModelInfo: embedder)
@@ -72,8 +71,10 @@ public enum SpeakerDetection {
     }
 
     /// Splits each segment into the voices heard in it, folding any stretch shorter than `shortest` seconds into a neighbour.
-    static func voiceTurns(turns: [VoiceTurn], placements: [SpeakerRecording.Placement], shortest: TimeInterval = 1) -> [UUID: [VoiceTurn]] {
-        let turns = turns.sorted { $0.start < $1.start }
+    static func voiceTurns(turns: [SpeakerSegment], placements: [SpeakerRecording.Placement], shortest: TimeInterval = 1) -> [UUID: [VoiceTurn]] {
+        let turns = turns.compactMap { turn in
+            turn.speaker.speakerId.map { VoiceTurn(voice: String($0), start: TimeInterval(turn.startTime), end: TimeInterval(turn.endTime)) }
+        }.sorted { $0.start < $1.start }
         var result: [UUID: [VoiceTurn]] = [:]
         for placement in placements {
             var runs: [VoiceTurn] = []
@@ -146,7 +147,6 @@ public enum SpeakerDetection {
     }
 }
 
-/// One voice's stretch of audio, in seconds.
 struct VoiceTurn: Equatable, Sendable {
     var voice: String
     var start: TimeInterval
@@ -191,13 +191,10 @@ public actor SpeakerRecording {
         guard !placements.isEmpty else { return [:] }
         let audio = try ParakeetProvider.samples(of: url)
         let result = try await SpeakerDetection.abandoningOnCancel {
-            try await SpeakerDetection.diarizer(from: SpeakerDetection.directory).diarize(audioArray: audio, options: nil, progressCallback: nil)
+            try await SpeakerDetection.installedDiarizer(from: SpeakerDetection.directory).diarize(audioArray: audio, options: nil, progressCallback: nil)
         }
         try Task.checkCancellation()
-        let turns = result.segments.compactMap { segment in
-            segment.speaker.speakerId.map { VoiceTurn(voice: String($0), start: TimeInterval(segment.startTime), end: TimeInterval(segment.endTime)) }
-        }
-        return SpeakerDetection.voiceTurns(turns: turns, placements: placements)
+        return SpeakerDetection.voiceTurns(turns: result.segments, placements: placements)
     }
 
     /// Writes one stretch of a segment's call audio to its own file, in seconds from the segment's start.
