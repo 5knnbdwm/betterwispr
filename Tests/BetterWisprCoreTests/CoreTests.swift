@@ -37,6 +37,7 @@ import Testing
     #expect(!settings.showInDock)
     #expect(settings.theme == .dark)
     #expect(settings.shortcut == .optionSpace)
+    #expect(settings.cancelShortcut == nil)
     #expect(settings.microphone == nil)
     #expect(settings.completedOnboardingVersion == 0)
     #expect(settings.onboardingStep == 0)
@@ -49,6 +50,8 @@ import Testing
     toggled.showInDock = true
     toggled.theme = .system
     toggled.microphone = AudioInputDevice(id: "AppleUSBAudioEngine:Shure:MV7:1", name: "Shure MV7")
+    toggled.cancelShortcut = DictationShortcut(keyCode: 53, modifiers: .control, key: "Esc")
+    #expect(toggled.cancelShortcut != nil)
     #expect(try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(toggled)) == toggled)
 }
 
@@ -409,6 +412,15 @@ func standaloneModifiersRoundTripThroughSettings(keyCode: UInt32) throws {
     #expect(try JSONDecoder().decode(AppSettings.self, from: settings).learnCorrections)
     settings = try JSONEncoder().encode(VocabularyEntry(phrase: "kv", replacement: "KV", learned: true))
     #expect(try JSONDecoder().decode(VocabularyEntry.self, from: settings).learned)
+}
+
+@Test func cancelShortcutDefaultsToControlOptionEscapeButStaysClearedOnceSaved() throws {
+    #expect(AppSettings().cancelShortcut == .controlOptionEscape)
+    let droppedKey = try jsonDroppingKey(AppSettings(), "cancelShortcut")
+    #expect(try JSONDecoder().decode(AppSettings.self, from: droppedKey).cancelShortcut == nil)
+    var cleared = AppSettings()
+    cleared.cancelShortcut = nil
+    #expect(try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(cleared)).cancelShortcut == nil)
 }
 
 private func jsonDroppingKey(_ value: some Encodable, _ key: String) throws -> Data {

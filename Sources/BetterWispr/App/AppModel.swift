@@ -123,6 +123,7 @@ final class AppModel {
     @ObservationIgnored private let startsServices: Bool
     @ObservationIgnored private let correctionWatcher = CorrectionWatcher()
     @ObservationIgnored private let globalShortcut = GlobalShortcut()
+    @ObservationIgnored private let cancelGlobalShortcut = GlobalShortcut()
     @ObservationIgnored private var microphoneObserver: AudioInputObserver?
     @ObservationIgnored private var shortcutWarning: String?
     @ObservationIgnored private var provider: (any SpeechProvider)?
@@ -193,6 +194,7 @@ final class AppModel {
         meetingDetector.isEnabled = settings.detectMeetings
         globalShortcut.onPress = { [weak self] in self?.shortcutPressed() }
         globalShortcut.onRelease = { [weak self] in self?.shortcutReleased() }
+        cancelGlobalShortcut.onPress = { [weak self] in self?.cancelRecording() }
         warmUpSelectedModel()
         let warmUpAfterWake: @Sendable (Notification) -> Void = { [weak self] _ in
             MainActor.assumeIsolated { self?.warmUpSelectedModel(after: .seconds(3)) }
@@ -234,6 +236,11 @@ final class AppModel {
 
     func changeShortcut(_ shortcut: DictationShortcut) {
         guard !isBusy else { return }
+        if shortcut == settings.cancelShortcut {
+            registerShortcut()
+            ToastWindow.shared.show(Toast(failure: "Couldn’t use \(shortcut.displayName)", ShortcutError.alreadyAssigned(shortcut)))
+            return
+        }
         do {
             try globalShortcut.register(shortcut)
         } catch {
@@ -243,6 +250,42 @@ final class AppModel {
         }
         if statusMessage == shortcutWarning { statusMessage = "" }
         settings.shortcut = shortcut
+        saveSettings()
+    }
+
+    func registerCancelShortcut() {
+        guard let cancelShortcut = settings.cancelShortcut else { cancelGlobalShortcut.unregister(); return }
+        do {
+            try cancelGlobalShortcut.register(cancelShortcut)
+        } catch {
+            ToastWindow.shared.show(Toast(failure: "Couldn’t use \(cancelShortcut.displayName) to cancel", error))
+        }
+    }
+
+    func suspendCancelShortcut() { cancelGlobalShortcut.unregister() }
+
+    /// Nil clears the cancel shortcut; cancelling always works from the menu bar and capsule regardless.
+    func changeCancelShortcut(_ shortcut: DictationShortcut?) {
+        guard !isBusy else { return }
+        if let shortcut, shortcut == settings.shortcut {
+            registerCancelShortcut()
+            ToastWindow.shared.show(Toast(failure: "Couldn’t use \(shortcut.displayName)", ShortcutError.alreadyAssigned(shortcut)))
+            return
+        }
+        guard let shortcut else {
+            cancelGlobalShortcut.unregister()
+            settings.cancelShortcut = nil
+            saveSettings()
+            return
+        }
+        do {
+            try cancelGlobalShortcut.register(shortcut)
+        } catch {
+            registerCancelShortcut()
+            ToastWindow.shared.show(Toast(failure: "Couldn’t use \(shortcut.displayName)", error))
+            return
+        }
+        settings.cancelShortcut = shortcut
         saveSettings()
     }
 
@@ -1016,7 +1059,10 @@ final class AppModel {
         microphoneGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
         let previouslyGranted = accessibilityGranted
         accessibilityGranted = AXIsProcessTrusted()
-        if previouslyGranted != accessibilityGranted, settings.shortcut.isModifierOnly, !isBusy { registerShortcut() }
+        if previouslyGranted != accessibilityGranted, !isBusy {
+            if settings.shortcut.isModifierOnly { registerShortcut() }
+            if settings.cancelShortcut?.isModifierOnly == true { registerCancelShortcut() }
+        }
     }
 
     func selectMicrophone(_ choice: AudioInputDevice?) {

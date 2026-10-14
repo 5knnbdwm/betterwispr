@@ -634,6 +634,19 @@ retries. They do not access Keychain, mount disk images or submit to Apple.
   required permission and keeps the previous shortcut. Revoke permission with a
   saved modifier shortcut, relaunch, then grant it again and return to BetterWispr;
   the saved shortcut resumes working. Ordinary combinations remain available.
+- [ ] On a fresh install (no saved workspace), open Settings and confirm the
+  Cancel shortcut already shows ⌃⌥Esc. Start a dictation into another app,
+  press ⌃⌥Esc, and confirm the capsule shows Cancelled, no text is pasted,
+  audio cleanup runs and Undo still restores the recording within the window.
+  The dictation shortcut keeps starting and finishing dictation as before, and
+  pressing it does not cancel.
+- [ ] Record a different Cancel shortcut and confirm it replaces ⌃⌥Esc and
+  works the same way; ⌃⌥Esc itself no longer cancels. Attempting to reuse the
+  dictation shortcut for Cancel (or vice versa) is refused with a toast and
+  leaves both shortcuts as they were. Clear turns the Cancel shortcut off;
+  with none set, cancelling still works from the capsule, menu bar and Escape
+  inside BetterWispr, and relaunching keeps it off rather than reverting to
+  ⌃⌥Esc. Recording a Cancel shortcut again after Clear works normally.
 - [ ] Disconnect the input device during capture; retry after reconnecting.
 - [ ] Move between Spaces, fullscreen windows and monitors. Confirm capsule
   positioning, keyboard controls, VoiceOver labels and reduced-motion behavior.

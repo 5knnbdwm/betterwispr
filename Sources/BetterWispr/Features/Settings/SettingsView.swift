@@ -32,7 +32,9 @@ struct SettingsView: View {
                 }
 
                 SettingsSection("Shortcut") {
-                    ShortcutRecorder(model: model)
+                    ShortcutRecorder(model: model, kind: .dictation)
+                    RowDivider()
+                    ShortcutRecorder(model: model, kind: .cancel)
                     RowDivider()
                     SettingRow("Behavior", caption: model.settings.dictationMode == .hold
                         ? "Hold to speak and release to finish. A quick tap starts hands-free dictation."
@@ -177,19 +179,26 @@ struct SettingsView: View {
 }
 
 private struct ShortcutRecorder: View {
+    enum Kind { case dictation, cancel }
+
     let model: AppModel
+    let kind: Kind
     @State private var monitor: Any?
     @State private var held: ShortcutModifiers = []
     @State private var modifierCandidate: DictationShortcut?
     @State private var feedback: String?
 
     private var isCapturing: Bool { monitor != nil }
-    private var shortcut: DictationShortcut { model.settings.shortcut }
+    private var shortcut: DictationShortcut? {
+        kind == .dictation ? model.settings.shortcut : model.settings.cancelShortcut
+    }
+    private var title: String { kind == .dictation ? "Keyboard shortcut" : "Cancel shortcut" }
+    private var placeholder: String { kind == .dictation ? "" : "Set Shortcut…" }
 
     var body: some View {
-        SettingRow("Keyboard shortcut", caption: caption) {
+        SettingRow(title, caption: caption) {
             HStack(spacing: 6) {
-                if shortcut != .optionSpace, !isCapturing {
+                if kind == .dictation, shortcut != .optionSpace, !isCapturing {
                     Button("Reset to \(DictationShortcut.optionSpace.spokenName)", systemImage: "arrow.counterclockwise") {
                         stop()
                         model.changeShortcut(.optionSpace)
@@ -199,9 +208,19 @@ private struct ShortcutRecorder: View {
                     .foregroundStyle(.secondary)
                     .help("Reset to \(DictationShortcut.optionSpace.displayName)")
                     .transition(.opacity)
+                } else if kind == .cancel, shortcut != nil, !isCapturing {
+                    Button("Clear", systemImage: "xmark.circle") {
+                        stop()
+                        model.changeCancelShortcut(nil)
+                    }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(.secondary)
+                    .help("Remove the cancel shortcut")
+                    .transition(.opacity)
                 }
                 recordButton
-                    .accessibilityLabel(isCapturing ? "Keyboard shortcut, waiting for keys" : "Keyboard shortcut, \(shortcut.spokenName)")
+                    .accessibilityLabel(isCapturing ? "\(title), waiting for keys" : "\(title), \(shortcut?.spokenName ?? "not set")")
                     .accessibilityHint("Click, then press a shortcut, or press and release a modifier key such as Option.")
             }
             .disabled(model.isBusy)
@@ -214,14 +233,17 @@ private struct ShortcutRecorder: View {
 
     private var caption: String? {
         if isCapturing { return feedback ?? "Press and release ⌃, ⌥, ⇧ or ⌘ alone, use a key combination, or press an F-key. Esc cancels." }
-        return shortcut.isModifierOnly ? "Needs Accessibility. Uses the left or right key you recorded." : "Starts dictation from any app."
+        switch kind {
+        case .dictation: return shortcut?.isModifierOnly == true ? "Needs Accessibility. Uses the left or right key you recorded." : "Starts dictation from any app."
+        case .cancel: return "Stops dictation without pasting it, from any app."
+        }
     }
 
     @ViewBuilder private var recordButton: some View {
         let button = Button {
             if isCapturing { stop() } else { start() }
         } label: {
-            Text(isCapturing ? (held.isEmpty ? "Type shortcut…" : held.symbols + " …") : shortcut.displayName)
+            Text(isCapturing ? (held.isEmpty ? "Type shortcut…" : held.symbols + " …") : (shortcut?.displayName ?? placeholder))
                 .frame(minWidth: 96)
                 .contentTransition(.opacity)
         }
@@ -232,7 +254,7 @@ private struct ShortcutRecorder: View {
         held = []
         modifierCandidate = nil
         feedback = nil
-        model.suspendShortcut()
+        suspend()
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { event in
             MainActor.assumeIsolated { capture(event) }
             return nil
@@ -244,7 +266,13 @@ private struct ShortcutRecorder: View {
         NSEvent.removeMonitor(monitor)
         self.monitor = nil
         modifierCandidate = nil
-        model.registerShortcut()
+        resume()
+    }
+
+    private func suspend() { kind == .dictation ? model.suspendShortcut() : model.suspendCancelShortcut() }
+    private func resume() { kind == .dictation ? model.registerShortcut() : model.registerCancelShortcut() }
+    private func change(_ shortcut: DictationShortcut) {
+        kind == .dictation ? model.changeShortcut(shortcut) : model.changeCancelShortcut(shortcut)
     }
 
     private func capture(_ event: NSEvent) {
@@ -257,16 +285,16 @@ private struct ShortcutRecorder: View {
         guard let shortcut = DictationShortcut(keyCode: UInt32(event.keyCode), modifiers: modifiers, key: key) else {
             let pressed = modifiers.isEmpty ? key : modifiers.symbols + " " + key
             feedback = key.isEmpty ? "That key can’t be a shortcut. Try another."
-                                   : "\(pressed) is for typing, so it can’t start dictation. Hold ⌃, ⌥ or ⌘ with it."
+                                   : "\(pressed) is for typing, so it can’t be a shortcut. Hold ⌃, ⌥ or ⌘ with it."
             return NSSound.beep()
         }
-        model.changeShortcut(shortcut)
+        change(shortcut)
         stop()
     }
 
     private func modifiersChanged(to modifiers: ShortcutModifiers, keyCode: Int) {
         if let candidate = modifierCandidate, candidate.keyCode == UInt32(keyCode), modifiers.isEmpty {
-            model.changeShortcut(candidate)
+            change(candidate)
             return stop()
         }
         modifierCandidate = nil

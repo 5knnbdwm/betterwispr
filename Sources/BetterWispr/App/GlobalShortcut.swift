@@ -5,6 +5,11 @@ import IOKit.hidsystem
 
 @MainActor
 final class GlobalShortcut {
+    /// Carbon dispatches every registered hotkey's press/release to each installed handler in turn,
+    /// so each instance needs its own id to claim only its own events and let others fall through.
+    private static var nextHotKeyID: UInt32 = 1
+
+    private let hotKeyID = GlobalShortcut.nextHotKeyIDValue()
     private var hotKey: EventHotKeyRef?
     private var handler: EventHandlerRef?
     private var localMonitor: Any?
@@ -12,6 +17,11 @@ final class GlobalShortcut {
     private var modifierPressed = false
     var onPress: (() -> Void)?
     var onRelease: (() -> Void)?
+
+    private static func nextHotKeyIDValue() -> UInt32 {
+        defer { nextHotKeyID += 1 }
+        return nextHotKeyID
+    }
 
     func register(_ shortcut: DictationShortcut) throws {
         unregister()
@@ -31,7 +41,7 @@ final class GlobalShortcut {
             return
         }
         guard installHandler() else { throw ShortcutError.unavailable(shortcut) }
-        let identifier = EventHotKeyID(signature: 0x42575350, id: 1)
+        let identifier = EventHotKeyID(signature: 0x42575350, id: hotKeyID)
         let status = RegisterEventHotKey(shortcut.keyCode, shortcut.modifiers.rawValue, identifier,
                                          GetApplicationEventTarget(), 0, &hotKey)
         guard status == noErr else { hotKey = nil; throw ShortcutError.unavailable(shortcut) }
@@ -82,10 +92,14 @@ final class GlobalShortcut {
         let context = Unmanaged.passUnretained(self).toOpaque()
         return InstallEventHandler(GetApplicationEventTarget(), { _, event, context in
             guard let event, let context else { return OSStatus(eventNotHandledErr) }
+            var eventHotKeyID = EventHotKeyID()
+            let status = GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
+                                           nil, MemoryLayout<EventHotKeyID>.size, nil, &eventHotKeyID)
+            let instance = Unmanaged<GlobalShortcut>.fromOpaque(context).takeUnretainedValue()
+            guard status == noErr, eventHotKeyID.id == instance.hotKeyID else { return OSStatus(eventNotHandledErr) }
             let pressed = GetEventKind(event) == UInt32(kEventHotKeyPressed)
             MainActor.assumeIsolated {
-                let shortcut = Unmanaged<GlobalShortcut>.fromOpaque(context).takeUnretainedValue()
-                (pressed ? shortcut.onPress : shortcut.onRelease)?()
+                (pressed ? instance.onPress : instance.onRelease)?()
             }
             return noErr
         }, specs.count, &specs, context, &handler) == noErr
@@ -96,11 +110,13 @@ enum ShortcutError: LocalizedError {
     case unavailable(DictationShortcut)
     case accessibilityRequired
     case monitorUnavailable
+    case alreadyAssigned(DictationShortcut)
     var errorDescription: String? {
         switch self {
         case .unavailable(let shortcut): "\(shortcut.displayName) is used by another app."
         case .accessibilityRequired: "Allow Accessibility in Settings to use a modifier key by itself."
         case .monitorUnavailable: "Couldn’t listen for the modifier key. Try choosing the shortcut again."
+        case .alreadyAssigned(let shortcut): "\(shortcut.displayName) is already BetterWispr’s other shortcut."
         }
     }
 }

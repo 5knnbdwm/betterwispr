@@ -4,6 +4,11 @@ All notable changes to BetterWispr are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/). The current version lives in `VERSION`.
 
+## [Unreleased]
+
+### Added
+- A second keyboard shortcut in Settings > Shortcut that cancels the current dictation without pasting it, from any app. It defaults to ⌃⌥Esc; record a different one the same way as the dictation shortcut, and Clear turns it off. It can't be the same combination as the dictation shortcut.
+
 ## [0.1.5] - 2026-10-12
 
 ### Added

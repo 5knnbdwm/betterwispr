@@ -32,6 +32,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var silenceThreshold: Float = 0.002
     public var dictationMode: DictationMode = .hold
     public var shortcut: DictationShortcut = .optionSpace
+    /// Stops a dictation without pasting it. Clear sets it to nil.
+    public var cancelShortcut: DictationShortcut? = .controlOptionEscape
     public var learnCorrections: Bool = true
     public var cleanup: CleanupLevel = .light
     /// Sends selected text, clipboard text and the focused window's text to the notes model during Medium cleanup.
@@ -112,6 +114,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         silenceThreshold = try container.decode(Float.self, forKey: .silenceThreshold)
         dictationMode = try container.decodeIfPresent(DictationMode.self, forKey: .dictationMode) ?? .hold
         shortcut = try container.decodeIfPresent(DictationShortcut.self, forKey: .shortcut) ?? .optionSpace
+        cancelShortcut = try container.decodeIfPresent(DictationShortcut.self, forKey: .cancelShortcut)
         microphone = try container.decodeIfPresent(AudioInputDevice.self, forKey: .microphone)
         learnCorrections = try container.decodeIfPresent(Bool.self, forKey: .learnCorrections) ?? true
         cleanup = try container.decodeIfPresent(CleanupLevel.self, forKey: .cleanup) ?? .light

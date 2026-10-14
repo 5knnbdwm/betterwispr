@@ -162,6 +162,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         notetaker = NotetakerController(model: model)
         model.onShowNotetaker = { [weak self] in self?.notetaker?.show($0) }
         model.registerShortcut()
+        model.registerCancelShortcut()
         capsule?.update()
     }
 
