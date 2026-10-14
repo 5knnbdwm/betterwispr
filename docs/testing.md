@@ -767,6 +767,12 @@ retries. They do not access Keychain, mount disk images or submit to Apple.
   `github.com` mode Medium cleanup and Screen context Off while Use screen
   context is on. Dictate in a GitHub tab in Safari with a notes model that logs
   requests. No selected text, clipboard or window text is sent.
+- [ ] Select Parakeet with the phrase booster, Light cleanup and Use screen
+  context. Open a Slack or Messages chat that shows an unusual name such as
+  Pannekeet or Supabase and say it in a sentence. Expect the on-screen
+  spelling when the plain result was misspelled, ordinary words left alone,
+  no Vocabulary fix counted in Insights and no request to any notes model or
+  speech API. With an API speech connection selected, nothing changes.
 - [ ] With Medium cleanup, add the instruction "Use British spelling." Dictate
   "the color of the organization" in the mode. Expect British spelling from the
   notes model; outside the mode, American spelling stays.
