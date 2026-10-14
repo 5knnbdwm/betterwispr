@@ -186,7 +186,7 @@ final class AppModel {
         if !models.contains(where: { $0.id == settings.selectedModelID }) { settings.selectedModelID = "apple" }
         settings.launchAtLogin = SMAppService.mainApp.status == .enabled
         meetings.notesSettings = settings
-        if let cli = settings.notesCLI { Task { await refreshNotesCLIModels(cli) } }
+        for cli in Set([settings.notesCLI, settings.askSettings.notesCLI].compactMap { $0 }) { Task { await refreshNotesCLIModels(cli) } }
         refreshModels()
         recorder.onLevel = { [weak self] levels in self?.voiceLevels = levels }
         recorder.onError = { [weak self] error in
@@ -750,8 +750,7 @@ final class AppModel {
             connections.append(connection)
         }
         if forNotes { settings.notesConnections = connections } else { settings.speechConnections = connections }
-        if forNotes, let oldConnection, oldConnection.keychainAccount != connection.keychainAccount,
-           settings.notesConnectionID == connection.id { settings.notesSelection = .apple }
+        if forNotes, let oldConnection, oldConnection.keychainAccount != connection.keychainAccount { settings.deselectNotesConnection(connection.id) }
         if !forNotes, let oldConnection, oldConnection.keychainAccount != connection.keychainAccount,
            settings.selectedModelID == connection.speechModel.id {
             settings.selectedModelID = "apple"
@@ -784,7 +783,7 @@ final class AppModel {
         try keys.save("", for: connection)
         if forNotes {
             settings.notesConnections.removeAll { $0.id == connection.id }
-            if settings.notesConnectionID == connection.id { settings.notesSelection = .apple }
+            settings.deselectNotesConnection(connection.id)
         } else {
             settings.speechConnections.removeAll { $0.id == connection.id }
             if settings.selectedModelID == connection.speechModel.id { settings.selectedModelID = "apple" }
@@ -1042,6 +1041,12 @@ final class AppModel {
     func selectNotesModel(_ selection: NotesModelSelection) {
         guard meetings.runs.isEmpty else { return }
         settings.notesSelection = selection
+        saveNotesSettings()
+        if case .cli(let cli) = selection { Task { await refreshNotesCLIModels(cli) } }
+    }
+
+    func selectAskModel(_ selection: NotesModelSelection?) {
+        settings.askSelection = selection
         saveNotesSettings()
         if case .cli(let cli) = selection { Task { await refreshNotesCLIModels(cli) } }
     }
