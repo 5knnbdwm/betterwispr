@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import BetterWisprCore
+@testable import BetterWispr
 
 private let now = Date(timeIntervalSinceReferenceDate: 800_000_000)
 
@@ -46,6 +47,30 @@ private func event(_ id: String, from start: TimeInterval, to end: TimeInterval,
     settings.useCalendar = true
     settings.excludedCalendarIDs = ["holidays", "birthdays"]
     #expect(try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(settings)) == settings)
+}
+
+@MainActor
+@Test func meetingStartedDuringAnEventTakesItsTitleAndInviteesAndIsDiscardedWhenCancelledEmpty() throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let store = MeetingStore(directory: directory)
+    let model = MeetingModel(store: store)
+    let speech = try #require(SpeechModel.catalog.first { $0.id == "whisper-turbo" })
+    var review = event("event-1", from: -2, to: 30)
+    review.title = "Design review"
+    review.attendees = ["Ada Lovelace", "grace@example.com"]
+
+    model.start(model: speech, language: "en", vocabulary: [], silenceThreshold: 0.002, microphone: nil, event: review)
+    let meeting = try #require(model.meetings.first)
+    #expect(meeting.title == "Design review")
+    #expect(meeting.attendees == ["Ada Lovelace", "grace@example.com"])
+    #expect(meeting.eventID == "event-1")
+    #expect(store.load().meetings == [meeting])
+
+    model.stop()
+    #expect(model.runs.isEmpty)
+    #expect(model.meetings.isEmpty)
+    #expect(store.load().meetings.isEmpty)
 }
 
 @Test func meetingsKeepTheirEventAndLoadFilesSavedBeforeCalendar() throws {

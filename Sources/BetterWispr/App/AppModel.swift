@@ -112,6 +112,9 @@ final class AppModel {
     var speakerDetectionInstalled = false
     var microphoneGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
     var accessibilityGranted = AXIsProcessTrusted()
+    var calendarGranted = CalendarEvents.isAuthorized
+    var calendarAccounts: [CalendarAccount] = []
+    @ObservationIgnored let calendarEvents = CalendarEvents()
     var microphones: [AudioInputDevice] = []
     var automaticMicrophone: AudioInputDevice?
     var onPresentationChange: (() -> Void)?

@@ -368,7 +368,8 @@ extension AppModel {
         }
         selectedPage = .meetings
         meetings.start(model: speechModel, language: settings.language == "auto" ? nil : settings.language,
-                       vocabulary: vocabulary, silenceThreshold: settings.silenceThreshold, microphone: settings.microphone)
+                       vocabulary: vocabulary, silenceThreshold: settings.silenceThreshold, microphone: settings.microphone,
+                       event: settings.useCalendar ? calendarEvents.current(excluding: settings.excludedCalendarIDs) : nil)
     }
 
     /// Starts a meeting and docks its card beside the call.
