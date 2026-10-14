@@ -200,12 +200,13 @@ func notesAPIFailuresNeverProduceASummary(path: String) async throws {
 }
 
 @MainActor
-@Test func notesCLILookupResolvesTheLoginShellPATHPastABanner() async throws {
+@Test func notesCLILookupResolvesTheLoginShellPATHPastABannerAndRetriesAfterABrokenShell() async throws {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory) }
     let bin = directory.appendingPathComponent("bin")
     try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
     let claude = bin.appendingPathComponent("claude").path
+    let brokenShell = directory.appendingPathComponent("broken-shell").path
     let loginShell = directory.appendingPathComponent("login-shell").path
     let bannerThenPATHThenCommand = """
     #!/bin/sh
@@ -217,8 +218,11 @@ func notesAPIFailuresNeverProduceASummary(path: String) async throws {
 
     """
     #expect(FileManager.default.createFile(atPath: claude, contents: Data("#!/bin/sh\n".utf8), attributes: [.posixPermissions: 0o755]))
+    #expect(FileManager.default.createFile(atPath: brokenShell, contents: Data("#!/bin/sh\nexit 1\n".utf8), attributes: [.posixPermissions: 0o755]))
     #expect(FileManager.default.createFile(atPath: loginShell, contents: Data(bannerThenPATHThenCommand.utf8), attributes: [.posixPermissions: 0o755]))
     let onlyTheFakeInstall: (String) -> Bool = { $0.hasPrefix(bin.path) && FileManager.default.isExecutableFile(atPath: $0) }
+    let afterBrokenShell = await NotesCLI.claudeCode.locateExecutable(shell: brokenShell, isExecutable: onlyTheFakeInstall)
+    #expect(afterBrokenShell == nil)
     let found = await NotesCLI.claudeCode.locateExecutable(shell: loginShell, isExecutable: onlyTheFakeInstall)
     #expect(found?.path == claude)
 }

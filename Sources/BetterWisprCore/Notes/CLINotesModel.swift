@@ -12,7 +12,7 @@ public enum NotesCLI: String, Codable, CaseIterable, Sendable {
     /// Synchronous for view bodies; sees the login shell's PATH only after `locateExecutable()` has resolved it once.
     public var executable: URL? { Self.locate(command, in: Self.searchDirectories) }
 
-    /// Resolves the login shell's PATH once per launch when the well-known folders miss, then looks the CLI up.
+    /// Resolves the login shell's PATH when the well-known folders miss, once per launch unless the shell failed, then looks the CLI up.
     @MainActor public func locateExecutable() async -> URL? {
         await locateExecutable(shell: Self.loginShell, isExecutable: Self.isExecutableFile)
     }
@@ -23,6 +23,7 @@ public enum NotesCLI: String, Codable, CaseIterable, Sendable {
             Self.loginShellResolution = Task { @MainActor in
                 let path = await Self.loginShellPATH(shell: shell)
                 Self.loginShellPATHCache.withLock { $0 = path }
+                if path == nil { Self.loginShellResolution = nil }
             }
         }
         await Self.loginShellResolution?.value
