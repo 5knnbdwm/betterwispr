@@ -381,6 +381,7 @@ struct MeetingDetailView: View {
                     .textFieldStyle(.roundedBorder)
             }
             if !meeting.participants.isEmpty { speakers(meeting) }
+            speakerDetectionOffer(meeting)
         }
 
         if meeting.segments.isEmpty, !isRecording {
@@ -405,7 +406,11 @@ struct MeetingDetailView: View {
             }
             LazyVStack(alignment: .leading, spacing: 18) {
                 ForEach(segments) { segment in
-                    SegmentRow(segment: segment, label: segment.label(names: meeting.participantNames)).id(segment.id)
+                    SegmentRow(segment: segment, label: segment.label(names: meeting.participantNames),
+                               canChangeSpeaker: segment.speaker == .them && !isActive) {
+                        speakerChoices(meeting, segment)
+                    }
+                    .id(segment.id)
                 }
             }
             if isRecording { listening(meeting) }
@@ -450,11 +455,86 @@ struct MeetingDetailView: View {
                     TextField("Speaker \(number)", text: participantName(number))
                         .textFieldStyle(.roundedBorder)
                         .accessibilityLabel("Name for speaker \(number)")
+                    if meeting.participants.count > 1, !isActive { mergeMenu(meeting, number) }
                 }
             }
         }
         .font(.callout)
         .help("Name the voices on the call. Names appear in the transcript and the notes.")
+    }
+
+    private func mergeMenu(_ meeting: Meeting, _ number: Int) -> some View {
+        let name = MeetingSegment.label(of: number, names: meeting.participantNames)
+        return Menu {
+            Section("Merge \(name) into") {
+                ForEach(meeting.participants.filter { $0 != number }, id: \.self) { target in
+                    Button(MeetingSegment.label(of: target, names: meeting.participantNames)) {
+                        meetings.edit(id) { $0.mergeParticipant(number, into: target) }
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "arrow.triangle.merge")
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Merge \(name) into another speaker")
+        .accessibilityLabel("Merge \(name) into another speaker")
+    }
+
+    @ViewBuilder private func speakerChoices(_ meeting: Meeting, _ segment: MeetingSegment) -> some View {
+        Picker("Speaker", selection: Binding(
+            get: { segment.participant },
+            set: { participant in meetings.edit(id) { $0.assign(segment: segment.id, toParticipant: participant) } }
+        )) {
+            ForEach(meeting.participants, id: \.self) { number in
+                Text(MeetingSegment.label(of: number, names: meeting.participantNames)).tag(Int?.some(number))
+            }
+            if meeting.segments.contains(where: { $0.speaker == .them && $0.participant == nil }) {
+                Text(Speaker.them.label).tag(Int?.none)
+            }
+        }
+        .pickerStyle(.inline)
+        Button("New speaker") { meetings.edit(id) { $0.assign(segment: segment.id, toParticipant: $0.nextParticipant) } }
+    }
+
+    @ViewBuilder private func speakerDetectionOffer(_ meeting: Meeting) -> some View {
+        if !isActive, SpeakerDetection.isSupported, !model.speakerDetectionInstalled, !model.settings.dismissedSpeakerDetectionOffer,
+           meeting.segments.contains(where: { $0.speaker == .them }) {
+            let installation = model.installation?.id == AppModel.speakerDetectionID ? model.installation : nil
+            let installing = installation != nil && installation?.failure == nil
+            VStack(alignment: .leading, spacing: 10) {
+                Label("Tell the voices on the call apart", systemImage: "person.2.wave.2")
+                    .font(.headline)
+                Text("Speaker detection labels the other side of a call Speaker 1, Speaker 2 and so on. It runs on this Mac and starts with your next meeting, because this meeting’s call audio wasn’t kept. For this meeting, click a speaker name to choose who said that line.")
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 12) {
+                    if installing {
+                        Button("Cancel", action: model.cancelInstallation)
+                    } else {
+                        Button(installation == nil ? "Download speaker detection" : "Retry") { model.installSpeakerDetection() }
+                            .disabled(model.isInstalling)
+                        Button("Don’t show again") {
+                            model.settings.dismissedSpeakerDetectionOffer = true
+                            model.saveSettings()
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                }
+                if let installation {
+                    if installing { ProgressView(value: installation.progress) }
+                    Text(installation.failure.map { "Download stopped: \($0)" } ?? installation.progressLabel)
+                        .font(.caption)
+                        .foregroundStyle(installing ? AnyShapeStyle(.secondary) : AnyShapeStyle(.red))
+                }
+            }
+            .font(.callout)
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12))
+        }
     }
 
     private func participantName(_ number: Int) -> Binding<String> {
@@ -523,16 +603,27 @@ private func voiceColor(_ participant: Int?) -> Color {
     return palette[max(0, participant - 1) % palette.count]
 }
 
-private struct SegmentRow: View {
+private struct SegmentRow<SpeakerChoices: View>: View {
     let segment: MeetingSegment
     let label: String
+    let canChangeSpeaker: Bool
+    @ViewBuilder let speakerChoices: () -> SpeakerChoices
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Circle().fill(segment.speaker == .me ? Color.green : voiceColor(segment.participant)).frame(width: 6, height: 6)
                     .accessibilityHidden(true)
-                Text(label).fontWeight(.semibold)
+                if canChangeSpeaker {
+                    Menu(content: speakerChoices) { Text(label).fontWeight(.semibold) }
+                        .menuStyle(.borderlessButton)
+                        .fixedSize()
+                        .help("Change who said this")
+                        .accessibilityLabel("Speaker")
+                        .accessibilityValue(label)
+                } else {
+                    Text(label).fontWeight(.semibold)
+                }
                 Text(segment.timestamp).foregroundStyle(.secondary).monospacedDigit()
             }
             .font(.caption)
@@ -543,6 +634,7 @@ private struct SegmentRow: View {
                 .bubble()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .contextMenu { if canChangeSpeaker { speakerChoices() } }
     }
 }
 
