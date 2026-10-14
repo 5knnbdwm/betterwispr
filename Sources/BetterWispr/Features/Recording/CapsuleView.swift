@@ -7,18 +7,16 @@ struct CapsuleView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var isRecording: Bool { model.phase == .recording }
-    private var isMeetingCapturing: Bool { model.meetings.activity.capturingID != nil }
+    private var isMeetingCapturing: Bool { model.meetings.capturingID != nil }
     private var isNotetaking: Bool { !model.isBusy && isMeetingCapturing }
-    private var isMeetingRecording: Bool {
-        if case .recording = model.meetings.activity { true } else { false }
-    }
+    private var isMeetingRecording: Bool { model.meetings.capturing?.phase == .recording }
     private var failure: DictationFailure? {
         model.failure ?? (model.phase != .idle ? nil : model.meetings.message.map {
             DictationFailure(title: "Notetaker needs attention", message: $0)
         })
     }
     private var meetingPrompt: DetectedMeeting? {
-        model.isBusy || model.meetings.activity != .idle ? nil : model.meetingDetector.meeting
+        model.isBusy || isMeetingCapturing ? nil : model.meetingDetector.meeting
     }
     private var showsCard: Bool {
         switch model.phase {
@@ -51,7 +49,7 @@ struct CapsuleView: View {
         .environment(\.colorScheme, .dark)
         .animation(spring, value: model.phase)
         .animation(spring, value: model.isHeldSession)
-        .animation(spring, value: model.meetings.activity)
+        .animation(spring, value: model.meetings.capturing?.phase)
         .animation(spring, value: model.liveTranscript.isEmpty)
         .animation(spring, value: failure)
         .animation(spring, value: meetingPrompt)
@@ -152,7 +150,7 @@ struct CapsuleView: View {
         switch target {
         case .microphone: "Dictate"
         case .notetaker:
-            isMeetingCapturing ? "Stop notetaker" : model.meetings.activity == .idle ? "Start notetaker" : "Finishing notes…"
+            isMeetingCapturing ? "Stop notetaker" : "Start notetaker"
         case .meetingNotes: "Open meeting notes"
         case .dictation:
             switch model.phase {
@@ -497,10 +495,9 @@ struct CapsuleView: View {
                     .contentShape(Circle())
             }
             .accessibilityLabel("Start notetaker")
-            .disabled(model.meetings.activity != .idle)
             .capsuleRegion(.notetaker)
             Button {
-                if let id = model.meetings.activity.meetingID {
+                if let id = model.meetings.activeMeetingID {
                     model.onShowNotetaker?(id)
                 } else {
                     model.selectedPage = .meetings
@@ -552,7 +549,7 @@ private struct CapsuleWaveform: View {
 
     private var mode: Waveform.Mode {
         if isNotetaking {
-            guard case .recording = model.meetings.activity else { return .waiting }
+            guard model.meetings.capturing?.phase == .recording else { return .waiting }
             return .listening(VoiceLevels(values: [max(model.meetings.levels.me, model.meetings.levels.them)]))
         }
         return model.phase == .recording ? .listening(model.voiceLevels) : .waiting

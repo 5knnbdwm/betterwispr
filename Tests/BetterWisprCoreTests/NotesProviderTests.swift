@@ -14,19 +14,47 @@ import Testing
     let model = MeetingModel(store: store)
     model.notesSettings.notesSelection = .connection(UUID())
     model.generateNotes(meeting.id)
-    #expect(model.activity == .generating(meeting.id))
-    model.cancelNotes()
+    #expect(model.runs[meeting.id]?.phase == .generating)
+    model.cancelNotes(meeting.id)
     try await Task.sleep(for: .milliseconds(50))
-    #expect(model.activity == .idle)
+    #expect(model.runs.isEmpty)
     #expect(model.meeting(meeting.id) == meeting)
     model.generateNotes(meeting.id)
     for _ in 0..<100 {
-        if model.activity == .idle { break }
+        if model.runs.isEmpty { break }
         try await Task.sleep(for: .milliseconds(10))
     }
-    #expect(model.activity == .idle)
+    #expect(model.runs.isEmpty)
     #expect(model.message?.contains("selected notes connection is missing") == true)
     #expect(store.load().meetings == [meeting])
+}
+
+@MainActor
+@Test func meetingNotesRunPerMeetingSoCancellingOneLeavesTheOtherRunning() async throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let store = MeetingStore(directory: directory)
+    let earlier = Meeting(title: "Earlier", notes: "A thought", modelName: "Parakeet", language: "en")
+    let later = Meeting(title: "Later", notes: "Another thought", modelName: "Parakeet", language: "en")
+    try store.save(earlier)
+    try store.save(later)
+    let model = MeetingModel(store: store)
+    model.notesSettings.notesSelection = .connection(UUID())
+    model.generateNotes(earlier.id)
+    model.generateNotes(later.id)
+    #expect(model.runs[earlier.id]?.phase == .generating)
+    #expect(model.runs[later.id]?.phase == .generating)
+    model.generateNotes(later.id)
+    #expect(model.runs.count == 2)
+    model.cancelNotes(earlier.id)
+    #expect(model.runs[earlier.id] == nil)
+    #expect(model.runs[later.id]?.phase == .generating)
+    for _ in 0..<100 {
+        if model.runs.isEmpty { break }
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(model.runs.isEmpty)
+    #expect(model.message?.contains("selected notes connection is missing") == true)
 }
 
 @Test func notesChoicesMigrateWithoutChangingSpeechOrLeakingKeys() throws {

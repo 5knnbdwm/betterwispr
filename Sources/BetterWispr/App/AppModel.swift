@@ -718,7 +718,7 @@ final class AppModel {
         return model.engine == .apple || model.engine == .api || installedModelIDs.contains(model.id)
     }
 
-    var canEditConnections: Bool { !isBusy && meetings.activity == .idle }
+    var canEditConnections: Bool { !isBusy && meetings.runs.isEmpty }
 
     func saveConnection(_ connection: SpeechConnection, key: String?, forNotes: Bool = false) throws {
         guard canEditConnections else { throw SpeechError.busy }
@@ -1027,7 +1027,7 @@ final class AppModel {
     }
 
     func selectNotesModel(_ selection: NotesModelSelection) {
-        guard meetings.activity == .idle else { return }
+        guard meetings.runs.isEmpty else { return }
         settings.notesSelection = selection
         saveNotesSettings()
         if case .cli(let cli) = selection { Task { await refreshNotesCLIModels(cli) } }
@@ -1041,7 +1041,7 @@ final class AppModel {
             let catalog = try await NotesCLICatalog.load(cli)
             try Task.checkCancellation()
             notesCLICatalogs[cli] = catalog
-            if settings.cliModel(cli).isEmpty, let defaultID = catalog.defaultID, meetings.activity == .idle {
+            if settings.cliModel(cli).isEmpty, let defaultID = catalog.defaultID, meetings.runs.isEmpty {
                 settings.setCLIModel(defaultID, for: cli)
                 saveNotesSettings()
             }
@@ -1079,7 +1079,7 @@ final class AppModel {
 
     private func playFeedback(_ cue: DictationSound) {
         feedbackSound?.stop()
-        guard settings.soundEffects, meetings.activity.capturingID == nil, let url = cue.url else { return }
+        guard settings.soundEffects, meetings.capturingID == nil, let url = cue.url else { return }
         feedbackSound = NSSound(contentsOf: url, byReference: false)
         feedbackSound?.volume = 0.6
         feedbackSound?.play()

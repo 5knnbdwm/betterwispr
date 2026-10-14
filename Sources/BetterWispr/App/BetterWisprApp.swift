@@ -88,11 +88,10 @@ private struct MenuContents: View {
         }
         .disabled(model.phase == .preparing || model.phase == .transcribing)
         if model.isBusy { Button("Cancel") { model.cancelRecording() } }
-        Button(model.meetings.activity.capturingID == nil ? "Start Meeting Notes" : "Stop Meeting") {
-            guard model.meetings.activity.capturingID == nil else { return model.meetings.stop() }
+        Button(model.meetings.capturingID == nil ? "Start Meeting Notes" : "Stop Meeting") {
+            guard model.meetings.capturingID == nil else { return model.meetings.stop() }
             model.startNotetaker()
         }
-        .disabled(model.meetings.activity != .idle && model.meetings.activity.capturingID == nil)
         Divider()
         Picker("Model", selection: Binding(
             get: { model.selectedModel.id },
