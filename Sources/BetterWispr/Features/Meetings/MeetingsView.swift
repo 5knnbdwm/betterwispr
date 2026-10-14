@@ -229,6 +229,8 @@ private struct NotetakerSettings: View {
             NotesModelPicker(model: model)
                 .pickerStyle(.inline)
                 .disabled(!model.meetings.runs.isEmpty)
+            NotesModelPicker(model: model, forAsk: true)
+                .pickerStyle(.inline)
             Button("Configure and test notes models…") { model.selectedPage = .models }
 
         } label: {
