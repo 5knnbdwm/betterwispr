@@ -2,21 +2,33 @@ import AppKit
 import BetterWisprCore
 import Observation
 
-enum MeetingActivity: Equatable {
-    case idle, starting(UUID), recording(UUID), finishing(UUID), findingSpeakers(UUID), generating(UUID)
+enum MeetingPhase: Equatable {
+    case starting, recording, finishing, findingSpeakers, generating
 
-    var meetingID: UUID? {
-        switch self {
-        case .idle: nil
-        case .starting(let id), .recording(let id), .finishing(let id), .findingSpeakers(let id), .generating(let id): id
-        }
-    }
+    var isCapturing: Bool { self == .starting || self == .recording }
+}
 
-    var capturingID: UUID? {
-        switch self {
-        case .starting(let id), .recording(let id): id
-        default: nil
-        }
+/// One meeting's capture or processing, so a finished meeting keeps processing while the next one records.
+@MainActor @Observable
+final class MeetingRun {
+    let meetingID: UUID
+    var phase: MeetingPhase
+    var pendingChunks = 0
+    var generationStep: (Int, Int)?
+    @ObservationIgnored var language: String?
+    @ObservationIgnored var vocabulary: [VocabularyEntry]
+    @ObservationIgnored var provider: (any SpeechProvider)?
+    @ObservationIgnored var queue: [MeetingAudioChunk] = []
+    @ObservationIgnored var drain: Task<Void, Never>?
+    @ObservationIgnored var work: Task<Void, Never>?
+    @ObservationIgnored var voices: SpeakerRecording?
+    @ObservationIgnored var detection: Task<[MeetingSegment], Error>?
+
+    init(meetingID: UUID, phase: MeetingPhase, language: String? = nil, vocabulary: [VocabularyEntry] = []) {
+        self.meetingID = meetingID
+        self.phase = phase
+        self.language = language
+        self.vocabulary = vocabulary
     }
 }
 
@@ -25,11 +37,9 @@ final class MeetingModel {
     var meetings: [Meeting] = []
     /// The note open in the dashboard; nil shows the list of notes.
     var selectedID: UUID?
-    var activity: MeetingActivity = .idle
+    var runs: [UUID: MeetingRun] = [:]
     var levels: (me: Float, them: Float) = (0, 0)
     var elapsed: TimeInterval = 0
-    var pendingChunks = 0
-    var generationStep: (Int, Int)?
     var message: String?
     var systemAudioIssue: String?
     var microphone: AudioInputDevice?
@@ -40,17 +50,11 @@ final class MeetingModel {
 
     @ObservationIgnored private let store: MeetingStore
     @ObservationIgnored private let recorder = MeetingRecorder()
-    @ObservationIgnored private var provider: (any SpeechProvider)?
-    @ObservationIgnored private var session = UUID()
-    @ObservationIgnored private var language: String?
-    @ObservationIgnored private var vocabulary: [VocabularyEntry] = []
+    /// The run that receives the recorder's chunks, including the last ones a stopped meeting hands off.
+    @ObservationIgnored private var recorderOwner: MeetingRun?
+    @ObservationIgnored private var releasingRecorder: Task<Void, Never>?
     @ObservationIgnored private var startedAt = Date()
-    @ObservationIgnored private var queue: [MeetingAudioChunk] = []
-    @ObservationIgnored private var drain: Task<Void, Never>?
-    @ObservationIgnored private var work: Task<Void, Never>?
     @ObservationIgnored private var ticker: Task<Void, Never>?
-    @ObservationIgnored private var voices: SpeakerRecording?
-    @ObservationIgnored private var detection: Task<[MeetingSegment], Error>?
     @ObservationIgnored private var saves: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var heard: (me: Bool, them: Bool) = (false, false)
     @ObservationIgnored private var levelsShownAt = ContinuousClock.now
@@ -72,97 +76,91 @@ final class MeetingModel {
 
     func meeting(_ id: UUID) -> Meeting? { meetings.first { $0.id == id } }
 
-    func isActive(_ id: UUID) -> Bool { activity.meetingID == id }
+    func isActive(_ id: UUID) -> Bool { runs[id] != nil }
+
+    var capturing: MeetingRun? { runs.values.first { $0.phase.isCapturing } }
+
+    var capturingID: UUID? { capturing?.meetingID }
+
+    /// The meeting being recorded, otherwise the newest one still processing.
+    var activeMeetingID: UUID? { meetings.first { runs[$0.id] != nil }?.id }
 
     func start(model: SpeechModel, language: String?, vocabulary: [VocabularyEntry], silenceThreshold: Float, microphone: AudioInputDevice?) {
-        guard activity == .idle else { return }
-        let token = UUID()
+        guard capturing == nil else { return }
         let meeting = Meeting(modelName: model.name, language: language ?? "auto")
-        session = token
-        self.language = language
-        self.vocabulary = vocabulary
+        let run = MeetingRun(meetingID: meeting.id, phase: .starting, language: language, vocabulary: vocabulary)
         meetings.insert(meeting, at: 0)
         saveNow(meeting.id)
-        activity = .starting(meeting.id)
+        runs[meeting.id] = run
         message = nil
         systemAudioIssue = nil
         showsCallAudioHint = false
         heard = (false, false)
-        voices?.discard()
-        voices = SpeakerDetection.isReady ? try? SpeakerRecording() : nil
+        run.voices = SpeakerDetection.isReady ? try? SpeakerRecording() : nil
         elapsed = 0
-        pendingChunks = 0
-        work = Task { [weak self] in
+        let releasing = releasingRecorder
+        run.work = Task { [weak self] in
             do {
                 if model.engine == .apple { try AppleSpeechProvider.checkAvailability(language: language) }
                 try model.connection?.validateLanguage(language)
                 let provider = model.makeProvider()
-                guard let self, self.session == token else { return }
+                await releasing?.value
+                guard let self, self.owns(run) else { return }
+                self.recorderOwner = run
                 try await self.recorder.start(silenceThreshold: silenceThreshold, microphone: microphone)
-                guard self.session == token else { return }
+                guard self.owns(run) else { return }
                 self.systemAudioIssue = self.recorder.systemAudioIssue
                 self.startedAt = Date()
-                self.activity = .recording(meeting.id)
-                self.startTicker(token)
+                run.phase = .recording
+                self.startTicker(run)
                 try await provider.prepare(model: model, download: false)
                 try Task.checkCancellation()
-                guard self.session == token else { return }
-                self.provider = provider
-                self.drainQueue()
+                guard self.owns(run) else { return }
+                run.provider = provider
+                self.drainQueue(run)
             } catch {
-                guard let self, self.session == token else { return }
-                self.session = UUID()
-                self.recorder.cancel()
-                self.ticker?.cancel()
-                self.discardQueue()
-                self.discardVoices()
-                self.provider = nil
-                self.activity = .idle
+                guard let self, self.owns(run) else { return }
+                self.discard(run)
                 if !(error is CancellationError) { self.message = "Couldn’t start the meeting. \(error.localizedDescription)" }
-                self.discardIfEmpty(meeting.id)
             }
         }
     }
 
+    /// Hands the recorder's last chunks to this meeting and processes it in the background, so the next meeting can start right away.
     func stop() {
-        if case .starting(let id) = activity {
-            session = UUID()
-            work?.cancel()
-            recorder.cancel()
-            discardQueue()
-            discardVoices()
-            provider = nil
-            activity = .idle
-            discardIfEmpty(id)
-            return
-        }
-        guard case .recording(let id) = activity else { return }
-        let token = session
-        let loading = work
+        guard let run = capturing else { return }
+        guard run.phase == .recording else { return discard(run) }
+        let id = run.meetingID
+        let loading = run.work
         ticker?.cancel()
         let duration = Date().timeIntervalSince(startedAt)
         elapsed = duration
-        activity = .finishing(id)
-        work = Task { [weak self] in
-            guard let self, self.session == token else { return }
-            await self.recorder.stop()
+        edit(id, save: false) { $0.duration = duration }
+        saveNow(id)
+        run.phase = .finishing
+        let releasing = Task { [weak self] in
+            await self?.recorder.stop()
+            if self?.recorderOwner === run { self?.recorderOwner = nil }
+        }
+        releasingRecorder = releasing
+        run.work = Task { [weak self] in
+            await releasing.value
             await loading?.value
-            await self.drain?.value
-            guard self.session == token else { return }
-            self.edit(id, save: false) { $0.duration = duration }
+            await run.drain?.value
+            guard let self, self.owns(run) else { return }
             self.saveNow(id)
-            if let voices = self.voices {
-                self.voices = nil
-                await self.findSpeakers(in: id, from: voices, token: token)
-                guard self.session == token else { return }
+            if let voices = run.voices {
+                run.voices = nil
+                await self.findSpeakers(for: run, from: voices)
+                guard self.owns(run) else { return }
             }
-            self.provider = nil
+            run.provider = nil
             if self.notesAvailability == .available, self.meeting(id)?.hasContent == true {
-                await self.writeNotes(for: id, token: token)
-            } else {
-                self.activity = .idle
+                await self.writeNotes(for: run)
             }
-            if self.session == token, self.selectedID == nil { self.selectedID = id }
+            guard self.owns(run) else { return }
+            self.runs[id] = nil
+            if self.selectedID == nil, self.capturing == nil { self.selectedID = id }
         }
     }
 
@@ -172,23 +170,24 @@ final class MeetingModel {
         ollamaModels = (try? await Ollama.installedModels()) ?? []
     }
 
-    func skipSpeakers() { detection?.cancel() }
+    func skipSpeakers(_ id: UUID) { runs[id]?.detection?.cancel() }
 
     func generateNotes(_ id: UUID) {
-        guard activity == .idle else { return }
-        let token = UUID()
-        session = token
-        activity = .generating(id)
+        guard runs[id] == nil else { return }
+        let run = MeetingRun(meetingID: id, phase: .generating)
+        runs[id] = run
         message = nil
-        work = Task { [weak self] in await self?.writeNotes(for: id, token: token) }
+        run.work = Task { [weak self] in
+            await self?.writeNotes(for: run)
+            if let self, self.owns(run) { self.runs[id] = nil }
+        }
     }
 
-    func cancelNotes() {
-        guard case .generating(let id) = activity else { return }
-        session = UUID()
-        work?.cancel()
-        generationStep = nil
-        activity = .idle
+    func cancelNotes(_ id: UUID) {
+        guard let run = runs[id], run.phase == .generating else { return }
+        runs[id] = nil
+        run.work?.cancel()
+        run.generationStep = nil
         saveNow(id)
         if selectedID == nil { selectedID = id }
     }
@@ -232,75 +231,89 @@ final class MeetingModel {
     }
 
     func endForQuit() {
-        let id = activity.meetingID
-        if case .recording = activity { elapsed = Date().timeIntervalSince(startedAt) }
-        session = UUID()
+        let id = capturingID
+        if capturing?.phase == .recording { elapsed = Date().timeIntervalSince(startedAt) }
         recorder.cancel()
+        recorderOwner = nil
         ticker?.cancel()
-        work?.cancel()
-        drain?.cancel()
-        drain = nil
-        discardVoices()
-        provider?.cancel()
-        provider = nil
-        queue = []
+        let ended = Array(runs.values)
+        runs = [:]
+        for run in ended {
+            run.work?.cancel()
+            run.drain?.cancel()
+            run.detection?.cancel()
+            run.voices?.discard()
+            run.provider?.cancel()
+        }
         Self.removeLeftoverAudio()
-        pendingChunks = 0
         if let id, meeting(id)?.duration == 0 { edit(id, save: false) { $0.duration = elapsed } }
         for pending in Array(saves.keys) { saveNow(pending) }
-        if let id { saveNow(id) }
-        activity = .idle
+        for run in ended { saveNow(run.meetingID) }
     }
 
-    private func findSpeakers(in id: UUID, from voices: SpeakerRecording, token: UUID) async {
+    private func owns(_ run: MeetingRun) -> Bool { runs[run.meetingID] === run }
+
+    /// Ends a meeting that never finished starting, stopping the recorder only if this meeting still holds it.
+    private func discard(_ run: MeetingRun) {
+        guard owns(run) else { return }
+        runs[run.meetingID] = nil
+        run.work?.cancel()
+        if recorderOwner === run {
+            recorder.cancel()
+            recorderOwner = nil
+            ticker?.cancel()
+        }
+        for chunk in run.queue { try? FileManager.default.removeItem(at: chunk.url) }
+        run.queue = []
+        run.pendingChunks = 0
+        run.detection?.cancel()
+        run.voices?.discard()
+        run.voices = nil
+        run.provider = nil
+        discardIfEmpty(run.meetingID)
+    }
+
+    private func findSpeakers(for run: MeetingRun, from voices: SpeakerRecording) async {
         defer { voices.discard() }
-        activity = .findingSpeakers(id)
+        let id = run.meetingID
+        run.phase = .findingSpeakers
         let segments = meeting(id)?.segments ?? []
-        let provider = provider
+        let provider = run.provider
         let detection = Task {
             try await SpeakerDetection.label(segments, voices: voices) { audio, start, duration in
                 guard let provider else { return nil }
-                return try await self.segment(of: audio, speaker: .them, start: start, duration: duration, with: provider)
+                return try await self.segment(of: audio, speaker: .them, start: start, duration: duration, with: provider, for: run)
             }
         }
-        self.detection = detection
+        run.detection = detection
         do {
             let labelled = try await detection.value
-            guard session == token else { return }
+            guard owns(run) else { return }
             edit(id, save: false) { $0.segments = labelled }
             saveNow(id)
         } catch {
-            guard session == token else { return }
+            guard owns(run) else { return }
             if !(error is CancellationError), !detection.isCancelled {
                 message = "Couldn’t tell the speakers on the call apart. \(error.localizedDescription)"
             }
         }
-        self.detection = nil
+        run.detection = nil
     }
 
-    private func discardVoices() {
-        detection?.cancel()
-        voices?.discard()
-        voices = nil
-    }
-
-    private func writeNotes(for id: UUID, token: UUID) async {
-        guard session == token, !Task.isCancelled else { return }
-        guard let meeting = meeting(id) else {
-            activity = .idle
-            return
-        }
-        activity = .generating(id)
-        generationStep = nil
+    private func writeNotes(for run: MeetingRun) async {
+        let id = run.meetingID
+        guard owns(run), !Task.isCancelled, let meeting = meeting(id) else { return }
+        run.phase = .generating
+        run.generationStep = nil
         let sourceFingerprint = meeting.summarySourceFingerprint
         let modelName = notesSettings.notesModelName
         do {
             let notes = try await MeetingNotesGenerator.generate(segments: meeting.segments, names: meeting.participantNames, userNotes: meeting.notes, settings: notesSettings) { [weak self] step, total in
-                guard let self, self.session == token else { return }
-                self.generationStep = (step, total)
+                guard let self, self.owns(run) else { return }
+                run.generationStep = (step, total)
             }
             try Task.checkCancellation()
-            guard session == token else { return }
+            guard owns(run) else { return }
             edit(id, save: false) { meeting in
                 meeting.summary = notes.summary
                 if meeting.summary?.modelName == nil { meeting.summary?.modelName = modelName }
@@ -309,63 +322,56 @@ final class MeetingModel {
             }
             saveNow(id)
         } catch {
-            guard session == token else { return }
+            guard owns(run) else { return }
             if !(error is CancellationError) { message = "Couldn’t write notes. \(error.localizedDescription)" }
         }
-        generationStep = nil
-        activity = .idle
+        run.generationStep = nil
     }
 
     /// Queues speech while the model may still be loading, so the first words of a meeting are kept.
     private func enqueue(_ chunk: MeetingAudioChunk) {
-        guard chunk.hasSpeech, activity.meetingID != nil else {
+        guard chunk.hasSpeech, let run = recorderOwner, owns(run) else {
             try? FileManager.default.removeItem(at: chunk.url)
             return
         }
-        queue.append(chunk)
-        pendingChunks += 1
-        drainQueue()
+        run.queue.append(chunk)
+        run.pendingChunks += 1
+        drainQueue(run)
     }
 
-    private func drainQueue() {
-        guard drain == nil, provider != nil, !queue.isEmpty, let id = activity.meetingID else { return }
-        let token = session
-        drain = Task { [weak self] in await self?.transcribeQueue(into: id, token: token) }
+    private func drainQueue(_ run: MeetingRun) {
+        guard run.drain == nil, run.provider != nil, !run.queue.isEmpty, owns(run) else { return }
+        run.drain = Task { [weak self] in await self?.transcribeQueue(run) }
     }
 
-    private func discardQueue() {
-        for chunk in queue { try? FileManager.default.removeItem(at: chunk.url) }
-        queue = []
-        pendingChunks = 0
-    }
-
-    private func transcribeQueue(into id: UUID, token: UUID) async {
-        while session == token, let provider, !queue.isEmpty {
-            let chunk = queue.removeFirst()
+    private func transcribeQueue(_ run: MeetingRun) async {
+        let id = run.meetingID
+        while owns(run), let provider = run.provider, !run.queue.isEmpty {
+            let chunk = run.queue.removeFirst()
             defer {
                 try? FileManager.default.removeItem(at: chunk.url)
-                if session == token { pendingChunks = max(0, pendingChunks - 1) }
+                run.pendingChunks = max(0, run.pendingChunks - 1)
             }
             do {
-                let segment = try await segment(of: chunk.url, speaker: chunk.speaker, start: chunk.start, duration: chunk.duration, with: provider)
-                guard session == token else { return }
+                let segment = try await segment(of: chunk.url, speaker: chunk.speaker, start: chunk.start, duration: chunk.duration, with: provider, for: run)
+                guard owns(run) else { return }
                 guard let segment else { continue }
                 edit(id, save: false) { $0.insert(segment) }
                 saveNow(id)
-                if chunk.speaker == .them, let voices { try? await voices.append(chunk.url, for: segment.id) }
+                if chunk.speaker == .them, let voices = run.voices { try? await voices.append(chunk.url, for: segment.id) }
             } catch {
-                guard session == token else { return }
+                guard owns(run) else { return }
                 if !(error is CancellationError) {
                     message = "A few seconds from \(chunk.speaker.label) couldn’t be transcribed. \(error.localizedDescription)"
                 }
             }
         }
-        if session == token { drain = nil }
+        run.drain = nil
     }
 
-    private func segment(of audio: URL, speaker: Speaker, start: TimeInterval, duration: TimeInterval, with provider: any SpeechProvider) async throws -> MeetingSegment? {
-        let raw = try await provider.transcribe(audioURL: audio, language: language, vocabulary: VocabularyProcessor.hints(vocabulary))
-        let text = VocabularyProcessor.apply(vocabulary, to: TranscriptCleaner.clean(raw, language: language))
+    private func segment(of audio: URL, speaker: Speaker, start: TimeInterval, duration: TimeInterval, with provider: any SpeechProvider, for run: MeetingRun) async throws -> MeetingSegment? {
+        let raw = try await provider.transcribe(audioURL: audio, language: run.language, vocabulary: VocabularyProcessor.hints(run.vocabulary))
+        let text = VocabularyProcessor.apply(run.vocabulary, to: TranscriptCleaner.clean(raw, language: run.language))
         return text.isEmpty ? nil : MeetingSegment(speaker: speaker, start: start, duration: duration, text: text, rawText: raw)
     }
 
@@ -381,11 +387,12 @@ final class MeetingModel {
         }
     }
 
-    private func startTicker(_ token: UUID) {
+    private func startTicker(_ run: MeetingRun) {
+        ticker?.cancel()
         ticker = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(500))
-                guard let self, self.session == token, case .recording = self.activity else { return }
+                guard let self, self.owns(run), run.phase == .recording else { return }
                 self.elapsed = Date().timeIntervalSince(self.startedAt)
                 self.showsCallAudioHint = self.elapsed >= 20 && self.heard.me && !self.heard.them && self.systemAudioIssue == nil
             }

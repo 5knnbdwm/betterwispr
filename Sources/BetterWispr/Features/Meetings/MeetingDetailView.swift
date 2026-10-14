@@ -61,8 +61,10 @@ struct MeetingDetailView: View {
     }
 
     private var meetings: MeetingModel { model.meetings }
-    private var isRecording: Bool { meetings.activity.capturingID == id }
-    private var isActive: Bool { meetings.isActive(id) }
+    private var run: MeetingRun? { meetings.runs[id] }
+    private var isRecording: Bool { run?.phase.isCapturing == true }
+    private var isActive: Bool { run != nil }
+    private var pendingChunks: Int { run?.pendingChunks ?? 0 }
 
     private func header(_ meeting: Meeting) -> some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -102,7 +104,7 @@ struct MeetingDetailView: View {
 
     private func footer(_ meeting: Meeting) -> some View {
         VStack(spacing: 8) {
-            if isActive, let issue = meetings.systemAudioIssue ?? (meetings.showsCallAudioHint ? Self.callAudioHint : nil) {
+            if isRecording, let issue = meetings.systemAudioIssue ?? (meetings.showsCallAudioHint ? Self.callAudioHint : nil) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Image(systemName: "speaker.slash")
                     Text(issue).fixedSize(horizontal: false, vertical: true)
@@ -113,14 +115,14 @@ struct MeetingDetailView: View {
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 4)
             }
-            switch meetings.activity {
-            case .starting(let active) where active == id:
+            switch run?.phase {
+            case .starting:
                 controlBar {
                     progress("Preparing \(meeting.modelName)…")
                     Spacer(minLength: 8)
                     Button("Cancel", action: meetings.stop)
                 }
-            case .recording(let active) where active == id:
+            case .recording:
                 controlBar {
                     MeetingClock(meetings: meetings, reduceMotion: reduceMotion)
                     VStack(alignment: .leading, spacing: 4) {
@@ -134,28 +136,28 @@ struct MeetingDetailView: View {
                 Text("Always get consent when transcribing others.")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
-            case .finishing(let active) where active == id:
+            case .finishing:
                 controlBar {
                     progress("Transcribing the last few seconds…")
                     Spacer(minLength: 0)
                 }
-            case .findingSpeakers(let active) where active == id:
+            case .findingSpeakers:
                 controlBar {
                     progress("Telling the speakers on the call apart…")
                     Spacer(minLength: 8)
-                    Button("Skip", action: meetings.skipSpeakers)
+                    Button("Skip") { meetings.skipSpeakers(id) }
                 }
-            case .generating(let active) where active == id:
+            case .generating:
                 controlBar {
-                    if let (step, total) = meetings.generationStep, total > 1 {
+                    if let (step, total) = run?.generationStep, total > 1 {
                         progress("Writing summary… part \(step) of \(total)")
                     } else {
                         progress("Writing summary with \(meetings.notesSettings.notesModelName)…")
                     }
                     Spacer(minLength: 8)
-                    Button("Cancel", action: meetings.cancelNotes)
+                    Button("Cancel") { meetings.cancelNotes(id) }
                 }
-            default:
+            case nil:
                 HStack {
                     Label("Notes stored on this Mac", systemImage: "internaldrive")
                     Spacer()
@@ -170,7 +172,7 @@ struct MeetingDetailView: View {
         .padding(.horizontal, 16)
         .padding(.top, 4)
         .padding(.bottom, 14)
-        .animation(reduceMotion ? nil : .ui, value: meetings.activity)
+        .animation(reduceMotion ? nil : .ui, value: run?.phase)
     }
 
     private func controlBar(@ViewBuilder _ content: () -> some View) -> some View {
@@ -229,7 +231,7 @@ struct MeetingDetailView: View {
                 HStack(spacing: 6) {
                     Text(meeting.summaryNeedsUpdate ? "Include your latest thoughts in the summary." : "Your summary includes these thoughts.")
                     Button("Update summary") { meetings.generateNotes(id) }
-                        .disabled(meetings.activity != .idle || meetings.notesAvailability != .available)
+                        .disabled(isActive || meetings.notesAvailability != .available)
                 }
                 .font(.callout)
                 .foregroundStyle(.tertiary)
@@ -267,7 +269,7 @@ struct MeetingDetailView: View {
                     }
                     Spacer(minLength: 0)
                     Button("Update summary") { meetings.generateNotes(id) }
-                        .disabled(meetings.activity != .idle || meetings.notesAvailability != .available)
+                        .disabled(isActive || meetings.notesAvailability != .available)
                         .help("Combine the full transcript and your current thoughts using \(meetings.notesSettings.notesModelName)")
                 }
                 if !summary.overview.isEmpty {
@@ -346,7 +348,7 @@ struct MeetingDetailView: View {
                 Label("Generate summary", systemImage: "sparkles")
             }
             .buttonStyle(.borderedProminent)
-            .disabled(unavailable != nil || meetings.activity != .idle)
+            .disabled(unavailable != nil || isActive)
             if let unavailable { Text(unavailable).font(.callout).foregroundStyle(.secondary) }
         }
         .padding(20)
@@ -408,7 +410,7 @@ struct MeetingDetailView: View {
             }
             if isRecording { listening(meeting) }
         }
-        if isActive, !isRecording, meetings.pendingChunks > 0 { progress("Transcribing…") }
+        if !isRecording, pendingChunks > 0 { progress("Transcribing…") }
     }
 
     @ViewBuilder private func listening(_ meeting: Meeting) -> some View {
@@ -431,7 +433,7 @@ struct MeetingDetailView: View {
         } else {
             HStack(spacing: 8) {
                 indicator
-                Text(meetings.pendingChunks > 0 ? "Transcribing…" : "Listening…")
+                Text(pendingChunks > 0 ? "Transcribing…" : "Listening…")
                     .foregroundStyle(.secondary)
             }
             .font(.callout)

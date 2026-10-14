@@ -67,7 +67,7 @@ struct MeetingsView: View {
                 Button { meetings.generateNotes(meeting.id) } label: {
                     Label(meeting.summary == nil ? "Generate summary" : "Regenerate summary", systemImage: "sparkles")
                 }
-                .disabled(!meeting.hasContent || meetings.activity != .idle || meetings.notesAvailability != .available)
+                .disabled(!meeting.hasContent || meetings.isActive(meeting.id) || meetings.notesAvailability != .available)
                 Button { meetings.copy(meeting.id, transcriptOnly: true) } label: {
                     Label("Copy transcript", systemImage: "text.quote")
                 }
@@ -162,7 +162,7 @@ private struct NotesHome: View {
     }
 
     private var header: some View {
-        let capturing = meetings.activity.capturingID != nil
+        let capturing = meetings.capturingID != nil
         return HStack(spacing: 14) {
             Text("Notetaker").font(.system(size: 26, weight: .semibold))
             Spacer(minLength: 8)
@@ -182,7 +182,7 @@ private struct NotesHome: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .disabled(!capturing && (meetings.activity != .idle || model.isBusy))
+            .disabled(!capturing && model.isBusy)
         }
     }
 }
@@ -205,7 +205,7 @@ private struct NotetakerSettings: View {
                 }
             }
             .pickerStyle(.inline)
-            .disabled(model.isBusy || model.meetings.activity != .idle)
+            .disabled(model.isBusy || !model.meetings.runs.isEmpty)
             Text(model.selectedModel.engine == .api ? "Audio sent to your selected endpoint" : "On-device transcription")
             Button("Manage models…") { model.selectedPage = .models }
             Divider()
@@ -214,7 +214,7 @@ private struct NotetakerSettings: View {
             Divider()
             NotesModelPicker(model: model)
                 .pickerStyle(.inline)
-                .disabled(model.meetings.activity != .idle)
+                .disabled(!model.meetings.runs.isEmpty)
             Button("Configure and test notes models…") { model.selectedPage = .models }
 
         } label: {
@@ -250,7 +250,7 @@ private struct NoteRow: View {
                     Text(meeting.createdAt.formatted(date: .omitted, time: .shortened))
                     if let status {
                         Text("•")
-                        Text(status).foregroundStyle(meetings.activity.capturingID == meeting.id ? .green : .secondary)
+                        Text(status).foregroundStyle(meetings.capturingID == meeting.id ? .green : .secondary)
                     } else if canSummarize {
                         Text("•")
                         Button("Generate summary") { meetings.generateNotes(meeting.id) }
@@ -282,18 +282,18 @@ private struct NoteRow: View {
     }
 
     private var status: String? {
-        switch meetings.activity {
-        case .recording(meeting.id): "Recording"
-        case .starting(meeting.id): "Starting"
-        case .finishing(meeting.id): "Transcribing"
-        case .findingSpeakers(meeting.id): "Finding speakers"
-        case .generating(meeting.id): "Writing summary"
-        default: nil
+        switch meetings.runs[meeting.id]?.phase {
+        case .recording: "Recording"
+        case .starting: "Starting"
+        case .finishing: "Transcribing"
+        case .findingSpeakers: "Finding speakers"
+        case .generating: "Writing summary"
+        case nil: nil
         }
     }
 
     private var canSummarize: Bool {
-        meeting.summary == nil && meeting.hasContent && meetings.activity == .idle && meetings.notesAvailability == .available
+        meeting.summary == nil && meeting.hasContent && !meetings.isActive(meeting.id) && meetings.notesAvailability == .available
     }
 }
 
@@ -305,7 +305,7 @@ private struct CurrentNote: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if let meeting = (meetings.activity.meetingID ?? meetings.meetings.first?.id).flatMap(meetings.meeting) {
+            if let meeting = (meetings.activeMeetingID ?? meetings.meetings.first?.id).flatMap(meetings.meeting) {
                 Button { meetings.selectedID = meeting.id } label: {
                     Text(meeting.displayTitle)
                         .font(.system(size: 20, weight: .semibold))
@@ -315,7 +315,7 @@ private struct CurrentNote: View {
                 .help("Open note")
                 Text("\(meeting.createdAt.noteDay) • \(meeting.createdAt.formatted(date: .omitted, time: .shortened))")
                     .foregroundStyle(.secondary)
-                if meetings.activity.capturingID == meeting.id {
+                if meetings.capturingID == meeting.id {
                     HStack(spacing: 8) {
                         Circle().fill(.green).frame(width: 8, height: 8).accessibilityHidden(true)
                         Text("Recording · \(durationLabel(meetings.elapsed))").monospacedDigit()
@@ -359,7 +359,7 @@ private extension Meeting {
 
 extension AppModel {
     func startMeeting() {
-        guard !isBusy, meetings.activity == .idle else { return }
+        guard !isBusy, meetings.capturingID == nil else { return }
         let speechModel = selectedModel
         guard isModelInstalled(speechModel) else {
             selectedPage = .models
@@ -374,6 +374,6 @@ extension AppModel {
     /// Starts a meeting and docks its card beside the call.
     func startNotetaker() {
         startMeeting()
-        if let id = meetings.activity.meetingID { onShowNotetaker?(id) } else { onShowDashboard?() }
+        if let id = meetings.capturingID { onShowNotetaker?(id) } else { onShowDashboard?() }
     }
 }

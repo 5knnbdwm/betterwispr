@@ -180,10 +180,15 @@ import Testing
 
     detector.update([meet], recording: [meet.appID])
     #expect(detector.meeting == meet)
-    model.meetings.activity = .recording(UUID())
+    let earlier = UUID()
+    model.meetings.runs[earlier] = MeetingRun(meetingID: earlier, phase: .recording)
     detector.update([meet], recording: [meet.appID])
     #expect(detector.meeting == nil)
-    model.meetings.activity = .idle
+    model.meetings.runs = [:]
     detector.update([meet], recording: [meet.appID])
     #expect(detector.meeting == nil)
+
+    model.meetings.runs[earlier] = MeetingRun(meetingID: earlier, phase: .finishing)
+    detector.update([zoom], recording: [zoom.appID])
+    #expect(detector.meeting == zoom)
 }
