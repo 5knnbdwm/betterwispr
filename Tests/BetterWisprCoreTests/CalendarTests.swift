@@ -7,7 +7,18 @@ private let now = Date(timeIntervalSinceReferenceDate: 800_000_000)
 
 private func event(_ id: String, from start: TimeInterval, to end: TimeInterval, allDay: Bool = false, video: Bool = false) -> CalendarEvent {
     CalendarEvent(id: id, title: id, start: now.addingTimeInterval(start * 60), end: now.addingTimeInterval(end * 60), isAllDay: allDay,
-                  calendarID: "work", videoURL: video ? URL(string: "https://zoom.us/j/1") : nil)
+                  videoURL: video ? URL(string: "https://zoom.us/j/1") : nil)
+}
+
+@Test func inviteesShowTheirNameElseTheirEmailAndNothingForOtherAddresses() throws {
+    let invitees = try [
+        (" Ada Lovelace ", "mailto:ada@example.com"),
+        (nil, "MAILTO:grace%2Bcal@example.com"),
+        ("", "urn:uuid:4B2C1D7E-0000-4000-8000-000000000001"),
+        ("  ", "mailto:"),
+    ].map { name, address in CalendarEvent.invitee(name: name, url: try #require(URL(string: address))) }
+
+    #expect(invitees == ["Ada Lovelace", "grace+cal@example.com", nil, nil])
 }
 
 @Test func currentEventPrefersAVideoCallThenTheLatestStart() {

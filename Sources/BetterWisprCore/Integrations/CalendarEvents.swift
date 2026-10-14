@@ -10,18 +10,15 @@ public struct CalendarEvent: Equatable, Sendable {
     public var isAllDay: Bool
     /// Invitees other than the user, by name, or by email when the invite gives no name.
     public var attendees: [String]
-    public var calendarID: String
     public var videoURL: URL?
 
-    public init(id: String, title: String, start: Date, end: Date, isAllDay: Bool = false, attendees: [String] = [],
-                calendarID: String, videoURL: URL? = nil) {
+    public init(id: String, title: String, start: Date, end: Date, isAllDay: Bool = false, attendees: [String] = [], videoURL: URL? = nil) {
         self.id = id
         self.title = title
         self.start = start
         self.end = end
         self.isAllDay = isAllDay
         self.attendees = attendees
-        self.calendarID = calendarID
         self.videoURL = videoURL
     }
 
@@ -33,6 +30,14 @@ public struct CalendarEvent: Equatable, Sendable {
         events
             .filter { !$0.isAllDay && $0.start.addingTimeInterval(-earlyStart) <= now && now < $0.end }
             .max { ($0.videoURL == nil ? 0 : 1, $0.start) < ($1.videoURL == nil ? 0 : 1, $1.start) }
+    }
+
+    /// How a meeting lists an invitee: the name on the invite, else the email address, else nothing.
+    static func invitee(name: String?, url: URL) -> String? {
+        if let name = name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty { return name }
+        guard url.scheme?.lowercased() == "mailto", let email = URLComponents(url: url, resolvingAgainstBaseURL: false)?.path,
+              !email.isEmpty else { return nil }
+        return email
     }
 
     /// The first Zoom, Google Meet, Microsoft Teams or Webex link in an event's URL, location or notes.
@@ -79,9 +84,9 @@ public final class CalendarEvents {
     public func accounts() -> [CalendarAccount] {
         guard Self.isAuthorized else { return [] }
         let calendars = store.calendars(for: .event)
-        return Dictionary(grouping: calendars) { $0.source.sourceIdentifier }
+        return Dictionary(grouping: calendars) { $0.source?.sourceIdentifier ?? "" }
             .map { id, calendars in
-                CalendarAccount(id: id, title: calendars[0].source.title,
+                CalendarAccount(id: id, title: calendars[0].source?.title ?? "",
                                 calendars: calendars.map { CalendarInfo(id: $0.calendarIdentifier, title: $0.title) }
                                     .sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending })
             }
@@ -107,12 +112,7 @@ extension CalendarEvent {
             isAllDay: event.isAllDay,
             attendees: (event.attendees ?? [])
                 .filter { !$0.isCurrentUser && $0.participantType != .room && $0.participantType != .resource }
-                .compactMap { participant in
-                    let name = participant.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                    let email = participant.url.absoluteString.replacingOccurrences(of: "mailto:", with: "", options: [.anchored, .caseInsensitive])
-                    return name.isEmpty ? (email.isEmpty ? nil : email) : name
-                },
-            calendarID: event.calendar?.calendarIdentifier ?? "",
+                .compactMap { Self.invitee(name: $0.name, url: $0.url) },
             videoURL: Self.videoURL(in: [event.url?.absoluteString, event.location, event.notes].compactMap { $0 })
         )
     }
