@@ -185,6 +185,22 @@ func notesAPIFailuresNeverProduceASummary(path: String) async throws {
     await #expect(throws: CancellationError.self) { try await task.value }
 }
 
+@Test func notesCLILookupSearchesNixFoldersAndTheLoginShellPATH() async {
+    let directories = NotesCLI.searchDirectories(home: "/Users/me", user: "me", processPATH: "/usr/bin:/bin:relative:",
+                                                 loginShellPATH: "prompt noise\n/Users/me/.volta/bin:/Users/me/.npm-global/bin")
+    #expect(directories == ["/Users/me/.local/bin", "/opt/homebrew/bin", "/usr/local/bin", "/Users/me/.nix-profile/bin",
+                            "/etc/profiles/per-user/me/bin", "/run/current-system/sw/bin", "/nix/var/nix/profiles/default/bin",
+                            "/usr/bin", "/bin", "/Users/me/.volta/bin", "/Users/me/.npm-global/bin"])
+    let nixOnly = NotesCLI.locate("claude", in: directories) { $0 == "/run/current-system/sw/bin/claude" }
+    #expect(nixOnly?.path == "/run/current-system/sw/bin/claude")
+    let shellOnly = NotesCLI.locate("codex", in: directories) { $0 == "/Users/me/.npm-global/bin/codex" }
+    #expect(shellOnly?.path == "/Users/me/.npm-global/bin/codex")
+    #expect(NotesCLI.locate("claude", in: directories) { _ in false } == nil)
+    #expect(NotesCLI.searchDirectories(home: "/Users/me", user: "me", processPATH: nil, loginShellPATH: nil).count == 7)
+    let shellPATH = await NotesCLI.claudeCode.loginShellPATH(shell: "/bin/sh")
+    #expect(shellPATH?.split(whereSeparator: \.isNewline).last?.contains("/usr/bin") == true)
+}
+
 @Test func claudeCatalogResolvesAliasesAndKeepsExactModelChoices() throws {
     let output = #"{"type":"control_response","response":{"request_id":"models","response":{"models":[{"value":"default","resolvedModel":"claude-sonnet-example","displayName":"Default"},{"value":"sonnet","resolvedModel":"claude-sonnet-example","displayName":"Sonnet"},{"value":"claude-sonnet-example","displayName":"Sonnet duplicate"},{"value":"claude-haiku-example","displayName":"Haiku"}]}}}"#
     let catalog = try NotesCLICatalog.claudeCatalog("unrelated log\n" + output)

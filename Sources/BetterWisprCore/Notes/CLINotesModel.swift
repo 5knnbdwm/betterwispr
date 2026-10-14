@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import os
 
 public enum NotesCLI: String, Codable, CaseIterable, Sendable {
     case claudeCode, codex
@@ -8,13 +9,51 @@ public enum NotesCLI: String, Codable, CaseIterable, Sendable {
     public var loginCommand: String { self == .claudeCode ? "claude auth login" : "codex login" }
     private var command: String { self == .claudeCode ? "claude" : "codex" }
 
-    public var executable: URL? {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let paths = ["\(home)/.local/bin", "/opt/homebrew/bin", "/usr/local/bin"]
-            + (ProcessInfo.processInfo.environment["PATH"] ?? "").split(separator: ":").map(String.init)
-        return paths.filter { $0.hasPrefix("/") }.map { URL(fileURLWithPath: $0).appendingPathComponent(command) }
-            .first { FileManager.default.isExecutableFile(atPath: $0.path) }
+    /// Synchronous for view bodies; sees the login shell's PATH only after `locateExecutable()` has resolved it once.
+    public var executable: URL? { Self.locate(command, in: Self.searchDirectories) }
+
+    /// Resolves the login shell's PATH once per launch when the well-known folders miss, then looks the CLI up.
+    @MainActor public func locateExecutable() async -> URL? {
+        if let executable { return executable }
+        if Self.loginShellResolution == nil {
+            Self.loginShellResolution = Task { @MainActor in
+                let path = await loginShellPATH(shell: Self.loginShell)
+                Self.loginShellPATHCache.withLock { $0 = path }
+            }
+        }
+        await Self.loginShellResolution?.value
+        return executable
     }
+
+    static func locate(_ command: String, in directories: [String],
+                       isExecutable: (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }) -> URL? {
+        directories.map { URL(fileURLWithPath: $0).appendingPathComponent(command) }.first { isExecutable($0.path) }
+    }
+
+    static var searchDirectories: [String] {
+        searchDirectories(home: FileManager.default.homeDirectoryForCurrentUser.path, user: NSUserName(),
+                          processPATH: ProcessInfo.processInfo.environment["PATH"], loginShellPATH: loginShellPATHCache.withLock { $0 })
+    }
+
+    static func searchDirectories(home: String, user: String, processPATH: String?, loginShellPATH: String?) -> [String] {
+        let wellKnown = ["\(home)/.local/bin", "/opt/homebrew/bin", "/usr/local/bin", "\(home)/.nix-profile/bin",
+                         "/etc/profiles/per-user/\(user)/bin", "/run/current-system/sw/bin", "/nix/var/nix/profiles/default/bin"]
+        let shell = loginShellPATH?.split(whereSeparator: \.isNewline).last.map(String.init)
+        return wellKnown + [processPATH, shell].compactMap { $0 }.flatMap { $0.split(separator: ":").map(String.init) }
+            .filter { $0.hasPrefix("/") }
+    }
+
+    @MainActor func loginShellPATH(shell: String) async -> String? {
+        try? await CLINotesModel.run(URL(fileURLWithPath: shell), arguments: ["-l", "-i", "-c", "/usr/bin/printenv PATH"],
+                                     input: "", cli: self, timeout: .seconds(5))
+    }
+
+    private static var loginShell: String {
+        getpwuid(getuid()).map { String(cString: $0.pointee.pw_shell) } ?? "/bin/zsh"
+    }
+
+    private static let loginShellPATHCache = OSAllocatedUnfairLock<String?>(initialState: nil)
+    @MainActor private static var loginShellResolution: Task<Void, Never>?
 }
 
 struct CLINotesModel: NotesLanguageModel {
@@ -28,7 +67,7 @@ struct CLINotesModel: NotesLanguageModel {
     }
 
     private func response(to prompt: String) async throws -> (text: String, modelName: String) {
-        guard let executable = cli.executable else {
+        guard let executable = await cli.locateExecutable() else {
             throw MeetingNotesError.unavailable("Install \(cli.name), then sign in with \(cli.loginCommand) in Terminal.")
         }
         // Use the CLI's login, never extract or store its OAuth credentials in BetterWispr.
@@ -119,7 +158,7 @@ struct CLINotesModel: NotesLanguageModel {
         // Prevent inherited API keys or provider URLs from changing the selected subscription route.
         let allowed = ["HOME", "USER", "LOGNAME", "TMPDIR", "LANG", "LC_ALL", "CODEX_HOME", "CLAUDE_CONFIG_DIR"]
         var environment = ProcessInfo.processInfo.environment.filter { allowed.contains($0.key) }
-        environment["PATH"] = "\(executable.deletingLastPathComponent().path):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+        environment["PATH"] = ([executable.deletingLastPathComponent().path] + NotesCLI.searchDirectories + ["/usr/bin", "/bin"]).joined(separator: ":")
         process.environment = environment
         if let controlInput { process.standardInput = controlInput } else { process.standardInput = stdin }
         process.standardOutput = stdout
