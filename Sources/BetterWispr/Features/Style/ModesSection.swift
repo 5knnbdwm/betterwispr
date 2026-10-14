@@ -119,23 +119,21 @@ private struct WritingModeEditor: View {
                         Text("Same as app").tag(StyleTone?.none)
                         ForEach(StyleTone.allCases, id: \.self) { Text($0.title).tag(Optional($0)) }
                     }
-                    if (mode.cleanup ?? model.settings.cleanup) == .medium {
-                        if !mode.apps.isEmpty || !mode.websites.isEmpty {
-                            Picker("Screen context", selection: $mode.useScreenContext) {
-                                Text("Same as default (\(model.settings.useScreenContext ? "On" : "Off"))").tag(Bool?.none)
-                                Text("On").tag(Optional(true))
-                                Text("Off").tag(Optional(false))
-                            }
+                    if !mode.apps.isEmpty || !mode.websites.isEmpty {
+                        Picker("Screen context", selection: $mode.useScreenContext) {
+                            Text("Same as default (\(model.settings.useScreenContext ? "On" : "Off"))").tag(Bool?.none)
+                            Text("On").tag(Optional(true))
+                            Text("Off").tag(Optional(false))
                         }
+                    }
+                    if (mode.cleanup ?? model.settings.cleanup) == .medium {
                         TextField("Instructions", text: instructions, prompt: Text("Use British spelling."), axis: .vertical)
                             .lineLimit(3...8)
                     }
                 } header: {
                     Text("Writing")
                 } footer: {
-                    Text((mode.cleanup ?? model.settings.cleanup) == .medium
-                         ? "Instructions go to your notes model with each Medium dictation in this mode. Screen context is read when you start dictating, so it follows this mode’s apps and websites, and a trigger word can turn it off but not on. It sends nearby text to your notes model, which may be a cloud service\(model.settings.recognizeScreenText ? ", and reads the window from a screenshot because Read window text from the screen is on" : "")."
-                         : "Choose Medium cleanup to add instructions for your notes model.")
+                    Text(writingFooter)
                 }
 
                 if !isNew {
@@ -168,6 +166,12 @@ private struct WritingModeEditor: View {
             let ids = Set(running + model.history.compactMap(\.appBundleID)).subtracting([Bundle.main.bundleIdentifier].compactMap { $0 })
             choices = ids.compactMap(AppChoice.init).sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         }
+    }
+
+    private var writingFooter: String {
+        let screen = "Screen context is read on this Mac when you start dictating, so it follows this mode’s apps and websites, and Parakeet with the phrase booster uses the names in it to fix misspelled English words\(model.settings.recognizeScreenText ? ". It may read the window from a screenshot because Read window text from the screen is on" : "")."
+        guard (mode.cleanup ?? model.settings.cleanup) == .medium else { return "\(screen) Choose Medium cleanup to add instructions for your notes model." }
+        return "Instructions go to your notes model with each Medium dictation in this mode. \(screen) Medium also sends it to your notes model, which may be a cloud service, and a trigger word can turn that off but not on."
     }
 
     private var instructions: Binding<String> {

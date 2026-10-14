@@ -79,6 +79,17 @@ import Testing
     #expect(context.fitting(4) == DictationContext())
 }
 
+@Test func spellingTermsAreMixedCaseOrUnknownCapitalizedWordsOnScreenMostFrequentFirst() {
+    let known: Set = ["Thanks", "The", "Active", "Window", "Application", "Content", "Notes", "Slack", "WhisperKit", "URGENT"]
+    let context = DictationContext(
+        selectedText: "Thanks Joris, the WhisperKit build",
+        clipboard: "Zelda",
+        window: "Active Window: Pannekeet Notes\nApplication: Slack\n\nWindow Content:\nJoris: URGENT teh kubectl deploy on Supabase broke. AI said Mem0 b683edb5 again.\nThe Supabase fix from Joris")
+    #expect(context.spellingTerms(isKnownWord: known.contains) == ["Joris", "Supabase", "WhisperKit", "Pannekeet", "Mem0"])
+    #expect(context.spellingTerms(limit: 2, isKnownWord: known.contains) == ["Joris", "Supabase"])
+    #expect(DictationContext(clipboard: "Zelda").spellingTerms { _ in false }.isEmpty)
+}
+
 @Test func clipboardSkipsTextMarkedSecretOrTemporary() {
     let pasteboard = NSPasteboard.withUniqueName()
     defer { pasteboard.releaseGlobally() }
@@ -166,6 +177,14 @@ import Testing
     #expect(await slow.value(within: .milliseconds(100)) == nil)
     #expect(started.duration(to: .now) < .seconds(5))
     #expect(slow.isCancelled)
+
+    let kept = Task<DictationContext, Never> {
+        try? await Task.sleep(for: .seconds(30))
+        return DictationContext(clipboard: "late")
+    }
+    #expect(await kept.value(within: .milliseconds(100), cancellingOnTimeout: false) == nil)
+    #expect(!kept.isCancelled)
+    kept.cancel()
 
     let ready = Task<DictationContext, Never> { DictationContext(clipboard: "Invoice 4471") }
     #expect(await ready.value(within: .seconds(5)) == DictationContext(clipboard: "Invoice 4471"))

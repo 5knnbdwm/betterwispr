@@ -80,12 +80,12 @@ public final class ParakeetProvider: SpeechProvider {
         return !term.isEmpty && spoken != term && spoken.contains(term)
     }
 
-    /// Keeps the spoken words when they already hold the term, or are correctly spelled English that only loosely resembles it.
-    nonisolated static func keepsOriginal(_ replacement: (original: String, replacement: String), spelledCorrectly: Bool) -> Bool {
+    /// Keeps the spoken words when they already hold the term, or are correctly spelled English that only loosely resembles it or that a term read from the screen would replace.
+    nonisolated static func keepsOriginal(_ replacement: (original: String, replacement: String), spelledCorrectly: Bool, readFromScreen: Bool = false) -> Bool {
         let spoken = letters(replacement.original)
         let term = letters(replacement.replacement)
         let resemblance = 1 - Double(StringUtils.levenshteinDistance(spoken, term)) / Double(max(1, spoken.count, term.count))
-        return alreadySaysTerm(replacement) || (spelledCorrectly && resemblance < minimumRespellingResemblance)
+        return alreadySaysTerm(replacement) || (spelledCorrectly && (readFromScreen || resemblance < minimumRespellingResemblance))
     }
 
     nonisolated static func restoringPunctuation(original: String, rescored: String,
@@ -216,18 +216,22 @@ public final class ParakeetProvider: SpeechProvider {
     }
 
     public func transcribe(audioURL: URL, language: String?, vocabulary: [String]) async throws -> String {
+        try await transcribe(audioURL: audioURL, language: language, vocabulary: vocabulary, screenTerms: [])
+    }
+
+    public func transcribe(audioURL: URL, language: String?, vocabulary: [String], screenTerms: [String]) async throws -> String {
         guard let manager, !preparing else { throw SpeechError.notPrepared }
         if let livePass { _ = try? await livePass.value }
         guard transcriptionTask == nil else { throw SpeechError.busy }
         guard audioURL.isFileURL, FileManager.default.fileExists(atPath: audioURL.path) else { throw SpeechError.audioUnavailable }
         try Task.checkCancellation()
         let hint = Self.hint(for: language)
-        let terms = loadedVersion != .tdtJa && (hint == nil || hint == .english) ? Self.boostingTerms(vocabulary) : []
+        let terms = loadedVersion != .tdtJa && (hint == nil || hint == .english) ? Self.boostingTerms(vocabulary + screenTerms) : []
         vocabularyFixes = 0
         let task = Task {
             let text: String
             if let session = await self.boostingSession(for: terms) {
-                (text, self.vocabularyFixes) = try await Self.boostedTranscript(of: audioURL, language: hint, manager: manager, session: session)
+                (text, self.vocabularyFixes) = try await Self.boostedTranscript(of: audioURL, language: hint, manager: manager, session: session, vocabulary: vocabulary)
             } else {
                 var state = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
                 text = try await manager.transcribe(audioURL, decoderState: &state, language: hint).text
@@ -279,27 +283,43 @@ public final class ParakeetProvider: SpeechProvider {
 
     @concurrent
     private nonisolated static func boostedTranscript(
-        of audioURL: URL, language: Language?, manager: AsrManager, session: VocabularyBoostingSession
+        of audioURL: URL, language: Language?, manager: AsrManager, session: VocabularyBoostingSession, vocabulary: [String]
     ) async throws -> (text: String, fixes: Int) {
         let samples = try AudioConverter().resampleAudioFile(audioURL)
         try Task.checkCancellation()
         var state = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
         let result = try await manager.transcribe(samples, decoderState: &state, language: language)
         try Task.checkCancellation()
+        let misspelled = await MainActor.run { !isSpelledCorrectly(result.text) }
         guard language != nil || TranscriptCleaner.isEnglish(result.text, language: nil),
+              misspelled || !vocabulary.isEmpty,
               let rescored = await session.rescore(text: result.text, tokenTimings: result.tokenTimings ?? [], audioSamples: samples),
               rescored.wasModified else { return (result.text, 0) }
         let candidates = rescored.replacements.compactMap { item in
             item.shouldReplace ? item.replacementWord.map { (original: item.originalWord, replacement: $0) } : nil
         }
         let spelling = await MainActor.run { candidates.map { isSpelledCorrectly($0.original) } }
-        let replacements = zip(candidates, spelling).map { (original: $0.original, replacement: $0.replacement, keepsOriginal: keepsOriginal($0, spelledCorrectly: $1)) }
+        let (replacements, fixes) = judging(candidates, spelledCorrectly: spelling, vocabulary: vocabulary)
         let text = restoringPunctuation(original: result.text, rescored: rescored.text, replacements: replacements)
-        return (text, text == result.text ? 0 : replacements.count { $0.original != $0.replacement && !$0.keepsOriginal })
+        return (text, text == result.text ? 0 : fixes)
+    }
+
+    /// Marks the rescored words to keep, treating a term outside `vocabulary` as read from the screen, and counts the vocabulary terms that replace a word.
+    nonisolated static func judging(
+        _ candidates: [(original: String, replacement: String)], spelledCorrectly: [Bool], vocabulary: [String]
+    ) -> (replacements: [(original: String, replacement: String, keepsOriginal: Bool)], vocabularyFixes: Int) {
+        let userTerms = Set(vocabulary.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() })
+        let replacements = zip(candidates, spelledCorrectly).map { candidate, spelledCorrectly in
+            let readFromScreen = !userTerms.contains(candidate.replacement.lowercased())
+            return (original: candidate.original, replacement: candidate.replacement,
+                    keepsOriginal: keepsOriginal(candidate, spelledCorrectly: spelledCorrectly, readFromScreen: readFromScreen))
+        }
+        let fixes = replacements.count { $0.original != $0.replacement && !$0.keepsOriginal && userTerms.contains($0.replacement.lowercased()) }
+        return (replacements, fixes)
     }
 
     @MainActor
-    private static func isSpelledCorrectly(_ words: String) -> Bool {
+    static func isSpelledCorrectly(_ words: String) -> Bool {
         NSSpellChecker.shared.checkSpelling(of: words, startingAt: 0, language: "en", wrap: false, inSpellDocumentWithTag: 0, wordCount: nil).location == NSNotFound
     }
 }
