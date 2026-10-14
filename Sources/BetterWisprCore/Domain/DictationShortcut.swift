@@ -53,7 +53,6 @@ public struct DictationShortcut: Codable, Equatable, Sendable {
 
     public var isModifierOnly: Bool { modifiers.isEmpty && Self.modifier(for: keyCode) != nil }
 
-    /// Modifier sets under which Escape cancels dictation, including any still held from this shortcut.
     public var cancelModifiers: [ShortcutModifiers] {
         let held = modifiers.union(Self.modifier(for: keyCode) ?? [])
         return held.isEmpty || keyCode == UInt32(kVK_Escape) ? [[]] : [[], held]
