@@ -14,21 +14,26 @@ public enum NotesCLI: String, Codable, CaseIterable, Sendable {
 
     /// Resolves the login shell's PATH once per launch when the well-known folders miss, then looks the CLI up.
     @MainActor public func locateExecutable() async -> URL? {
-        if let executable { return executable }
+        await locateExecutable(shell: Self.loginShell, isExecutable: Self.isExecutableFile)
+    }
+
+    @MainActor func locateExecutable(shell: String, isExecutable: (String) -> Bool) async -> URL? {
+        if let found = Self.locate(command, in: Self.searchDirectories, isExecutable: isExecutable) { return found }
         if Self.loginShellResolution == nil {
             Self.loginShellResolution = Task { @MainActor in
-                let path = await loginShellPATH(shell: Self.loginShell)
+                let path = await loginShellPATH(shell: shell)
                 Self.loginShellPATHCache.withLock { $0 = path }
             }
         }
         await Self.loginShellResolution?.value
-        return executable
+        return Self.locate(command, in: Self.searchDirectories, isExecutable: isExecutable)
     }
 
-    static func locate(_ command: String, in directories: [String],
-                       isExecutable: (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }) -> URL? {
+    static func locate(_ command: String, in directories: [String], isExecutable: (String) -> Bool = isExecutableFile) -> URL? {
         directories.map { URL(fileURLWithPath: $0).appendingPathComponent(command) }.first { isExecutable($0.path) }
     }
+
+    static func isExecutableFile(_ path: String) -> Bool { FileManager.default.isExecutableFile(atPath: path) }
 
     static var searchDirectories: [String] {
         searchDirectories(home: FileManager.default.homeDirectoryForCurrentUser.path, user: NSUserName(),
