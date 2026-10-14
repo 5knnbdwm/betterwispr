@@ -21,7 +21,7 @@ public enum NotesCLI: String, Codable, CaseIterable, Sendable {
         if let found = Self.locate(command, in: Self.searchDirectories, isExecutable: isExecutable) { return found }
         if Self.loginShellResolution == nil {
             Self.loginShellResolution = Task { @MainActor in
-                let path = await loginShellPATH(shell: shell)
+                let path = await Self.loginShellPATH(shell: shell)
                 Self.loginShellPATHCache.withLock { $0 = path }
             }
         }
@@ -43,14 +43,30 @@ public enum NotesCLI: String, Codable, CaseIterable, Sendable {
     static func searchDirectories(home: String, user: String, processPATH: String?, loginShellPATH: String?) -> [String] {
         let wellKnown = ["\(home)/.local/bin", "/opt/homebrew/bin", "/usr/local/bin", "\(home)/.nix-profile/bin",
                          "/etc/profiles/per-user/\(user)/bin", "/run/current-system/sw/bin", "/nix/var/nix/profiles/default/bin"]
-        let shell = loginShellPATH?.split(whereSeparator: \.isNewline).last.map(String.init)
-        return wellKnown + [processPATH, shell].compactMap { $0 }.flatMap { $0.split(separator: ":").map(String.init) }
+        return wellKnown + [processPATH, loginShellPATH].compactMap { $0 }.flatMap { $0.split(separator: ":").map(String.init) }
             .filter { $0.hasPrefix("/") }
     }
 
-    @MainActor func loginShellPATH(shell: String) async -> String? {
-        try? await CLINotesModel.run(URL(fileURLWithPath: shell), arguments: ["-l", "-i", "-c", "/usr/bin/printenv PATH"],
-                                     input: "", cli: self, timeout: .seconds(5))
+    @MainActor static func loginShellPATH(shell: String) async -> String? {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("betterwispr-shell-\(UUID())")
+        guard (try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false,
+                                                         attributes: [.posixPermissions: 0o700])) != nil else { return nil }
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let pathFile = directory.appendingPathComponent("PATH")
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: shell)
+        process.arguments = ["-l", "-i", "-c", "/usr/bin/printenv PATH > '\(pathFile.path)'"]
+        process.currentDirectoryURL = directory
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        guard (try? process.run()) != nil else { return nil }
+        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        while process.isRunning {
+            guard ContinuousClock.now < deadline, !Task.isCancelled else { await CLINotesModel.stop(process); return nil }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        return try? String(contentsOf: pathFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static var loginShell: String {
@@ -205,7 +221,7 @@ struct CLINotesModel: NotesLanguageModel {
         return text
     }
 
-    @MainActor private static func stop(_ process: Process) async {
+    @MainActor static func stop(_ process: Process) async {
         guard process.isRunning else { return }
         process.terminate()
         // Cleanup must finish even when the calling task is cancelled.

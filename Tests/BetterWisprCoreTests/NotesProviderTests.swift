@@ -187,7 +187,7 @@ func notesAPIFailuresNeverProduceASummary(path: String) async throws {
 
 @Test func notesCLILookupSearchesNixFoldersAndTheLoginShellPATH() {
     let directories = NotesCLI.searchDirectories(home: "/Users/me", user: "me", processPATH: "/usr/bin:/bin:relative:",
-                                                 loginShellPATH: "prompt noise\n/Users/me/.volta/bin:/Users/me/.npm-global/bin")
+                                                 loginShellPATH: "/Users/me/.volta/bin:/Users/me/.npm-global/bin")
     #expect(directories == ["/Users/me/.local/bin", "/opt/homebrew/bin", "/usr/local/bin", "/Users/me/.nix-profile/bin",
                             "/etc/profiles/per-user/me/bin", "/run/current-system/sw/bin", "/nix/var/nix/profiles/default/bin",
                             "/usr/bin", "/bin", "/Users/me/.volta/bin", "/Users/me/.npm-global/bin"])
