@@ -26,6 +26,10 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var soundEffects: Bool = true
     /// Offers the notetaker when a known call app or web meeting starts recording.
     public var detectMeetings: Bool = true
+    /// Names a meeting note after the Calendar event under way when recording starts and lists its invitees.
+    public var useCalendar: Bool = false
+    /// Calendars, by EventKit calendar identifier, that meeting notes ignore.
+    public var excludedCalendarIDs: Set<String> = []
     public var theme: AppTheme = .dark
     public var launchAtLogin: Bool = false
     public var showInDock: Bool = false
@@ -106,6 +110,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
         showLiveText = try container.decodeIfPresent(Bool.self, forKey: .showLiveText) ?? true
         soundEffects = try container.decodeIfPresent(Bool.self, forKey: .soundEffects) ?? true
         detectMeetings = try container.decodeIfPresent(Bool.self, forKey: .detectMeetings) ?? true
+        useCalendar = try container.decodeIfPresent(Bool.self, forKey: .useCalendar) ?? false
+        excludedCalendarIDs = try container.decodeIfPresent(Set<String>.self, forKey: .excludedCalendarIDs) ?? []
         theme = try container.decodeIfPresent(AppTheme.self, forKey: .theme) ?? .dark
         launchAtLogin = try container.decode(Bool.self, forKey: .launchAtLogin)
         showInDock = try container.decodeIfPresent(Bool.self, forKey: .showInDock) ?? false

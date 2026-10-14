@@ -82,6 +82,9 @@ public struct Meeting: Codable, Identifiable, Equatable, Sendable {
     public var language: String
     /// Names the user gave voices on the call, by participant number.
     public var participantNames: [Int: String]?
+    /// Invitees of the Calendar event the meeting was recorded during, other than the user.
+    public var attendees: [String]?
+    public var eventID: String?
 
     public init(id: UUID = UUID(), title: String = "", createdAt: Date = .now, duration: TimeInterval = 0, notes: String = "",
                 summary: MeetingSummary? = nil, segments: [MeetingSegment] = [], modelName: String, language: String) {
