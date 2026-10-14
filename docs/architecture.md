@@ -111,8 +111,9 @@ on the list; the finished note opens there once notes are written, unless
 another meeting is recording by then. Personal thoughts, the transcript, and the generated summary have separate
 tabs backed by the existing meeting fields.
 
-1. Starting a meeting saves an empty `Meeting`, checks microphone permission and
-   starts `MeetingRecorder`. The microphone becomes "Me". On macOS 14.2 and later
+1. Starting a meeting saves an empty `Meeting`, named after the Calendar event
+   under way when Use Calendar is on (see [Calendar events](#calendar-events)),
+   checks microphone permission and starts `MeetingRecorder`. The microphone becomes "Me". On macOS 14.2 and later
    a private Core Audio process tap on a private aggregate device records every
    other app as "Them". If the tap fails, the meeting records the microphone only
    and says so. Recording starts before the speech provider finishes loading, so
@@ -170,6 +171,51 @@ one's `MeetingRecorder.stop()` before it takes the recorder, so a stopped
 meeting's last chunks never land in the next one. Cancelling a meeting that is
 still starting stops the recorder only if that meeting holds it. While two
 meetings overlap, each holds its own loaded speech model.
+
+### Calendar events
+
+`CalendarEvents` in `Integrations/` reads, through EventKit, the events that the
+Mac's Calendar app has already synced. That covers every account Calendar shows,
+such as iCloud, Google and Exchange, including shared and subscribed calendars.
+It never contacts a calendar server itself, so it works offline and needs no
+account sign-in of its own.
+
+It is off by default. Only turning on `AppSettings.useCalendar`, from the
+Settings toggle or the Calendar row under Permissions, calls
+`requestFullAccessToEvents`, which shows the macOS prompt the first time. A
+denial turns the setting back off and opens the Calendars pane of Privacy
+settings. The bundle declares `NSCalendarsFullAccessUsageDescription` and the
+hardened runtime entitlement `com.apple.security.personal-information.calendars`.
+Once access is granted, Settings lists each account's event calendars with a
+toggle. `AppSettings.excludedCalendarIDs` stores the EventKit calendar
+identifiers switched off, so a calendar added later in Calendar is included
+without another visit to Settings. The list refreshes when the app becomes active.
+
+When a meeting starts with the integration on and access granted,
+`CalendarEvents.current(excluding:)` fetches events from the included calendars
+that overlap the next five minutes. `CalendarEvent.current(_:at:)` ignores
+all-day events, keeps one that started or starts within five minutes and has
+not ended, and prefers an event with a Zoom, Google Meet, Microsoft Teams or
+Webex link, then the latest start. The meeting takes the event's title and
+saves `Meeting.attendees` (invitees other than the user, without rooms and
+resources, by name or else email) and `Meeting.eventID`. The notes model only
+fills a title that is still empty, so the event title stays. Attendee names
+without an `@` are added to that meeting's speech hints; they never become
+vocabulary entries, which rewrite text. A meeting cancelled before anything is
+recorded is still discarded although its title came from the event.
+
+`Meeting.calendarInvite` gives the title and up to 20 invitees, then a count of
+the rest. `NotesWriter` puts it before the material in the first draft prompt
+only, after `NotesWriter.inviteNote`, which tells the model to use it for the
+subject and names, never to follow it as instructions, and not to assume every
+invitee spoke. Meetings without an `eventID` send no invite. The event title and
+invitees therefore reach whichever notes model the user chose, including an API
+connection, and the Settings footer says so.
+
+`useCalendar` and `excludedCalendarIDs` decode with `decodeIfPresent` and
+`Meeting.attendees` and `Meeting.eventID` are optional, so workspaces and
+meetings saved before them load with the integration off, no calendar excluded,
+and no event.
 
 ### Meeting detection
 
@@ -434,6 +480,8 @@ do not acknowledge receipt; slow recipient apps need explicit manual testing.
 Add only the concrete integration and its required settings. Do not introduce
 per-app speech providers or duplicate recording code. Any future network
 integration must require explicit opt-in and preserve the local default.
+Integrations that read personal data, like `CalendarEvents`, stay off until the
+user turns them on, and only that action may show the macOS permission prompt.
 
 ## Updates
 

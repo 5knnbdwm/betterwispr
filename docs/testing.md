@@ -1000,6 +1000,47 @@ were not exercised in this UI pass.
   durations and no `betterwispr-meeting-*.caf` files remain in the temporary
   folder.
 
+### Calendar events
+
+Automated tests cover choosing the event, video link detection, the invite text
+given to the notes model, discarding a cancelled event meeting, and loading
+settings and meetings saved before Calendar. None of them touches EventKit or the
+permission prompt. Run these checks on a Mac whose Calendar app has at least an
+iCloud or local calendar, a Google or Exchange account, a calendar shared with
+you, and a subscribed calendar. Reset the permission first with
+`tccutil reset Calendar org.betterwispr.app`.
+
+- [ ] Launch the packaged app, finish onboarding and start and stop a meeting with
+  Use Calendar off. macOS never asks for Calendar access, and Settings lists no
+  calendars.
+- [ ] Turn on Use Calendar in Settings. macOS asks once, with the
+  `NSCalendarsFullAccessUsageDescription` text. Allow it. Every calendar that
+  Calendar shows appears under its account, shared and subscribed calendars
+  included, each switched on. The Calendar row under Permissions shows granted.
+- [ ] Reset the permission, turn Use Calendar on and deny. The toggle turns back
+  off, the Calendars pane of Privacy settings opens, and starting a meeting gives
+  an untitled note as before. The Calendar row under Permissions opens the same pane.
+- [ ] Grant access, then create a timed event starting in three minutes with two
+  invitees and a Zoom link. Start a meeting. The note takes the event title, and
+  the meeting header lists the invitees, without you and without rooms. Stop it.
+  The written notes keep the event title. Record whether the summary names the
+  invitees who spoke and leaves out those who did not; do not assume either way.
+- [ ] Overlap that event with one without a video link that started later. The
+  meeting takes the event with the Zoom link.
+- [ ] Turn off the event's calendar in Settings and start a meeting. The note is
+  untitled and lists no one. Turn it back on and relaunch; the choice persists.
+- [ ] Repeat the event check with an event on a shared calendar and on a
+  subscribed calendar, then with an all-day event only. Shared and subscribed
+  events name the note; the all-day event does not.
+- [ ] Disconnect networking and start a meeting during an event already synced.
+  The note still takes its title and invitees, and a network monitor shows no
+  requests from BetterWispr.
+- [ ] Start a meeting during an event and cancel it before anything is
+  transcribed. The note is discarded, not kept with only the event title.
+- [ ] Revoke access in System Settings while Use Calendar is on and switch back.
+  The Permissions row shows Calendar as not granted, the calendar list is gone,
+  and new meetings are untitled.
+
 ## Accuracy
 
 - [ ] Follow [the corpus and scoring protocol](accuracy.md). Use consented natural
