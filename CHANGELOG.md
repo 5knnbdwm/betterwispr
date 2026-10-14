@@ -14,6 +14,9 @@ All notable changes to BetterWispr are listed here. The format follows
 ### Changed
 - Start the next meeting while the last one is still processing. Stopping a meeting no longer locks the notetaker while it transcribes its last chunks, finds speakers and writes notes. The capsule, the menu bar and the dashboard can start a new meeting right away, and the stopped one finishes on its own. Its last words stay in its own transcript, and the dashboard does not jump to its note while the new meeting records. Skip, Cancel and Update summary act on one meeting. While two meetings overlap, each holds its own copy of the speech model.
 
+### Fixed
+- Claude Code and Codex are now found when installed through nix or anywhere your login shell can run them, so Meeting notes and Medium cleanup no longer report them as missing.
+
 ## [0.1.5] - 2026-10-12
 
 ### Added
