@@ -1,0 +1,117 @@
+import AppKit
+
+enum MediaApp: String, CaseIterable, Sendable {
+    case music = "com.apple.Music"
+    case spotify = "com.spotify.client"
+
+    var suite: String {
+        switch self {
+        case .music: "hook"
+        case .spotify: "spfy"
+        }
+    }
+}
+
+enum PlayerState: Sendable {
+    case playing, paused, stopped, unavailable
+}
+
+protocol MediaPlayers: Sendable {
+    func state(of app: MediaApp) async -> PlayerState
+    func pause(_ app: MediaApp) async
+    func play(_ app: MediaApp) async
+}
+
+@MainActor
+final class MediaPauser {
+    private let players: any MediaPlayers
+    private var paused: [MediaApp] = []
+    private(set) var pending: Task<Void, Never>?
+
+    init(players: any MediaPlayers = AppleEventMediaPlayers()) {
+        self.players = players
+    }
+
+    func pause() {
+        let previous = pending
+        pending = Task {
+            await previous?.value
+            for app in MediaApp.allCases where await players.state(of: app) == .playing {
+                await players.pause(app)
+                paused.append(app)
+            }
+        }
+    }
+
+    func resume() {
+        guard let previous = pending else { return }
+        pending = Task {
+            await previous.value
+            let apps = paused
+            paused = []
+            for app in apps where await players.state(of: app) == .paused {
+                await players.play(app)
+            }
+        }
+    }
+}
+
+struct AppleEventMediaPlayers: MediaPlayers {
+    @concurrent
+    func state(of app: MediaApp) async -> PlayerState {
+        guard let specifier = NSAppleEventDescriptor.record().coerce(toDescriptorType: Self.code("obj ")) else { return .unavailable }
+        specifier.setDescriptor(NSAppleEventDescriptor(typeCode: Self.code("prop")), forKeyword: Self.code("want"))
+        specifier.setDescriptor(.null(), forKeyword: Self.code("from"))
+        specifier.setDescriptor(NSAppleEventDescriptor(enumCode: Self.code("prop")), forKeyword: Self.code("form"))
+        specifier.setDescriptor(NSAppleEventDescriptor(typeCode: Self.code("pPlS")), forKeyword: Self.code("seld"))
+        let reply = Self.send("core", "getd", to: app, directObject: specifier)
+        switch reply?.paramDescriptor(forKeyword: Self.code("----"))?.enumCodeValue {
+        case Self.code("kPSP"): return .playing
+        case Self.code("kPSp"): return .paused
+        case Self.code("kPSS"): return .stopped
+        default: return .unavailable
+        }
+    }
+
+    @concurrent
+    func pause(_ app: MediaApp) async {
+        Self.send(app.suite, "Paus", to: app)
+    }
+
+    @concurrent
+    func play(_ app: MediaApp) async {
+        Self.send(app.suite, "Play", to: app)
+    }
+
+    @concurrent
+    static func requestPermission() async {
+        for app in MediaApp.allCases {
+            guard let target = target(app) else { continue }
+            automationAllowed(target, askingUser: true)
+        }
+    }
+
+    private static func target(_ app: MediaApp) -> NSAppleEventDescriptor? {
+        guard let running = NSRunningApplication.runningApplications(withBundleIdentifier: app.rawValue).first else { return nil }
+        return NSAppleEventDescriptor(processIdentifier: running.processIdentifier)
+    }
+
+    @discardableResult
+    private static func send(_ eventClass: String, _ eventID: String, to app: MediaApp,
+                             directObject: NSAppleEventDescriptor? = nil) -> NSAppleEventDescriptor? {
+        guard let target = target(app), automationAllowed(target, askingUser: false) else { return nil }
+        let event = NSAppleEventDescriptor(eventClass: code(eventClass), eventID: code(eventID), targetDescriptor: target,
+                                           returnID: AEReturnID(kAutoGenerateReturnID), transactionID: AETransactionID(kAnyTransactionID))
+        if let directObject { event.setParam(directObject, forKeyword: code("----")) }
+        return try? event.sendEvent(options: [.waitForReply, .neverInteract], timeout: 1)
+    }
+
+    @discardableResult
+    private static func automationAllowed(_ target: NSAppleEventDescriptor, askingUser: Bool) -> Bool {
+        AEDeterminePermissionToAutomateTarget(target.aeDesc, typeWildCard, typeWildCard, askingUser) == noErr
+    }
+
+    private static func code(_ text: String) -> FourCharCode {
+        text.utf8.reduce(0) { $0 << 8 | FourCharCode($1) }
+    }
+}
