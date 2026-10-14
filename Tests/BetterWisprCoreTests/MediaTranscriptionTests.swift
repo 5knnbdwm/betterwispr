@@ -3,7 +3,7 @@ import Foundation
 import Testing
 @testable import BetterWisprCore
 
-private func mediaFile(seconds: Double, silent: [Range<Double>], tone: Bool = true) throws -> URL {
+@concurrent private func mediaFile(seconds: Double, silent: [Range<Double>], tone: Bool = true) async throws -> URL {
     let url = FileManager.default.temporaryDirectory.appending(path: "betterwispr-test-\(UUID().uuidString).wav")
     let rate = 44_100.0
     let format = AVAudioFormat(standardFormatWithSampleRate: rate, channels: 2)!
@@ -46,7 +46,7 @@ private func chunks(of url: URL) async throws -> (audio: MediaAudio, chunks: [Me
 }
 
 @Test func mediaAudioCutsInSilentGapsIntoContiguousChunksThatCoverTheFile() async throws {
-    let url = try mediaFile(seconds: 130, silent: [40..<41, 85..<86])
+    let url = try await mediaFile(seconds: 130, silent: [40..<41, 85..<86])
     defer { try? FileManager.default.removeItem(at: url) }
     let (audio, chunks) = try await chunks(of: url)
     defer { for chunk in chunks { try? FileManager.default.removeItem(at: chunk.url) } }
@@ -68,7 +68,7 @@ private func chunks(of url: URL) async throws -> (audio: MediaAudio, chunks: [Me
 }
 
 @Test func silentMediaStillYieldsChunksAtTheShortestLength() async throws {
-    let url = try mediaFile(seconds: 70, silent: [], tone: false)
+    let url = try await mediaFile(seconds: 70, silent: [], tone: false)
     defer { try? FileManager.default.removeItem(at: url) }
     let (_, chunks) = try await chunks(of: url)
     defer { for chunk in chunks { try? FileManager.default.removeItem(at: chunk.url) } }
@@ -85,4 +85,64 @@ private func chunks(of url: URL) async throws -> (audio: MediaAudio, chunks: [Me
 
     await #expect(throws: MediaAudioError.unreadable(url.lastPathComponent)) { try await MediaAudio(url: url) }
     #expect(MediaAudioError.unreadable("talk.mkv").localizedDescription.contains("MP3, M4A, AAC, WAV, AIFF, CAF, FLAC, MP4, MOV or M4V"))
+}
+
+@MainActor
+private final class ScriptedProvider: SpeechProvider {
+    var onProgress: (@MainActor @Sendable (Double) -> Void)?
+    var onPartialTranscript: (@MainActor @Sendable (String) -> Void)?
+    var replies: [() throws -> String]
+    var heard: [(audio: URL, vocabulary: [String])] = []
+
+    init(_ replies: [() throws -> String]) { self.replies = replies }
+
+    func prepare(model: SpeechModel, download: Bool) async throws {}
+
+    func transcribe(audioURL: URL, language: String?, vocabulary: [String]) async throws -> String {
+        #expect(FileManager.default.fileExists(atPath: audioURL.path))
+        heard.append((audioURL, vocabulary))
+        return try replies.removeFirst()()
+    }
+
+    func cancel() {}
+}
+
+@MainActor
+@Test func mediaTranscriptionCleansEveryChunkInOrderAndDeletesItsAudio() async throws {
+    let url = try await mediaFile(seconds: 100, silent: [], tone: false)
+    defer { try? FileManager.default.removeItem(at: url) }
+    let provider = ScriptedProvider([{ "um so the api is ready" }, { "  " }, { "thanks everyone" }])
+    var stages: [MediaStage] = []
+
+    let transcript = try await MediaTranscriber.transcribe(url, with: provider, language: "en", vocabulary: [VocabularyEntry(phrase: "api", replacement: "API")]) {
+        stages.append($0)
+    }
+
+    #expect(transcript.segments.map(\.text) == ["So the API is ready", "thanks everyone"])
+    #expect(transcript.segments.map(\.rawText) == ["um so the api is ready", "thanks everyone"])
+    #expect(transcript.segments.map(\.start) == [0, 60])
+    #expect(transcript.segments.allSatisfy { $0.speaker == .them && $0.participant == nil })
+    #expect(abs(transcript.duration - 100) < 0.01)
+    #expect(provider.heard.map(\.vocabulary) == [["API"], ["API"], ["API"]])
+    #expect(provider.heard.allSatisfy { !FileManager.default.fileExists(atPath: $0.audio.path) })
+    #expect(stages.first == .reading)
+    #expect(stages.last.map { if case .transcribing(let done) = $0 { abs(done - 1) < 0.01 } else { false } } == true)
+}
+
+@MainActor
+@Test func mediaTranscriptionFailsOnAFailedChunkOrCancellationAndLeavesNoAudio() async throws {
+    let url = try await mediaFile(seconds: 100, silent: [], tone: false)
+    defer { try? FileManager.default.removeItem(at: url) }
+    let failing = ScriptedProvider([{ "hello" }, { throw SpeechError.timedOut }, { "never" }])
+    await #expect(throws: SpeechError.self) {
+        try await MediaTranscriber.transcribe(url, with: failing, language: "en", vocabulary: [])
+    }
+    #expect(failing.heard.count == 2)
+    #expect(failing.heard.allSatisfy { !FileManager.default.fileExists(atPath: $0.audio.path) })
+
+    let cancelling = ScriptedProvider([{ "hello" }, { withUnsafeCurrentTask { $0?.cancel() }; return "bye" }, { "never" }])
+    let job = Task { try await MediaTranscriber.transcribe(url, with: cancelling, language: "en", vocabulary: []) }
+    await #expect(throws: CancellationError.self) { try await job.value }
+    #expect(cancelling.heard.count == 2)
+    #expect(cancelling.heard.allSatisfy { !FileManager.default.fileExists(atPath: $0.audio.path) })
 }
