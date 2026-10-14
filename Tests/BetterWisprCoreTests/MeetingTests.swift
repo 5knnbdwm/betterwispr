@@ -245,6 +245,43 @@ import Testing
     #expect(prompts[1] == "Write the meeting notes from this transcript:\n\nMe: Ship it.")
 }
 
+@Test(arguments: [(3, 2), (9, 2), (20, 2), (20, 1), (20, 3), (3, 3)])
+func notesWriterCondensesLongMeetingsWhenTheModelOvershootsItsWordLimit(parts: Int, overshoot: Int) async throws {
+    let model = OvershootingNotesModel(overshoot: overshoot)
+    let transcript = Array(repeating: "Me: " + String(repeating: "abcde ", count: 990), count: parts)
+    let notes = try await NotesWriter.write(parts: transcript, notes: "", model: model) { _, _ in }
+    #expect(notes.title == "Long meeting")
+    #expect(await model.draftMaterial.count <= MeetingNotesGenerator.budget)
+    #expect(await model.condenseCalls <= 2 * parts + 4)
+}
+
+private actor OvershootingNotesModel: NotesLanguageModel {
+    let overshoot: Int
+    private(set) var draftMaterial = ""
+    private(set) var condenseCalls = 0
+
+    init(overshoot: Int) { self.overshoot = overshoot }
+
+    func respond(to prompt: String) throws -> String {
+        condenseCalls += 1
+        let limit = try #require(prompt.firstMatch(of: /at most (\d+) words/).flatMap { Int($0.1) })
+        let available = Self.body(of: prompt).split(whereSeparator: \.isWhitespace).count
+        let words = min(limit * overshoot, available)
+        return stride(from: 0, to: words, by: 10)
+            .map { "- " + Array(repeating: "abcde", count: min(10, words - $0)).joined(separator: " ") }
+            .joined(separator: "\n")
+    }
+
+    func draft(_ prompt: String) -> NotesDraft {
+        draftMaterial = Self.body(of: prompt)
+        return NotesDraft(title: "Long meeting", overview: "Condensed.", keyPoints: [], decisions: [], actionItems: [])
+    }
+
+    private static func body(of prompt: String) -> String {
+        prompt.components(separatedBy: "\n\n").dropFirst().joined(separator: "\n\n")
+    }
+}
+
 private struct NonCondensingNotesModel: NotesLanguageModel {
     func respond(to prompt: String) -> String { String(repeating: "still too long ", count: 500) }
     func draft(_ prompt: String) -> NotesDraft {
