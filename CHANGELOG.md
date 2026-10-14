@@ -4,6 +4,8 @@ All notable changes to BetterWispr are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/). The current version lives in `VERSION`.
 
+## [0.1.6] - 2026-10-14
+
 ## [0.1.5] - 2026-10-12
 
 ### Added
