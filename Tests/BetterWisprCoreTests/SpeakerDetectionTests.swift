@@ -109,3 +109,45 @@ private func turn(_ voice: String, _ start: TimeInterval, _ end: TimeInterval) -
     #expect(legacy.segments.map(\.participant) == [nil])
     #expect(legacy.segments.map(\.text) == ["Hello"])
 }
+
+@Test func speakerDetectionIsInstalledOnlyWithTheMarkerAndEveryPinnedModel() throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    func add(_ model: String) throws {
+        try FileManager.default.createDirectory(at: directory.appending(path: model), withIntermediateDirectories: true)
+    }
+    let marker = directory.appending(path: ".betterwispr-installed")
+
+    try Data().write(to: marker)
+    #expect(!SpeakerDetection.isInstalled(at: directory))
+    try add("speaker_segmenter/pyannote-v3/W8A16/SpeakerSegmenter.mlmodelc")
+    try add("speaker_embedder/pyannote-v3/W8A16/SpeakerEmbedderPreprocessor.mlmodelc")
+    try add("speaker_embedder/pyannote-v3/W8A16/SpeakerEmbedder.mlmodelc")
+    try add("speaker_clusterer/pyannote-v4/W32A32/PldaProjector.mlmodelc")
+    #expect(!SpeakerDetection.isInstalled(at: directory))
+    try add("speaker_segmenter/pyannote-v3/W32A32/SpeakerSegmenter.mlmodelc")
+    #expect(SpeakerDetection.isInstalled(at: directory))
+    try FileManager.default.removeItem(at: marker)
+    #expect(!SpeakerDetection.isInstalled(at: directory))
+}
+
+@Test func speakerDetectionStopsWaitingForWorkThatIgnoresCancellation() async throws {
+    #expect(try await SpeakerDetection.abandoningOnCancel { 42 } == 42)
+    await #expect(throws: CocoaError.self) {
+        try await SpeakerDetection.abandoningOnCancel { () async throws -> Int in throw CocoaError(.fileReadCorruptFile) }
+    }
+
+    let clock = ContinuousClock()
+    let started = clock.now
+    let waiting = Task {
+        try await SpeakerDetection.abandoningOnCancel {
+            await Task.detached { try? await Task.sleep(for: .seconds(30)) }.value
+            return 1
+        }
+    }
+    try await Task.sleep(for: .milliseconds(100))
+    waiting.cancel()
+    await #expect(throws: CancellationError.self) { try await waiting.value }
+    #expect(clock.now - started < .seconds(5))
+}
