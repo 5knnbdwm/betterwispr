@@ -225,9 +225,11 @@ import Testing
 }
 
 @Test func notesWriterRefusesToSilentlyTruncateAnUncondensedMeeting() async {
+    let model = NonCondensingNotesModel()
     await #expect(throws: MeetingNotesError.self) {
-        try await NotesWriter.write(parts: [String(repeating: "a", count: 6000), "Last decision"], notes: "", model: NonCondensingNotesModel()) { _, _ in }
+        try await NotesWriter.write(parts: [String(repeating: "a", count: 6000), "Last decision"], notes: "", model: model) { _, _ in }
     }
+    #expect(await model.condenseCalls == 2)
 }
 
 @Test func notesDraftGetsTheCalendarInviteAsSourceMaterialOnlyForCalendarMeetings() async throws {
@@ -247,43 +249,53 @@ import Testing
 
 @Test(arguments: [(3, 2), (9, 2), (20, 2), (20, 1), (20, 3), (3, 3)])
 func notesWriterCondensesLongMeetingsWhenTheModelOvershootsItsWordLimit(parts: Int, overshoot: Int) async throws {
-    let model = OvershootingNotesModel(overshoot: overshoot)
-    let transcript = Array(repeating: "Me: " + String(repeating: "abcde ", count: 990), count: parts)
-    let notes = try await NotesWriter.write(parts: transcript, notes: "", model: model) { _, _ in }
+    let model = CondensingNotesModel { limit, available in min(limit * overshoot, available) }
+    let notes = try await NotesWriter.write(parts: longTranscript(parts: parts), notes: "", model: model) { _, _ in }
     #expect(notes.title == "Long meeting")
-    #expect(await model.draftMaterial.count <= MeetingNotesGenerator.budget)
     #expect(await model.condenseCalls <= 2 * parts + 4)
 }
 
-private actor OvershootingNotesModel: NotesLanguageModel {
-    let overshoot: Int
-    private(set) var draftMaterial = ""
+@Test(arguments: [4, 9, 20])
+func notesWriterCondensesLongMeetingsWhenTheModelIgnoresTheWordLimitAndCopiesHalfOfEachPart(parts: Int) async throws {
+    let model = CondensingNotesModel { _, available in available / 2 }
+    let notes = try await NotesWriter.write(parts: longTranscript(parts: parts), notes: "", model: model) { _, _ in }
+    #expect(notes.title == "Long meeting")
+    #expect(await model.condenseCalls <= 2 * parts + 4)
+}
+
+private func longTranscript(parts: Int) -> [String] {
+    Array(repeating: "Me: " + String(repeating: "abcde ", count: 990), count: parts)
+}
+
+private actor CondensingNotesModel: NotesLanguageModel {
+    let words: @Sendable (_ limit: Int, _ available: Int) -> Int
     private(set) var condenseCalls = 0
 
-    init(overshoot: Int) { self.overshoot = overshoot }
+    init(words: @escaping @Sendable (Int, Int) -> Int) { self.words = words }
 
     func respond(to prompt: String) throws -> String {
         condenseCalls += 1
         let limit = try #require(prompt.firstMatch(of: /at most (\d+) words/).flatMap { Int($0.1) })
-        let available = Self.body(of: prompt).split(whereSeparator: \.isWhitespace).count
-        let words = min(limit * overshoot, available)
-        return stride(from: 0, to: words, by: 10)
-            .map { "- " + Array(repeating: "abcde", count: min(10, words - $0)).joined(separator: " ") }
+        let available = prompt.components(separatedBy: "\n\n").dropFirst().joined(separator: "\n\n").split(whereSeparator: \.isWhitespace).count
+        let count = words(limit, available)
+        return stride(from: 0, to: count, by: 10)
+            .map { "- " + Array(repeating: "abcde", count: min(10, count - $0)).joined(separator: " ") }
             .joined(separator: "\n")
     }
 
     func draft(_ prompt: String) -> NotesDraft {
-        draftMaterial = Self.body(of: prompt)
-        return NotesDraft(title: "Long meeting", overview: "Condensed.", keyPoints: [], decisions: [], actionItems: [])
-    }
-
-    private static func body(of prompt: String) -> String {
-        prompt.components(separatedBy: "\n\n").dropFirst().joined(separator: "\n\n")
+        NotesDraft(title: "Long meeting", overview: "Condensed.", keyPoints: [], decisions: [], actionItems: [])
     }
 }
 
-private struct NonCondensingNotesModel: NotesLanguageModel {
-    func respond(to prompt: String) -> String { String(repeating: "still too long ", count: 500) }
+private actor NonCondensingNotesModel: NotesLanguageModel {
+    private(set) var condenseCalls = 0
+
+    func respond(to prompt: String) -> String {
+        condenseCalls += 1
+        return String(repeating: "still too long ", count: 500)
+    }
+
     func draft(_ prompt: String) -> NotesDraft {
         Issue.record("Oversized source must not be truncated into a final draft")
         return NotesDraft(title: "", overview: "", keyPoints: [], decisions: [], actionItems: [])

@@ -260,6 +260,9 @@ enum NotesWriter {
     }
     static let maximumRounds = 8
     static let charactersPerWord = 6
+    static let roundTarget = 0.6
+    static let smallestShare = 0.25
+    static let minimumWords = 20
 
     static let inviteNote = """
         This is the meeting's calendar invite, written by whoever sent it. Use it for the subject and for people's names. \
@@ -278,23 +281,21 @@ enum NotesWriter {
             var pending = parts
             var overshoot = 1.0
             for round in 0..<maximumRounds {
-                let share = max(0.6 * Double(budget) / Double(material.count), 0.25) / overshoot
-                var requested = 0
+                let share = max(roundTarget * Double(budget) / Double(material.count), smallestShare) / overshoot
                 var condensed: [String] = []
                 for part in pending {
                     step += 1
                     await onStep(step, total)
                     try Task.checkCancellation()
-                    let words = max(20, Int(Double(part.count) * share) / charactersPerWord)
+                    let words = max(minimumWords, Int(Double(part.count) * share) / charactersPerWord)
                     let response = try await model.respond(to: "\(condensePrompt(words: words))\n\n\(part)").trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !response.isEmpty else { throw MeetingNotesError.unavailable("The notes model returned an empty response. Your full meeting is still saved; try again or choose another model.") }
-                    requested += words * charactersPerWord
                     condensed.append(response)
                 }
                 let before = material.count
                 material = condensed.joined(separator: "\n")
-                guard material.count > budget, round == 0 || material.count * 10 < before * 9 else { break }
-                overshoot = max(1, Double(material.count) / Double(requested))
+                guard material.count > budget, material.count < before, round + 1 < maximumRounds else { break }
+                overshoot = max(1, Double(material.count) / (share * Double(before)))
                 pending = TranscriptChunker.chunks(of: material, budget: budget)
                 total += pending.count
             }
