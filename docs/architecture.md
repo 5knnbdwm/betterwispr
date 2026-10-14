@@ -178,7 +178,9 @@ meetings overlap, each holds its own loaded speech model.
 Mac's Calendar app has already synced. That covers every account Calendar shows,
 such as iCloud, Google and Exchange, including shared and subscribed calendars.
 It never contacts a calendar server itself, so it works offline and needs no
-account sign-in of its own.
+account sign-in of its own. It is an actor that owns the one `EKEventStore`, so
+EventKit's synchronous queries run off the main thread and only `Sendable`
+values such as `CalendarEvent` reach the app.
 
 It is off by default. Only turning on `AppSettings.useCalendar`, from the
 Settings toggle or the Calendar row under Permissions, calls
@@ -190,15 +192,22 @@ hardened runtime entitlement
 Settings lists each account's event calendars with a toggle.
 `AppSettings.excludedCalendarIDs` stores the EventKit calendar identifiers
 switched off, so a calendar added later in Calendar is included without another
-visit to Settings. The list refreshes when the app becomes active.
+visit to Settings. The list refreshes when the app becomes active. Every read
+resets the store first, so access granted again after a revoke takes effect
+without a relaunch. While the toggle is on without access, its caption points to
+the Calendar row under Permissions.
 
 When a meeting starts with the integration on and access granted,
 `CalendarEvents.current(excluding:)` fetches events from the included calendars
-that overlap the next five minutes. `CalendarEvent.current(_:at:)` ignores
+that overlap the next five minutes. `AppModel.startMeeting` awaits it before
+checking that nothing else is recording and calling `MeetingModel.start`, so a
+second click during the lookup finds the first meeting and starts nothing.
+`CalendarEvent.current(_:at:)` ignores
 all-day events and events that were cancelled or that the user declined, keeps
 one that started or starts within five minutes and has not ended, and prefers an
 event with a Zoom, Google Meet, Microsoft Teams or Webex link, then the latest
-start. The meeting takes the event's title and saves `Meeting.attendees`
+start. The meeting takes the event's title, on one line, and saves
+`Meeting.attendees`
 (invitees other than the user, without rooms and resources, by name, or by
 `mailto:` address when the invite gives no name) and `Meeting.eventID`. The
 notes model only fills a title that is still empty, so the event title stays.

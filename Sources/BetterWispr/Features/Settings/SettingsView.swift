@@ -107,7 +107,9 @@ struct SettingsView: View {
                 }
 
                 SettingsSection("Calendar") {
-                    SettingToggle("Use Calendar", caption: "A meeting note started during an event takes its title and the people invited.",
+                    SettingToggle("Use Calendar", caption: model.settings.useCalendar && !model.calendarGranted
+                                      ? "Waiting for Calendar access. Choose Allow… for Calendar under Permissions."
+                                      : "A meeting note started during an event takes its title and the people invited.",
                                   isOn: Binding(get: { model.settings.useCalendar }, set: { model.useCalendar($0) }))
                     if model.settings.useCalendar, model.calendarGranted {
                         ForEach(model.calendarAccounts) { account in

@@ -121,7 +121,7 @@ public struct Meeting: Codable, Identifiable, Equatable, Sendable {
 
     private static let listedInvitees = 20
 
-    private static func oneLine(_ text: String) -> String {
+    static func oneLine(_ text: String) -> String {
         text.split(whereSeparator: \.isNewline).joined(separator: " ")
     }
 

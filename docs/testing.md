@@ -1003,8 +1003,9 @@ were not exercised in this UI pass.
 ### Calendar events
 
 Automated tests cover choosing the event, video link detection, the invite text
-given to the notes model, discarding a cancelled event meeting, and loading
-settings and meetings saved before Calendar. None of them touches EventKit or the
+given to the notes model, invitee names in the meeting's speech hints,
+discarding a cancelled event meeting, and loading settings and meetings saved
+before Calendar. None of them touches EventKit or the
 permission prompt. Run these checks on a Mac whose Calendar app has at least an
 iCloud or local calendar, a Google or Exchange account, a calendar shared with
 you, and a subscribed calendar. Reset the permission first with
@@ -1042,7 +1043,12 @@ you, and a subscribed calendar. Reset the permission first with
   transcribed. The note is discarded, not kept with only the event title.
 - [ ] Revoke access in System Settings while Use Calendar is on and switch back.
   The Permissions row shows Calendar as not granted, the calendar list is gone,
-  and new meetings are untitled.
+  the Use Calendar caption asks for access, and new meetings are untitled. Allow
+  BetterWispr again in System Settings, leaving the toggle on, and switch back.
+  The calendars return without a relaunch, and a new meeting takes the event.
+- [ ] With access granted and every calendar on, click Start Notetaker during an
+  event. The window keeps responding while the note starts. Double-click Start
+  Notetaker; only one meeting starts.
 
 ## Accuracy
 

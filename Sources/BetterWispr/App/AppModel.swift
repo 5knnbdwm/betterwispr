@@ -1029,7 +1029,7 @@ final class AppModel {
                 NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars")!)
                 return
             }
-            calendarAccounts = calendarEvents.accounts()
+            calendarAccounts = await calendarEvents.accounts()
         }
     }
 
@@ -1043,7 +1043,8 @@ final class AppModel {
 
     private func refreshCalendars() {
         calendarGranted = CalendarEvents.isAuthorized
-        calendarAccounts = settings.useCalendar && calendarGranted ? calendarEvents.accounts() : []
+        guard settings.useCalendar, calendarGranted else { calendarAccounts = []; return }
+        Task { calendarAccounts = await calendarEvents.accounts() }
     }
 
     func selectMicrophone(_ choice: AudioInputDevice?) {

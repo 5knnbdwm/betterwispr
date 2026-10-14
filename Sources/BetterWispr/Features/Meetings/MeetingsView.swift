@@ -358,7 +358,8 @@ private extension Meeting {
 }
 
 extension AppModel {
-    func startMeeting() {
+    func startMeeting() async {
+        let event = settings.useCalendar ? await calendarEvents.current(excluding: settings.excludedCalendarIDs) : nil
         guard !isBusy, meetings.capturingID == nil else { return }
         let speechModel = selectedModel
         guard isModelInstalled(speechModel) else {
@@ -368,13 +369,14 @@ extension AppModel {
         }
         selectedPage = .meetings
         meetings.start(model: speechModel, language: settings.language == "auto" ? nil : settings.language,
-                       vocabulary: vocabulary, silenceThreshold: settings.silenceThreshold, microphone: settings.microphone,
-                       event: settings.useCalendar ? calendarEvents.current(excluding: settings.excludedCalendarIDs) : nil)
+                       vocabulary: vocabulary, silenceThreshold: settings.silenceThreshold, microphone: settings.microphone, event: event)
     }
 
     /// Starts a meeting and docks its card beside the call.
     func startNotetaker() {
-        startMeeting()
-        if let id = meetings.capturingID { onShowNotetaker?(id) } else { onShowDashboard?() }
+        Task {
+            await startMeeting()
+            if let id = meetings.capturingID { onShowNotetaker?(id) } else { onShowDashboard?() }
+        }
     }
 }

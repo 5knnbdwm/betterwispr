@@ -68,9 +68,8 @@ public struct CalendarInfo: Identifiable, Equatable, Sendable {
     public var title: String
 }
 
-/// Reads events the Mac's Calendar already synced, so it works offline and never contacts calendar servers itself.
-@MainActor
-public final class CalendarEvents {
+/// Reads events the Mac's Calendar already synced, off the main thread, so it works offline and never contacts calendar servers itself.
+public actor CalendarEvents {
     private lazy var store = EKEventStore()
 
     public init() {}
@@ -79,18 +78,12 @@ public final class CalendarEvents {
 
     /// Shows the macOS Calendar permission prompt the first time; later calls return the saved answer.
     public func requestAccess() async -> Bool {
-        let store = store
-        let granted = await withCheckedContinuation { continuation in
-            store.requestFullAccessToEvents { granted, _ in continuation.resume(returning: granted) }
-        }
-        if granted { store.reset() }
-        return granted
+        (try? await store.requestFullAccessToEvents()) ?? false
     }
 
     public func accounts() -> [CalendarAccount] {
         guard Self.isAuthorized else { return [] }
-        let calendars = store.calendars(for: .event)
-        return Dictionary(grouping: calendars) { $0.source?.sourceIdentifier ?? "" }
+        return Dictionary(grouping: freshCalendars()) { $0.source?.sourceIdentifier ?? "" }
             .map { id, calendars in
                 CalendarAccount(id: id, title: calendars[0].source?.title ?? "",
                                 calendars: calendars.map { CalendarInfo(id: $0.calendarIdentifier, title: $0.title) }
@@ -101,10 +94,16 @@ public final class CalendarEvents {
 
     public func current(excluding excluded: Set<String>, at now: Date = .now) -> CalendarEvent? {
         guard Self.isAuthorized else { return nil }
-        let calendars = store.calendars(for: .event).filter { !excluded.contains($0.calendarIdentifier) }
+        let calendars = freshCalendars().filter { !excluded.contains($0.calendarIdentifier) }
         guard !calendars.isEmpty else { return nil }
         let predicate = store.predicateForEvents(withStart: now, end: now.addingTimeInterval(CalendarEvent.earlyStart), calendars: calendars)
         return CalendarEvent.current(store.events(matching: predicate).map(CalendarEvent.init), at: now)
+    }
+
+    /// The event calendars re-read from the Calendar database, so access granted again after a revoke takes effect without a relaunch.
+    private func freshCalendars() -> [EKCalendar] {
+        store.reset()
+        return store.calendars(for: .event)
     }
 }
 
@@ -112,7 +111,7 @@ extension CalendarEvent {
     init(_ event: EKEvent) {
         self.init(
             id: event.calendarItemExternalIdentifier ?? event.eventIdentifier ?? UUID().uuidString,
-            title: event.title ?? "",
+            title: Meeting.oneLine(event.title ?? ""),
             start: event.startDate,
             end: event.endDate,
             isAllDay: event.isAllDay,
