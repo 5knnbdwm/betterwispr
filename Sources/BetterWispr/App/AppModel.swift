@@ -2,6 +2,7 @@ import AppKit
 import AVFoundation
 @preconcurrency import ApplicationServices
 import BetterWisprCore
+import Carbon.HIToolbox
 import Observation
 import OSLog
 import ServiceManagement
@@ -12,6 +13,8 @@ enum RecordingPhase: Equatable {
     case cancelled, completed(String)
     case failed(DictationFailure)
     case unpasted(String)
+
+    var isBusy: Bool { self == .preparing || self == .recording || self == .transcribing }
 }
 
 struct DictationFailure: Equatable {
@@ -83,6 +86,7 @@ final class AppModel {
         didSet {
             cardDismissal?.cancel()
             cardDeadline = nil
+            if phase.isBusy != oldValue.isBusy { onBusyChange?(phase.isBusy) }
             onPresentationChange?()
         }
     }
@@ -115,6 +119,7 @@ final class AppModel {
     var microphones: [AudioInputDevice] = []
     var automaticMicrophone: AudioInputDevice?
     var onPresentationChange: (() -> Void)?
+    var onBusyChange: ((Bool) -> Void)?
     var onShowDashboard: (() -> Void)?
     var onShowNotetaker: ((UUID) -> Void)?
 
@@ -123,6 +128,7 @@ final class AppModel {
     @ObservationIgnored private let startsServices: Bool
     @ObservationIgnored private let correctionWatcher = CorrectionWatcher()
     @ObservationIgnored private let globalShortcut = GlobalShortcut()
+    @ObservationIgnored private let cancelShortcut = GlobalShortcut(id: 2)
     @ObservationIgnored private var microphoneObserver: AudioInputObserver?
     @ObservationIgnored private var shortcutWarning: String?
     @ObservationIgnored private var provider: (any SpeechProvider)?
@@ -146,7 +152,7 @@ final class AppModel {
     var modelRevision = 0
 
     var selectedModel: SpeechModel { models.first { $0.id == settings.selectedModelID } ?? models[0] }
-    var isBusy: Bool { phase == .preparing || phase == .recording || phase == .transcribing }
+    var isBusy: Bool { phase.isBusy }
     var isInstalling: Bool { installation != nil && installation?.failure == nil }
     var needsOnboarding: Bool { storageIsReadable && settings.completedOnboardingVersion < Self.onboardingVersion }
     var failure: DictationFailure? { if case .failed(let failure) = phase { failure } else { nil } }
@@ -193,6 +199,8 @@ final class AppModel {
         meetingDetector.isEnabled = settings.detectMeetings
         globalShortcut.onPress = { [weak self] in self?.shortcutPressed() }
         globalShortcut.onRelease = { [weak self] in self?.shortcutReleased() }
+        cancelShortcut.onPress = { [weak self] in self?.cancelRecording() }
+        onBusyChange = { [weak self] busy in self?.armCancelShortcut(busy) }
         warmUpSelectedModel()
         let warmUpAfterWake: @Sendable (Notification) -> Void = { [weak self] _ in
             MainActor.assumeIsolated { self?.warmUpSelectedModel(after: .seconds(3)) }
@@ -231,6 +239,11 @@ final class AppModel {
     }
 
     func suspendShortcut() { globalShortcut.unregister() }
+
+    private func armCancelShortcut(_ busy: Bool) {
+        if busy { cancelShortcut.register(keyCode: UInt32(kVK_Escape), modifiers: settings.shortcut.cancelModifiers) }
+        else { cancelShortcut.unregister() }
+    }
 
     func changeShortcut(_ shortcut: DictationShortcut) {
         guard !isBusy else { return }

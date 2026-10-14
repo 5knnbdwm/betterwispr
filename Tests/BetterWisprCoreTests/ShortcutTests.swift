@@ -42,6 +42,18 @@ import Testing
     #expect(transitions == [true, false, true, false])
 }
 
+@Test func escapeCancelsUnderTheModifiersStillHeldFromTheDictationShortcut() throws {
+    let rightCommand = try #require(DictationShortcut(keyCode: UInt32(kVK_RightCommand), modifiers: [], key: "Right Command"))
+    let f5 = try #require(DictationShortcut(keyCode: UInt32(kVK_F5), modifiers: [], key: "F5"))
+    let optionEscape = try #require(DictationShortcut(keyCode: UInt32(kVK_Escape), modifiers: .option, key: "Esc"))
+    let commandShiftD = try #require(DictationShortcut(keyCode: UInt32(kVK_ANSI_D), modifiers: [.command, .shift], key: "D"))
+    #expect(DictationShortcut.optionSpace.cancelModifiers == [[], .option])
+    #expect(rightCommand.cancelModifiers == [[], .command])
+    #expect(f5.cancelModifiers == [[]])
+    #expect(optionEscape.cancelModifiers == [[]])
+    #expect(commandShiftD.cancelModifiers == [[], [.command, .shift]])
+}
+
 @Test @MainActor func eachShortcutAnswersOnlyItsOwnCarbonHotKey() throws {
     let dictation = GlobalShortcut()
     let cancel = GlobalShortcut(id: 2)
