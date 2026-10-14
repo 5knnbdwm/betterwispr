@@ -210,6 +210,7 @@ func notesAPIFailuresNeverProduceASummary(path: String) async throws {
     let loginShell = directory.appendingPathComponent("login-shell").path
     let bannerThenPATHThenCommand = """
     #!/bin/sh
+    [ "$1 $2" = "-l -i" ] || exit 1
     /usr/bin/head -c 3000000 /dev/zero | /usr/bin/tr '\\0' x; echo
     /bin/sleep 0.3
     export PATH="\(bin.path):$PATH"
