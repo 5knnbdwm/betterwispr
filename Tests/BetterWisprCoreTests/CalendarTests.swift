@@ -78,6 +78,7 @@ private func event(_ id: String, from start: TimeInterval, to end: TimeInterval,
     #expect(meeting.title == "Design review")
     #expect(meeting.attendees == ["Ada Lovelace", "grace@example.com"])
     #expect(meeting.eventID == "event-1")
+    #expect(model.runs[meeting.id]?.hints == ["Ada Lovelace"])
     #expect(store.load().meetings == [meeting])
 
     model.stop()
