@@ -14,7 +14,7 @@ public struct MeetingSegment: Codable, Identifiable, Equatable, Sendable {
     public var duration: TimeInterval
     public var text: String
     public var rawText: String
-    /// Which voice on the call said this, numbered by first appearance; nil for Me and before speakers are found.
+    /// Which voice on the call said this; nil for Me and for remote lines with no speaker yet.
     public var participant: Int?
 
     public init(id: UUID = UUID(), speaker: Speaker, start: TimeInterval, duration: TimeInterval, text: String, rawText: String, participant: Int? = nil) {
@@ -124,12 +124,13 @@ public struct Meeting: Codable, Identifiable, Equatable, Sendable {
         transcriptSegments.map { "[\($0.timestamp)] \($0.label(names: participantNames)): \($0.text)" }.joined(separator: "\n")
     }
 
-    /// Voices found on the call, in the order they first spoke.
+    /// Speaker numbers used on the call, lowest first.
     public var participants: [Int] { Set(segments.compactMap(\.participant)).sorted() }
 
-    /// The lowest speaker number that no line or saved name uses yet.
+    /// The lowest speaker number that no line or non-blank saved name uses yet.
     public var nextParticipant: Int {
-        let used = Set(participants).union((participantNames ?? [:]).keys)
+        let named = (participantNames ?? [:]).filter { !$0.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.keys
+        let used = Set(participants).union(named)
         var number = 1
         while used.contains(number) { number += 1 }
         return number

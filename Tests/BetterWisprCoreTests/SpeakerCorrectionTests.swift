@@ -47,6 +47,7 @@ private func labels(_ meeting: Meeting) -> [String] {
     #expect(call([]).nextParticipant == 1)
     #expect(call([1, 3, 1]).nextParticipant == 2)
     #expect(call([1, 3], names: [2: "Ana"]).nextParticipant == 4)
+    #expect(call([1, 3], names: [2: " "]).nextParticipant == 2)
 }
 
 @Test func mergingRelabelsEveryLineAndCarriesTheNameAcross() {

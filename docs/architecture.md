@@ -164,8 +164,9 @@ tabs backed by the existing meeting fields.
 Speaker labels can be fixed after a meeting. A remote line's speaker name in the
 transcript opens a menu, also on right-click, that calls
 `Meeting.assign(segment:toParticipant:)` to move that line to another speaker, to
-plain "Them", or to a new speaker numbered by `Meeting.nextParticipant`, the
-lowest number no line or saved name uses. The Merge into menu beside each name
+plain "Them" while some remote lines have no speaker, or to a new speaker
+numbered by `Meeting.nextParticipant`, the lowest number no line or non-blank
+saved name uses. The Merge into menu beside each name
 calls `Meeting.mergeParticipant(_:into:)`, which relabels every line of one
 speaker as another, moves the name across when the target has none and drops the
 old number's name. Me lines never move, because echo removal and the notes prompt

@@ -94,7 +94,8 @@ download card have not been exercised in the app, and no download was run.
   Them line's speaker name, choose New speaker, and check it reads Speaker 1 and a
   name field appears. Right-click the line's bubble and check the same menu opens
   rather than only the text menu.
-- [ ] Move a line to another speaker and back to Them. Me lines show no menu.
+- [ ] Move a line to another speaker and back to Them. Me lines show no speaker
+  menu, and right-clicking a Me line's selected text still offers Copy.
 - [ ] With two or more speakers, use Merge into on one. Its lines take the other
   speaker's label, a typed name moves across when the target has none, and the
   summary shows as out of date.

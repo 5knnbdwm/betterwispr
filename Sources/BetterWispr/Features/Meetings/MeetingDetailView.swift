@@ -496,6 +496,7 @@ struct MeetingDetailView: View {
             }
         }
         .pickerStyle(.inline)
+        Divider()
         Button("New speaker") { meetings.edit(id) { $0.assign(segment: segment.id, toParticipant: $0.nextParticipant) } }
     }
 
@@ -610,6 +611,14 @@ private struct SegmentRow<SpeakerChoices: View>: View {
     @ViewBuilder let speakerChoices: () -> SpeakerChoices
 
     var body: some View {
+        if canChangeSpeaker {
+            row.contextMenu(menuItems: speakerChoices)
+        } else {
+            row
+        }
+    }
+
+    private var row: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Circle().fill(segment.speaker == .me ? Color.green : voiceColor(segment.participant)).frame(width: 6, height: 6)
@@ -634,7 +643,6 @@ private struct SegmentRow<SpeakerChoices: View>: View {
                 .bubble()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .contextMenu { if canChangeSpeaker { speakerChoices() } }
     }
 }
 
