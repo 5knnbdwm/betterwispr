@@ -98,15 +98,17 @@ behavior that unit tests cannot establish.
 
 ## Meeting notes flow
 
-`MeetingModel` owns meetings and is separate from dictation. It loads its own
-speech provider with `download: false` and releases it when the meeting ends.
+`MeetingModel` owns meetings and is separate from dictation. Each meeting loads
+its own speech provider with `download: false` and releases it once its last
+chunks are transcribed and its speakers are found.
 The Notetaker page's settings menu exposes the same model and microphone
 selection as dictation, plus the notes model; both use `SpeechModel.makeProvider()` with independent
 provider instances. The model name is captured when recording starts. The page
 lists notes by day beside the current note (the one recording, otherwise the
 latest); `MeetingModel.selectedID` opens one full page, and nil returns to the
 list. Starting a meeting docks its card beside the call and leaves the dashboard
-on the list; the finished note opens there once notes are written. Personal thoughts, the transcript, and the generated summary have separate
+on the list; the finished note opens there once notes are written, unless
+another meeting is recording by then. Personal thoughts, the transcript, and the generated summary have separate
 tabs backed by the existing meeting fields.
 
 1. Starting a meeting saves an empty `Meeting`, checks microphone permission and
@@ -135,7 +137,9 @@ tabs backed by the existing meeting fields.
    (FluidAudio issue 878 crashes its Core ML path on macOS 14), each transcribed
    "Them" chunk is also resampled to 16 kHz mono and appended to one
    `SpeakerRecording` file, which remembers where each segment sits in it.
-4. Stopping closes both sources and transcribes the remaining chunks. If a
+4. Stopping closes both sources and transcribes the remaining chunks. The next
+   meeting can start as soon as the recorder has handed those chunks off, while
+   the stopped one keeps transcribing, finding speakers and writing notes. If a
    `SpeakerRecording` exists, FluidAudio's `OfflineDiarizerManager` (pyannote
    community-1 with VBx clustering) runs on it with models that
    `SpeakerDetection.loadModels` reads from disk; it never downloads. Each "Them"
@@ -157,8 +161,15 @@ tabs backed by the existing meeting fields.
    speaker detection file is deleted after detection, on cancel and at quit, and
    shares the chunk prefix, so launch cleanup removes it too.
 
-A session token guards every continuation, so a stopped or quit meeting never
-receives a late segment or summary.
+Each meeting being captured or processed is a `MeetingRun` in
+`MeetingModel.runs`. One run records at a time and any number process. Every
+continuation checks that its run is still the one registered for its meeting,
+so a cancelled or quit meeting never receives a late segment or summary. The
+recorder's chunks go to `recorderOwner`, and a new meeting waits for the stopped
+one's `MeetingRecorder.stop()` before it takes the recorder, so a stopped
+meeting's last chunks never land in the next one. Cancelling a meeting that is
+still starting stops the recorder only if that meeting holds it. While two
+meetings overlap, each holds its own loaded speech model.
 
 ### Meeting detection
 
@@ -181,8 +192,9 @@ local state and never records anything itself.
    again every 3 seconds.
 4. Each call is offered once. Starting the notetaker, choosing Not now or letting
    the prompt expire after 30 seconds marks that app's call as answered. Calls
-   that run while the notetaker is active are answered too. An app's answer is
-   forgotten when it stops recording.
+   that run while the notetaker records are answered too. A new call is offered
+   while an earlier meeting is still processing. An app's answer is forgotten
+   when it stops recording.
 
 `AppSettings.notesSelection` resolves the legacy Ollama choice plus the new optional
 CLI or notes-connection selection. Old workspaces decode without changing providers.

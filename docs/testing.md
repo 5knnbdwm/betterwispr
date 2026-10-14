@@ -986,6 +986,19 @@ were not exercised in this UI pass.
   summary says Ollama isn't running; Apple Intelligence is never used instead.
 - [ ] Disconnect networking, then start, record, stop and summarize a meeting with
   an installed model. Everything works and a network monitor shows no requests.
+- [ ] Back-to-back meetings: stop a meeting with speech in its last seconds and
+  start the next one at once. The capsule offers the next call, the docked card
+  switches to the new meeting, and the first meeting's row shows Transcribing,
+  Finding speakers and then Writing summary. Its last words stay in its own
+  transcript and never appear in the new one. The new meeting records and
+  transcribes normally, and the dashboard does not jump to the first note while
+  the new one records.
+- [ ] Back-to-back meetings: cancel the new meeting while it says Preparing. The
+  first meeting still finishes its transcript and notes. Repeat with Cancel on
+  the first meeting's Writing summary step; the new meeting keeps recording.
+- [ ] Back-to-back meetings: quit mid-overlap. Both meetings are kept with their
+  durations and no `betterwispr-meeting-*.caf` files remain in the temporary
+  folder.
 
 ## Accuracy
 
