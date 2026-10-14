@@ -154,6 +154,7 @@ import Testing
     model.onBusyChange = { armed.append($0) }
 
     model.toggleRecording()
+    #expect(model.phase == .preparing && armed == [true])
     model.phase = .recording
     model.phase = .transcribing
     model.cancelRecording()
