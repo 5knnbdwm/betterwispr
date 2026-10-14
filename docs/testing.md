@@ -6,6 +6,42 @@ version, Mac model, input device, engine/model and date for future runs. A
 successful build does not verify microphone capture, clipboard behavior or
 general recognition accuracy.
 
+## Speaker detection check, 2026-10-14, version 0.1.6
+
+Apple M4 Pro, macOS 27.0.1, debug builds. `swift build`, all 168 tests in
+`swift test` and `./scripts/build-app.sh` passed. Tests cover the install check
+(the marker and every pinned model folder must exist) and a cancelled wait
+returning within 5 seconds while the work behind it keeps running.
+`swift run BetterWisprCLI --download-speaker-detection` installed 15,468,430
+bytes of models into
+`~/Library/Application Support/BetterWispr/Models/models/argmaxinc/speakerkit-coreml`
+and its verification load passed. A stand-in 0.1.5 folder at
+`~/Library/Application Support/FluidAudio/Models/speaker-diarization` holding
+the BetterWispr install marker was removed after the install, and the Parakeet
+folder beside it was left alone. `--model parakeet-110m --meeting` ran on
+16 kHz WAV files made with `say`, alternating Samantha and Daniel. With 0.5 s
+pauses the four lines were labelled 1, 2, 1, 2. With no pauses, the 20-second
+chunks were cut at 10.3, 21.1 and 30.8 s, within 0.15 s of the real voice
+changes, into five lines labelled 1, 2, 2, 1, 2, which matches who spoke. These
+are synthetic voices, not people on a call. macOS 14, an Intel Mac, a real
+call, Skip and quitting during detection in the app, and the Models download
+button have not been exercised.
+
+- [ ] On macOS 14.2 or later, install Speaker detection in Models. Hold a call
+  with at least two remote people, stop the meeting and check that "Telling the
+  speakers on the call apart" appears, then Speaker 1, Speaker 2 labels and name
+  fields. Type a name and check the transcript, Copy transcript and regenerated
+  notes.
+- [ ] Press Skip during detection. The notes start at once and the meeting keeps
+  Them.
+- [ ] Quit during detection, relaunch and check no `betterwispr-meeting-voices-`
+  file is left in the temporary folder.
+- [ ] With 0.1.5's Speaker detection installed, update to 0.1.6. Models shows
+  Speaker detection as not downloaded. Download it and check that
+  `~/Library/Application Support/FluidAudio/Models/speaker-diarization` is gone.
+- [ ] Turn off Wi-Fi after installing and run a meeting. Speakers are labelled
+  without network access.
+
 ## Accuracy and meetings check, 2026-10-12, version 0.1.5
 
 Apple M5, macOS 27.0.1, release builds of `BetterWisprCLI`. Every check below
@@ -62,7 +98,8 @@ UI automation was not enabled for this session.
 
 macOS 27.0.1. `swift run BetterWisprCLI --download-speaker-detection` installed
 21 MB into `~/Library/Application Support/FluidAudio/Models/speaker-diarization`
-and its verification load passed. `--find-speakers` ran the app's
+and its verification load passed. `--find-speakers`, since replaced by
+`--meeting`, ran the app's
 `SpeakerRecording` path on two 35.5 second WAV files made with `say`, cut into
 5-second pieces. Lines were Samantha (0 to 9.8 s), Daniel (to 21.6 s), Samantha
 (to 26.6 s) and a third voice. With Rishi as the third voice the pieces were
@@ -71,17 +108,8 @@ Karen was merged into Samantha (1, 1, 2, 2, 1, 1, 1, 1): two similar synthetic
 female voices became one speaker. Each run took about 3 seconds and left no
 temporary files. These are synthetic voices, not people on a call. A real call,
 Skip, quitting during detection, renaming in the app and macOS 14 hiding the
-download have not been exercised.
-
-- [ ] Install Speaker detection in Models on macOS 15 or later. Hold a call with at
-  least two remote people, stop the meeting and check that "Telling the speakers
-  on the call apart" appears, then Speaker 1, Speaker 2 labels and name fields.
-  Type a name and check the transcript, Copy transcript and regenerated notes.
-- [ ] Press Skip during detection. The meeting keeps Them and writes notes.
-- [ ] Quit during detection, relaunch and check no `betterwispr-meeting-voices-`
-  file is left in the temporary folder.
-- [ ] On macOS 14, Models shows Speaker detection as needing macOS 15 and offers no
-  download.
+download have not been exercised. The remaining steps moved to the 0.1.6 check
+above.
 
 ## Speaker correction check, 2026-10-14, version 0.1.6
 
