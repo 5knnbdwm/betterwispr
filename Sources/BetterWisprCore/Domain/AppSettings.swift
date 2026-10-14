@@ -44,6 +44,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var modes: [WritingMode] = []
     /// Nil uses Automatic: the macOS default input, or the built-in mic instead of a Bluetooth headset while the lid is open.
     public var microphone: AudioInputDevice?
+    /// The user closed the meeting card that offers the speaker detection download.
+    public var dismissedSpeakerDetectionOffer: Bool = false
     /// The Ollama model that writes meeting notes; nil uses Apple Intelligence.
     public var notesModel: String?
     /// The newest onboarding the user finished or skipped; 0 shows it again.
@@ -113,6 +115,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         dictationMode = try container.decodeIfPresent(DictationMode.self, forKey: .dictationMode) ?? .hold
         shortcut = try container.decodeIfPresent(DictationShortcut.self, forKey: .shortcut) ?? .optionSpace
         microphone = try container.decodeIfPresent(AudioInputDevice.self, forKey: .microphone)
+        dismissedSpeakerDetectionOffer = try container.decodeIfPresent(Bool.self, forKey: .dismissedSpeakerDetectionOffer) ?? false
         learnCorrections = try container.decodeIfPresent(Bool.self, forKey: .learnCorrections) ?? true
         cleanup = try container.decodeIfPresent(CleanupLevel.self, forKey: .cleanup) ?? .light
         useScreenContext = try container.decodeIfPresent(Bool.self, forKey: .useScreenContext) ?? false
