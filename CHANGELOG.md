@@ -6,6 +6,12 @@ All notable changes to BetterWispr are listed here. The format follows
 
 ## [0.1.6] - 2026-10-14
 
+### Added
+- Press Escape to cancel a dictation from any app while it is starting, recording or transcribing. Escape also works with your shortcut's Option, Control or Shift still held, but never with Command, so Command-Option-Escape stays Force Quit. Undo still appears when audio was captured. Escape goes back to the app you're in as soon as the dictation ends.
+
+### Changed
+- Start the next meeting while the last one is still processing. Stopping a meeting no longer locks the notetaker while it transcribes its last chunks, finds speakers and writes notes. The capsule, the menu bar and the dashboard can start a new meeting right away, and the stopped one finishes on its own. Its last words stay in its own transcript, and the dashboard does not jump to its note while the new meeting records. Skip, Cancel and Update summary act on one meeting. While two meetings overlap, each holds its own copy of the speech model.
+
 ## [0.1.5] - 2026-10-12
 
 ### Added
