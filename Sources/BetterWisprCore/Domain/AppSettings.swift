@@ -24,6 +24,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
     /// Shows Parakeet's provisional words in the capsule while recording.
     public var showLiveText: Bool = true
     public var soundEffects: Bool = true
+    /// Pauses Music and Spotify while the microphone is open, then resumes only what it paused.
+    public var pauseMediaWhileDictating: Bool = false
     /// Offers the notetaker when a known call app or web meeting starts recording.
     public var detectMeetings: Bool = true
     public var theme: AppTheme = .dark
@@ -107,6 +109,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         showCapsule = try container.decode(Bool.self, forKey: .showCapsule)
         showLiveText = try container.decodeIfPresent(Bool.self, forKey: .showLiveText) ?? true
         soundEffects = try container.decodeIfPresent(Bool.self, forKey: .soundEffects) ?? true
+        pauseMediaWhileDictating = try container.decodeIfPresent(Bool.self, forKey: .pauseMediaWhileDictating) ?? false
         detectMeetings = try container.decodeIfPresent(Bool.self, forKey: .detectMeetings) ?? true
         theme = try container.decodeIfPresent(AppTheme.self, forKey: .theme) ?? .dark
         launchAtLogin = try container.decode(Bool.self, forKey: .launchAtLogin)

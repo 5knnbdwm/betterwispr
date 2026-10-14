@@ -34,6 +34,7 @@ import Testing
     #expect(settings.dictationMode == .hold)
     #expect(!settings.copyToClipboard)
     #expect(settings.soundEffects)
+    #expect(!settings.pauseMediaWhileDictating)
     #expect(!settings.showInDock)
     #expect(settings.theme == .dark)
     #expect(settings.shortcut == .optionSpace)
@@ -46,6 +47,7 @@ import Testing
     toggled.onboardingStep = 2
     toggled.copyToClipboard = true
     toggled.soundEffects = false
+    toggled.pauseMediaWhileDictating = true
     toggled.showInDock = true
     toggled.theme = .system
     toggled.microphone = AudioInputDevice(id: "AppleUSBAudioEngine:Shure:MV7:1", name: "Shure MV7")
