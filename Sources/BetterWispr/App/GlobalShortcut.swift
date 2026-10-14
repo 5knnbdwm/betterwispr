@@ -2,6 +2,7 @@ import AppKit
 import BetterWisprCore
 import Carbon
 import IOKit.hidsystem
+import OSLog
 
 @MainActor
 final class GlobalShortcut {
@@ -44,9 +45,11 @@ final class GlobalShortcut {
         guard installHandler() else { return false }
         for modifier in modifiers {
             var hotKey: EventHotKeyRef?
-            if RegisterEventHotKey(keyCode, modifier.rawValue, identifier, GetApplicationEventTarget(), 0, &hotKey) == noErr,
-               let hotKey {
+            let status = RegisterEventHotKey(keyCode, modifier.rawValue, identifier, GetApplicationEventTarget(), 0, &hotKey)
+            if status == noErr, let hotKey {
                 hotKeys.append(hotKey)
+            } else {
+                Logger(subsystem: "org.betterwispr.app", category: "GlobalShortcut").error("Hot key registration failed: id=\(self.identifier.id) keyCode=\(keyCode) modifiers=\(modifier.symbols, privacy: .public) status=\(status)")
             }
         }
         return hotKeys.count == modifiers.count
