@@ -1,90 +1,87 @@
 @preconcurrency import AVFoundation
-@preconcurrency import CoreML
-import FluidAudio
 import Foundation
+import SpeakerKit
+import WhisperKit
 
-public enum SpeakerDetectionError: LocalizedError {
-    case damaged
-
-    public var errorDescription: String? {
-        "The speaker detection model is damaged. Download it again in Models."
-    }
-}
-
-/// Tells the voices on the other side of a call apart after a meeting, on this Mac, with FluidAudio's offline pyannote pipeline.
+/// Tells the voices on the other side of a call apart after a meeting, on this Mac.
 public enum SpeakerDetection {
+    private static let repo = "argmaxinc/speakerkit-coreml"
+    private static let revision = "556fc52a13327837688f02289457cded017802e9"
+    private static let segmenter = ModelInfo.segmenter(variant: "W32A32")
+    private static let embedder = ModelInfo.embedder(variant: "W8A16")
+    private static let models = [
+        (info: segmenter, files: ["SpeakerSegmenter"]),
+        (info: embedder, files: ["SpeakerEmbedderPreprocessor", "SpeakerEmbedder"]),
+        (info: ModelInfo.plda(), files: ["PldaProjector"])
+    ]
+
     public static var directory: URL {
-        OfflineDiarizerModels.defaultModelsDirectory().appending(path: Repo.diarizer.folderName)
+        WhisperKitProvider.defaultModelsDirectory.appending(path: "models/\(repo)", directoryHint: .isDirectory)
     }
-
-    /// Apple fixed a crash in this pipeline's Core ML path in macOS 15 (FluidAudio issue 878).
-    public static var isSupported: Bool {
-        ProcessInfo.processInfo.isOperatingSystemAtLeast(OperatingSystemVersion(majorVersion: 15, minorVersion: 0, patchVersion: 0))
-    }
-
-    public static var isReady: Bool { isSupported && isInstalled() }
 
     public static func isInstalled(at directory: URL = directory) -> Bool {
-        FileManager.default.fileExists(atPath: directory.appending(path: ".betterwispr-installed").path)
-            && ModelNames.OfflineDiarizer.requiredModels.allSatisfy { FileManager.default.fileExists(atPath: directory.appending(path: $0).path) }
+        FileManager.default.fileExists(atPath: directory.appending(path: ".betterwispr-installed").path) && models.allSatisfy { model in
+            model.files.allSatisfy { FileManager.default.fileExists(atPath: model.info.modelURL(baseURL: directory).appending(path: "\($0).mlmodelc").path) }
+        }
     }
 
-    /// Downloads and verifies the models after an explicit installation action.
+    /// Downloads and verifies the pinned models after an explicit installation action, then removes the FluidAudio speaker models they replace.
     public static func install(progress: (@Sendable (Double) -> Void)? = nil) async throws {
-        let directory = directory
-        try FileManager.default.createDirectory(at: directory.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try await ModelHub.download(.diarizer, to: directory.deletingLastPathComponent(), variant: "offline") {
-            progress?(ParakeetProvider.downloadedFraction($0))
+        let base = WhisperKitProvider.defaultModelsDirectory
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        let downloader = ModelDownloader(config: ModelDownloadConfig(downloadBase: base.path, modelRepo: repo, revision: revision))
+        do {
+            _ = try await downloader.resolveRepo(patterns: models.map(\.info.downloadPattern), downloadBase: base, download: true) {
+                progress?($0.fractionCompleted)
+            }
+        } catch {
+            throw WhisperKitProvider.readableDownloadError(error)
         }
         try Task.checkCancellation()
-        _ = try loadModels(from: directory)
+        _ = try await diarizer(from: directory)
         try Task.checkCancellation()
-        try Data(directory.lastPathComponent.utf8).write(to: directory.appending(path: ".betterwispr-installed"), options: .atomic)
+        try Data(revision.utf8).write(to: directory.appending(path: ".betterwispr-installed"), options: .atomic)
+        let legacy = URL.applicationSupportDirectory.appending(path: "FluidAudio/Models/speaker-diarization", directoryHint: .isDirectory)
+        if FileManager.default.fileExists(atPath: legacy.appending(path: ".betterwispr-installed").path) {
+            try? FileManager.default.removeItem(at: legacy)
+        }
     }
 
     /// Loads only files already on disk, so a missing or damaged model fails instead of downloading again.
-    static func loadModels(from directory: URL) throws -> OfflineDiarizerModels {
-        let names = ModelNames.OfflineDiarizer.self
-        func model(_ name: String, on units: MLComputeUnits) throws -> MLModel {
-            let configuration = MLModelConfiguration()
-            configuration.computeUnits = units
-            configuration.allowLowPrecisionAccumulationOnGPU = true
-            return try MLModel(contentsOf: directory.appending(path: name), configuration: configuration)
-        }
-        return OfflineDiarizerModels(
-            segmentationModel: try model(names.segmentationPath, on: .all), fbankModel: try model(names.fbankPath, on: .cpuOnly),
-            embeddingModel: try model(names.embeddingPath, on: .all), pldaRhoModel: try model(names.pldaRhoPath, on: .all),
-            pldaPsi: try pldaPsi(from: directory.appending(path: names.pldaParameters)), compilationDuration: 0)
+    static func diarizer(from directory: URL) async throws -> SpeakerKitDiarizer {
+        let diarizer = SpeakerKitDiarizer.pyannote(
+            config: PyannoteConfig(modelFolder: directory.path, download: false, load: false, verbose: false),
+            segmenterModelInfo: segmenter, embedderModelInfo: embedder)
+        try await diarizer.loadModels()
+        return diarizer
     }
 
-    private struct PLDAParameters: Decodable {
-        struct Tensors: Decodable { var psi: Tensor }
-        struct Tensor: Decodable { var data_base64: String }
-        var tensors: Tensors
-    }
-
-    /// Adapted from FluidAudio's private `OfflineDiarizerModels.loadPLDAPsi`.
-    static func pldaPsi(from url: URL) throws -> [Double] {
-        let encoded = try JSONDecoder().decode(PLDAParameters.self, from: Data(contentsOf: url)).tensors.psi.data_base64
-        guard let data = Data(base64Encoded: encoded, options: .ignoreUnknownCharacters), data.count >= MemoryLayout<Float>.size else {
-            throw SpeakerDetectionError.damaged
+    static func abandoningOnCancel<Value: Sendable>(_ work: @escaping @Sendable () async throws -> Value) async throws -> Value {
+        try Task.checkCancellation()
+        let (results, continuation) = AsyncThrowingStream<Value, any Error>.makeStream()
+        Task {
+            do {
+                continuation.yield(try await work())
+                continuation.finish()
+            } catch {
+                continuation.finish(throwing: error)
+            }
         }
-        var floats = [Float](repeating: 0, count: data.count / MemoryLayout<Float>.size)
-        _ = floats.withUnsafeMutableBytes { data.copyBytes(to: $0) }
-        return floats.map(Double.init)
+        for try await result in results { return result }
+        throw CancellationError()
     }
 
     /// Splits each segment into the voices heard in it, folding any stretch shorter than `shortest` seconds into a neighbour.
-    static func voiceTurns(turns: [TimedSpeakerSegment], placements: [SpeakerRecording.Placement], shortest: TimeInterval = 1) -> [UUID: [VoiceTurn]] {
-        let turns = turns.sorted { $0.startTimeSeconds < $1.startTimeSeconds }
+    static func voiceTurns(turns: [VoiceTurn], placements: [SpeakerRecording.Placement], shortest: TimeInterval = 1) -> [UUID: [VoiceTurn]] {
+        let turns = turns.sorted { $0.start < $1.start }
         var result: [UUID: [VoiceTurn]] = [:]
         for placement in placements {
             var runs: [VoiceTurn] = []
             for turn in turns {
-                let start = max(placement.start, Double(turn.startTimeSeconds), runs.last?.end ?? 0)
-                let end = min(placement.end, Double(turn.endTimeSeconds))
+                let start = max(placement.start, turn.start, runs.last?.end ?? 0)
+                let end = min(placement.end, turn.end)
                 guard end > start else { continue }
-                if runs.last?.voice == turn.speakerId { runs[runs.count - 1].end = end } else { runs.append(VoiceTurn(voice: turn.speakerId, start: start, end: end)) }
+                if runs.last?.voice == turn.voice { runs[runs.count - 1].end = end } else { runs.append(VoiceTurn(voice: turn.voice, start: start, end: end)) }
             }
             while runs.count > 1, let index = runs.indices.min(by: { runs[$0].length < runs[$1].length }), runs[index].length < shortest {
                 let neighbour = index == 0 ? 1 : index == runs.count - 1 || runs[index - 1].length >= runs[index + 1].length ? index - 1 : index + 1
@@ -149,7 +146,7 @@ public enum SpeakerDetection {
     }
 }
 
-/// One voice's stretch of a Them segment, in seconds from the start of that segment's audio.
+/// One voice's stretch of audio, in seconds.
 struct VoiceTurn: Equatable, Sendable {
     var voice: String
     var start: TimeInterval
@@ -178,7 +175,7 @@ public actor SpeakerRecording {
 
     public func append(_ chunk: URL, for segment: UUID) throws {
         guard let file else { return }
-        let samples = try AudioConverter().resampleAudioFile(chunk)
+        let samples = try ParakeetProvider.samples(of: chunk)
         guard !samples.isEmpty, let buffer = AVAudioPCMBuffer(pcmFormat: Self.format, frameCapacity: AVAudioFrameCount(samples.count)),
               let channel = buffer.floatChannelData?[0] else { return }
         samples.withUnsafeBufferPointer { channel.update(from: $0.baseAddress!, count: samples.count) }
@@ -192,10 +189,15 @@ public actor SpeakerRecording {
     func voiceTurns() async throws -> [UUID: [VoiceTurn]] {
         file = nil
         guard !placements.isEmpty else { return [:] }
-        let diarizer = OfflineDiarizerManager()
-        diarizer.initialize(models: try SpeakerDetection.loadModels(from: SpeakerDetection.directory))
-        let result = try await diarizer.process(url)
-        return SpeakerDetection.voiceTurns(turns: result.segments, placements: placements)
+        let audio = try ParakeetProvider.samples(of: url)
+        let result = try await SpeakerDetection.abandoningOnCancel {
+            try await SpeakerDetection.diarizer(from: SpeakerDetection.directory).diarize(audioArray: audio, options: nil, progressCallback: nil)
+        }
+        try Task.checkCancellation()
+        let turns = result.segments.compactMap { segment in
+            segment.speaker.speakerId.map { VoiceTurn(voice: String($0), start: TimeInterval(segment.startTime), end: TimeInterval(segment.endTime)) }
+        }
+        return SpeakerDetection.voiceTurns(turns: turns, placements: placements)
     }
 
     /// Writes one stretch of a segment's call audio to its own file, in seconds from the segment's start.

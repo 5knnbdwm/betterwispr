@@ -1,10 +1,9 @@
-import FluidAudio
 import Foundation
 import Testing
 @testable import BetterWisprCore
 
-private func turn(_ voice: String, _ start: Float, _ end: Float) -> TimedSpeakerSegment {
-    TimedSpeakerSegment(speakerId: voice, embedding: [], startTimeSeconds: start, endTimeSeconds: end, qualityScore: 1)
+private func turn(_ voice: String, _ start: TimeInterval, _ end: TimeInterval) -> VoiceTurn {
+    VoiceTurn(voice: voice, start: start, end: end)
 }
 
 @Test func speakerDetectionSplitsSegmentsAtVoiceChangesAndFoldsShortInterjections() {
@@ -109,21 +108,4 @@ private func turn(_ voice: String, _ start: Float, _ end: Float) -> TimedSpeaker
     #expect(legacy.participantNames == nil)
     #expect(legacy.segments.map(\.participant) == [nil])
     #expect(legacy.segments.map(\.text) == ["Hello"])
-}
-
-@Test func speakerDetectionReadsThePLDAParametersAndRejectsAnEmptyTensor() throws {
-    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-    defer { try? FileManager.default.removeItem(at: directory) }
-    let url = directory.appending(path: "plda-parameters.json")
-    func write(_ values: [Float]) throws {
-        let encoded = values.withUnsafeBytes { Data($0) }.base64EncodedString()
-        try Data(#"{"tensors":{"psi":{"data_base64":"\#(encoded)"}}}"#.utf8).write(to: url)
-    }
-
-    try write([1.5, -2, 0.25])
-    #expect(try SpeakerDetection.pldaPsi(from: url) == [1.5, -2, 0.25])
-    try write([])
-    #expect(throws: SpeakerDetectionError.self) { try SpeakerDetection.pldaPsi(from: url) }
-    #expect(!SpeakerDetection.isInstalled(at: directory))
 }

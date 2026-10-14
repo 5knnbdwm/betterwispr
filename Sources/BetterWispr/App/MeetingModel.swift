@@ -96,7 +96,7 @@ final class MeetingModel {
         systemAudioIssue = nil
         showsCallAudioHint = false
         heard = (false, false)
-        run.voices = SpeakerDetection.isReady ? try? SpeakerRecording() : nil
+        run.voices = SpeakerDetection.isInstalled() ? try? SpeakerRecording() : nil
         elapsed = 0
         let releasing = releasingRecorder
         run.work = Task { [weak self] in
