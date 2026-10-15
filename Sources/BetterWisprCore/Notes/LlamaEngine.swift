@@ -78,6 +78,7 @@ public final class LlamaEngine: Sendable {
         case loading([UUID: Waiter])
         case loaded(any LanguageWeights)
         case draining(any LanguageWeights)
+        case closing
     }
 
     struct State: Sendable {
@@ -173,7 +174,7 @@ public final class LlamaEngine: Sendable {
                 case .idle:
                     state.phase = .loading([id: continuation])
                     return .load
-                case .draining:
+                case .draining, .closing:
                     return .refuse
                 }
             }
@@ -194,7 +195,7 @@ public final class LlamaEngine: Sendable {
                 return (Array(waiters.values), nil, nil)
             }
             guard state.accepting else {
-                state.phase = .idle
+                state.phase = .closing
                 return (Array(waiters.values), weights, nil)
             }
             state.phase = .loaded(weights)
@@ -202,7 +203,7 @@ public final class LlamaEngine: Sendable {
             state.uses += 1
             return (Array(waiters.values), nil, waiters.isEmpty ? state.uses : nil)
         }
-        orphan?.close()
+        finishClosing(orphan)
         for waiter in waiters { orphan == nil ? waiter.resume(with: result) : waiter.resume(throwing: CancellationError()) }
         if let stamp { scheduleIdleUnload(stamp) }
     }
@@ -231,13 +232,13 @@ public final class LlamaEngine: Sendable {
             guard !state.holders else { return (nil, nil) }
             switch state.phase {
             case .draining(let weights):
-                state.phase = .idle
+                state.phase = .closing
                 return (weights, nil)
             case .loaded: return (nil, state.uses)
-            case .idle, .loading: return (nil, nil)
+            case .idle, .loading, .closing: return (nil, nil)
             }
         }
-        retired?.close()
+        finishClosing(retired)
         if let stamp { scheduleIdleUnload(stamp) }
     }
 
@@ -247,11 +248,17 @@ public final class LlamaEngine: Sendable {
             guard let self else { return }
             let retired = self.state.withLock { state -> (any LanguageWeights)? in
                 guard state.uses == stamp, !state.holders, case .loaded(let weights) = state.phase else { return nil }
-                state.phase = .idle
+                state.phase = .closing
                 return weights
             }
-            retired?.close()
+            self.finishClosing(retired)
         }
+    }
+
+    private func finishClosing(_ weights: (any LanguageWeights)?) {
+        guard let weights else { return }
+        weights.close()
+        state.withLock { $0.phase = .idle }
     }
 
     /// One step toward nothing loaded: frees idle weights, or cancels holders and lets the last one free them.
@@ -259,10 +266,10 @@ public final class LlamaEngine: Sendable {
         let (retired, done) = state.withLock { state -> ((any LanguageWeights)?, Bool) in
             switch state.phase {
             case .idle: return (nil, true)
-            case .loading, .draining: break
+            case .loading, .draining, .closing: break
             case .loaded(let weights):
                 guard state.holders else {
-                    state.phase = .idle
+                    state.phase = .closing
                     return (weights, true)
                 }
                 state.phase = .draining(weights)
@@ -270,7 +277,7 @@ public final class LlamaEngine: Sendable {
             for id in state.requests.keys { state.requests[id]?.cancelled = true }
             return (nil, false)
         }
-        retired?.close()
+        finishClosing(retired)
         return done
     }
 
