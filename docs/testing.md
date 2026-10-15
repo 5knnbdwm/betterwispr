@@ -8,12 +8,13 @@ general recognition accuracy.
 
 ## Built-in notes model check, 2026-10-15, version 0.1.6
 
-Apple M4 Pro with 48 GB, macOS 27.0.1, debug builds. `swift build`, all 222
+Apple M4 Pro with 48 GB, macOS 27.0.1, debug builds. `swift build`, all 223
 tests in `swift test` and `./scripts/build-app.sh` passed. The new tests use
 fake weights and small files, so none needs the download. They cover settings
 round trips, the install marker, prompt injection through control tokens,
 prompts and replies that overflow the window, timeouts, lane pauses, idle
-unload, shutdown during a load and shutdown waiting for an unload to finish.
+unload, a request that arrives while the weights close, shutdown during a load
+and shutdown waiting for an unload to finish.
 
 Memory figures below come from `/usr/bin/time -l`. Resident size counts the
 1.28 GB weights file, which is mapped rather than copied; the peak footprint is
@@ -30,7 +31,8 @@ the process's own memory.
   four-person launch meeting exited 0 in 10.00 s, with 1,522,106,368 bytes
   resident and a 293,799,928-byte footprint. After rebasing onto main it took
   52.74 s, of which 42.35 s was Parakeet preparation (0.24 s in the earlier
-  runs; the cause was not found and this change does not touch it), with
+  runs). A CLI built from main at `aa1f9c2` also took 22 s and 23 s to prepare,
+  so the slowdown is not from this change. The run had
   1,551,171,584 bytes resident and a 275,974,208-byte footprint. The notes
   repeated items and gave Priya's slides to Marco.
 - `--bench` with `--cleanup medium --notes-model builtin` on two `say` clips
@@ -51,9 +53,9 @@ the process's own memory.
   `@rpath/llama.framework/Versions/Current/llama` with the
   `@executable_path/../Frameworks` run path. Launched with a separate home
   folder (`CFFIXED_USER_HOME`) so the installed BetterWispr kept running, it
-  loaded the embedded framework, then quit through
-  `NSRunningApplication.terminate()` after 94 and 129 s, exited 0 and left no
-  crash report.
+  loaded the embedded framework in two launches. Each quit through
+  `NSRunningApplication.terminate()`, after 94 s and 129 s, exited 0 and left
+  no crash report.
 
 The Download, Cancel, Remove and Test buttons, Medium dictation, meeting notes
 and Ask in the app, quitting during a load, offline loading in the app, macOS

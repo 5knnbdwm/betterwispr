@@ -474,7 +474,8 @@ weights, then deletes the folder and leaves the selection alone.
 `LlamaEngine.shared` runs the file through llama.cpp's C API from the
 llama.swift package. One `OSAllocatedUnfairLock` holds its state: idle, loading
 (with the requests waiting for it), loaded, draining while running requests
-finish, or closing while the weights are freed. The weights are memory-mapped
+finish, or closing while the weights are freed. A request that arrives while
+they close waits and loads them again. The weights are memory-mapped
 with every layer on Metal. Each request opens its own 8,192-token context with a
 Q8_0 KV cache and frees it on its own thread, so requests share weights but
 never a context. Prompts use Qwen's chat template with thinking off. Template
