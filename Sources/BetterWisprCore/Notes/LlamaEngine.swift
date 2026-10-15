@@ -11,8 +11,8 @@ public struct ChatPrompt: Sendable, Equatable {
         self.user = user
     }
 
-    /// Qwen's ChatML with thinking turned off; message text is tokenized without special tokens so it cannot close a turn.
-    var segments: [(text: String, isTemplate: Bool)] {
+    /// Qwen's ChatML with thinking turned off.
+    var segments: [(text: String, parsesSpecialTokens: Bool)] {
         [("<|im_start|>system\n", true), (system, false), ("<|im_end|>\n<|im_start|>user\n", true), (user, false),
          ("<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n", true)]
     }
@@ -36,7 +36,6 @@ public enum LlamaEngineError: LocalizedError, Equatable {
     }
 }
 
-/// Loaded weights that hand out one fresh token stream per request; the seam tests fake.
 protocol LanguageWeights: AnyObject, Sendable {
     var contextLength: Int { get }
     func tokens(for prompt: ChatPrompt) throws -> [Int32]
@@ -44,22 +43,20 @@ protocol LanguageWeights: AnyObject, Sendable {
     func close()
 }
 
-/// One request's context, used and freed on the request's generation thread.
 protocol TokenStream: AnyObject {
     func prefill(_ tokens: ArraySlice<Int32>) throws
     func next() throws -> Int32?
     func append(_ token: Int32) throws -> [UInt8]
 }
 
-/// Owns the built-in model's lifetime: lazy load, concurrent requests in fresh contexts, lane priority, cancellation, idle unload and shutdown.
 public final class LlamaEngine: Sendable {
     public enum Lane: Sendable { case interactive, background }
     enum Verdict: Sendable { case proceed, pause, stop }
 
+    static let contextLength = 8192
     static let replyReserve = 1024
     static let prefillChunk = 256
 
-    /// The process's one engine over the installed built-in model; the app and the CLI shut it down before exiting.
     public static let shared = LlamaEngine {
         guard BuiltInModel.isInstalled() else { throw LlamaEngineError.modelMissing }
         return try LlamaWeights(contentsOf: BuiltInModel.fileURL)
@@ -100,19 +97,17 @@ public final class LlamaEngine: Sendable {
         self.load = load
     }
 
-    /// Generates a reply in a fresh context over the shared weights; cancelling the task stops it within one decode step.
+    /// Cancelling the task stops it within one decode step.
     public func complete(_ prompt: ChatPrompt, lane: Lane, grammar: String? = nil) async throws -> String {
         try await run(lane: lane) { weights, checkpoint in
             try Self.generate(prompt, grammar: grammar, limit: nil, with: weights, checkpoint: checkpoint)
         }
     }
 
-    /// Loads the weights, which also compiles the Metal library the first time.
     public func warmUp() async {
         _ = try? await run(lane: .interactive) { _, _ in () }
     }
 
-    /// Loads, prefills and samples one constrained token, proving the file, runtime and grammar work together.
     func verify(grammar: String) async throws {
         _ = try await run(lane: .interactive) { weights, checkpoint in
             try Self.generate(ChatPrompt(system: "Reply with JSON.", user: "Say hello."), grammar: grammar, limit: 1, with: weights, checkpoint: checkpoint)
@@ -261,31 +256,28 @@ public final class LlamaEngine: Sendable {
         state.withLock { $0.phase = .idle }
     }
 
-    /// One step toward nothing loaded: frees idle weights, or cancels holders and lets the last one free them.
-    private func retire() -> Bool {
-        let (retired, done) = state.withLock { state -> ((any LanguageWeights)?, Bool) in
-            switch state.phase {
-            case .idle: return (nil, true)
-            case .loading, .draining, .closing: break
-            case .loaded(let weights):
-                guard state.holders else {
-                    state.phase = .closing
-                    return (weights, true)
-                }
-                state.phase = .draining(weights)
-            }
-            for id in state.requests.keys { state.requests[id]?.cancelled = true }
-            return (nil, false)
-        }
-        finishClosing(retired)
-        return done
-    }
-
     private func drain() {
-        while !retire() { usleep(10_000) }
+        while true {
+            let (retired, unloaded) = state.withLock { state -> ((any LanguageWeights)?, Bool) in
+                switch state.phase {
+                case .idle: return (nil, true)
+                case .loading, .draining, .closing: break
+                case .loaded(let weights):
+                    guard state.holders else {
+                        state.phase = .closing
+                        return (weights, true)
+                    }
+                    state.phase = .draining(weights)
+                }
+                for id in state.requests.keys { state.requests[id]?.cancelled = true }
+                return (nil, false)
+            }
+            finishClosing(retired)
+            if unloaded { return }
+            usleep(10_000)
+        }
     }
 
-    /// Throws before opening a context when the prompt leaves less than the reply reserve, and when a reply fills the window; never truncates.
     static func generate(_ prompt: ChatPrompt, grammar: String?, limit: Int?, with weights: any LanguageWeights,
                          checkpoint: () -> Verdict) throws -> String {
         let tokens = try weights.tokens(for: prompt)
@@ -322,7 +314,7 @@ public final class LlamaEngine: Sendable {
 
 /// Owns one `llama_model`; `@unchecked Sendable` because the model is immutable after loading and llama.cpp allows contexts on separate threads to share it, and the engine calls `close` only after every context over it is freed.
 final class LlamaWeights: LanguageWeights, @unchecked Sendable {
-    let contextLength = 8192
+    let contextLength = LlamaEngine.contextLength
     private let model: OpaquePointer
     private let vocab: OpaquePointer
 
@@ -347,7 +339,7 @@ final class LlamaWeights: LanguageWeights, @unchecked Sendable {
     func tokens(for prompt: ChatPrompt) throws -> [Int32] {
         try prompt.segments.flatMap { segment in
             var tokens = [llama_token](repeating: 0, count: segment.text.utf8.count + 8)
-            let count = llama_tokenize(vocab, segment.text, Int32(segment.text.utf8.count), &tokens, Int32(tokens.count), false, segment.isTemplate)
+            let count = llama_tokenize(vocab, segment.text, Int32(segment.text.utf8.count), &tokens, Int32(tokens.count), false, segment.parsesSpecialTokens)
             guard count >= 0 else { throw LlamaEngineError.decodeFailed(count) }
             return tokens.prefix(Int(count))
         }
@@ -375,7 +367,6 @@ final class LlamaWeights: LanguageWeights, @unchecked Sendable {
     }
 }
 
-/// One request's context and grammar, created, used and freed on the request's generation thread.
 final class LlamaStream: TokenStream {
     private let context: OpaquePointer
     private let vocab: OpaquePointer
@@ -400,7 +391,6 @@ final class LlamaStream: TokenStream {
         guard status == 0 else { throw LlamaEngineError.decodeFailed(status) }
     }
 
-    /// Greedy choice; with a grammar, checks only the top token and masks the whole vocabulary only when the grammar rejects it.
     func next() throws -> Int32? {
         guard let logits = llama_get_logits_ith(context, -1) else { throw LlamaEngineError.decodeFailed(-1) }
         var token = Self.argmax(UnsafeBufferPointer(start: logits, count: vocabularySize))

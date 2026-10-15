@@ -52,11 +52,10 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var microphone: AudioInputDevice?
     /// The user closed the meeting card that offers the speaker detection download.
     public var dismissedSpeakerDetectionOffer: Bool = false
-    /// The Ollama model that writes meeting notes; nil uses Apple Intelligence.
+    /// The Ollama model that writes meeting notes.
     public var notesModel: String?
     /// Nil asks questions with the notes model.
     public var askSelection: NotesModelSelection?
-    /// The built-in model writes meeting notes; the CLI, connection and Ollama choices take precedence when set.
     public var notesBuiltIn: Bool = false
     /// The newest onboarding the user finished or skipped; 0 shows it again.
     public var completedOnboardingVersion: Int = 0

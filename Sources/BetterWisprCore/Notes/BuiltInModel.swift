@@ -2,7 +2,6 @@ import CryptoKit
 import Foundation
 import WhisperKit
 
-/// The pinned Qwen3.5 2B file BetterWispr downloads on request and runs in process with llama.cpp.
 public enum BuiltInModel {
     public static let displayName = "Qwen3.5 2B"
     public static let sizeLabel = "1.28 GB"
@@ -26,7 +25,7 @@ public enum BuiltInModel {
             && pinned.matchesSize(of: directory.appending(path: fileName))
     }
 
-    /// Downloads the pinned file after an explicit installation action, checks its size and SHA-256, loads it once and only then writes the marker; any failure deletes the download.
+    /// Downloads the pinned file after an explicit installation action; any failure deletes the download.
     public static func install(progress: (@Sendable (Double) -> Void)? = nil) async throws {
         guard !isInstalled() else { return }
         let base = WhisperKitProvider.defaultModelsDirectory
@@ -62,17 +61,14 @@ public enum BuiltInModel {
     }
 }
 
-/// A download pinned by exact size and SHA-256.
 struct PinnedFile: Sendable {
     let byteCount: Int
     let sha256: String
 
-    /// Compares only the size, so availability never reads 1.3 GB.
     func matchesSize(of url: URL) -> Bool {
         (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int) == byteCount
     }
 
-    /// Streams the file through SHA-256 in 8 MB reads, each freed by its own autorelease pool, stopping when the task is cancelled.
     func verify(_ url: URL) throws {
         guard matchesSize(of: url) else { throw BuiltInModelError.integrity }
         let handle = try FileHandle(forReadingFrom: url)
@@ -97,7 +93,6 @@ public enum BuiltInModelError: LocalizedError {
     }
 }
 
-/// The built-in backend behind `NotesLanguageModel`; polish and review use the interactive lane, notes and Test the background one.
 struct BuiltInNotesModel: NotesLanguageModel {
     let instructions: String
     let lane: LlamaEngine.Lane
@@ -116,7 +111,6 @@ struct BuiltInNotesModel: NotesLanguageModel {
 }
 
 extension NotesDraft {
-    /// GBNF for exactly the five fields `decode` reads, so the built-in model cannot reply with prose, fences or nested objects.
     static let grammar = #"""
         root ::= "{" ws "\"title\":" ws string "," ws "\"overview\":" ws string "," ws "\"keyPoints\":" ws list "," ws "\"decisions\":" ws list "," ws "\"actionItems\":" ws list ws "}"
         list ::= "[" ws ( string ( "," ws string )* )? ws "]"

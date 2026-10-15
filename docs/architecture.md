@@ -491,8 +491,9 @@ lane. Prefill runs in 256-token batches, and each request checks between batches
 and between tokens whether to go on: a background request pauses while an
 interactive one holds the weights, and a cancelled or timed-out request stops
 within one batch. The polisher's character budget for the built-in model is
-21,000, its 7,168 prompt tokens at the same 3 characters a token guessed for
-Apple's window, so it keeps screen context that Apple's 12,000 would drop.
+21,504, derived from its 7,168 prompt tokens at the same 3 characters a token
+guessed for Apple's window, so it keeps screen context that Apple's 12,000
+would drop.
 
 The weights load on first use, or 450 ms into a Medium dictation through
 `MeetingNotesGenerator.warmUp`, and unload after 300 seconds without a request.

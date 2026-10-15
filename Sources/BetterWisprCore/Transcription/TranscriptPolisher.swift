@@ -92,10 +92,8 @@ public enum TranscriptPolisher {
     /// Characters of prompt, request and reply that fit Apple's 4,096-token window, at a guessed 3 characters a token.
     static let appleBudget = 12_000
 
-    /// Characters of prompt, request and reply for the built-in model's 7,168 prompt tokens (8,192 less the reply reserve) at the same guess.
-    static let builtInBudget = 21_000
+    static let builtInBudget = (LlamaEngine.contextLength - LlamaEngine.replyReserve) * 3
 
-    /// The character budget of a model with a small fixed window; nil sends the context whole.
     static func budget(for selection: NotesModelSelection) -> Int? {
         switch selection {
         case .apple: appleBudget

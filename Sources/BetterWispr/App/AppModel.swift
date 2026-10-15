@@ -699,7 +699,6 @@ final class AppModel {
         }
     }
 
-    /// Downloads the built-in model, then makes it the notes model unless the user chose another one meanwhile.
     func installBuiltInModel() {
         guard !isInstalling else { return }
         let selection = settings.notesSelection
@@ -716,7 +715,6 @@ final class AppModel {
         }
     }
 
-    /// Frees and deletes the built-in model; the selection stays, so notes and Medium report it missing instead of switching models.
     func removeBuiltInModel() {
         guard !isInstalling, canEditConnections else { return }
         Task {

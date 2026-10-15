@@ -77,7 +77,7 @@ public enum MeetingNotesGenerator {
         return .unavailable("Apple Intelligence needs macOS 26. Choose the built-in model, Claude Code, Codex, Ollama or an API connection in Models.")
     }
 
-    /// `lowLatency` asks API and CLI models for minimal reasoning and puts built-in requests ahead of meeting notes; meeting notes keep the default requests.
+    /// `lowLatency` asks API and CLI models for minimal reasoning; meeting notes keep the default requests.
     static func languageModel(_ settings: AppSettings, instructions: String = NotesWriter.instructions,
                               lowLatency: Bool = false) throws -> any NotesLanguageModel {
         switch settings.notesSelection {
