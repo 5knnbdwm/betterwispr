@@ -72,16 +72,18 @@ struct PinnedFile: Sendable {
         (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int) == byteCount
     }
 
-    /// Streams the file through SHA-256 in 8 MB reads, stopping when the task is cancelled.
+    /// Streams the file through SHA-256 in 8 MB reads, each freed by its own autorelease pool, stopping when the task is cancelled.
     func verify(_ url: URL) throws {
         guard matchesSize(of: url) else { throw BuiltInModelError.integrity }
         let handle = try FileHandle(forReadingFrom: url)
         defer { try? handle.close() }
         var hasher = SHA256()
-        while let chunk = try handle.read(upToCount: 8 << 20), !chunk.isEmpty {
+        while try autoreleasepool(invoking: {
             try Task.checkCancellation()
+            guard let chunk = try handle.read(upToCount: 8 << 20), !chunk.isEmpty else { return false }
             hasher.update(data: chunk)
-        }
+            return true
+        }) {}
         let digest = hasher.finalize().map { String(format: "%02x", $0) }.joined()
         guard digest == sha256 else { throw BuiltInModelError.integrity }
     }
