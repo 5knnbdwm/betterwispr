@@ -356,11 +356,7 @@ final class MeetingModel {
         do {
             let labelled = try await detection.value
             guard owns(run) else { return }
-            if remembersVoices {
-                do { heardVoices[id] = HeardVoices(labelled.voices, among: try voiceStore.load()) } catch { voicesMessage = voicesError(error) }
-            }
-            edit(id, save: false) { $0.segments = labelled.segments }
-            saveNow(id)
+            applySpeakers(labelled, to: id)
         } catch {
             guard owns(run) else { return }
             if !(error is CancellationError), !detection.isCancelled {
@@ -368,6 +364,14 @@ final class MeetingModel {
             }
         }
         run.detection = nil
+    }
+
+    func applySpeakers(_ labelled: (segments: [MeetingSegment], voices: [Int: [Float]]), to id: UUID) {
+        if remembersVoices {
+            do { heardVoices[id] = HeardVoices(labelled.voices, among: try voiceStore.load()) } catch { voicesMessage = voicesError(error) }
+        }
+        edit(id, save: false) { $0.segments = labelled.segments }
+        saveNow(id)
     }
 
     private func writeNotes(for run: MeetingRun) async {
@@ -478,7 +482,7 @@ final class MeetingModel {
         }
     }
 
-    private func saveNow(_ id: UUID) {
+    func saveNow(_ id: UUID) {
         saves.removeValue(forKey: id)?.cancel()
         guard let meeting = meeting(id) else { return }
         do { try store.save(meeting) } catch { message = "This meeting couldn’t be saved. \(error.localizedDescription)" }
@@ -497,6 +501,15 @@ final class MeetingModel {
     func merge(_ source: Int, into target: Int, in id: UUID) {
         heardVoices[id]?.drop(source)
         edit(id) { $0.mergeParticipant(source, into: target) }
+    }
+
+    /// Forgets the remembered voice behind a speaker's suggestion once the user commits another name, including from the meeting it was remembered in.
+    func commitName(of number: Int, in id: UUID) {
+        guard let meeting = meeting(id) else { return }
+        do {
+            guard let rejected = try heardVoices[id]?.reject(number, in: meeting, from: voiceStore) else { return }
+            heardVoices[rejected.meetingID]?.drop(rejected.participant)
+        } catch { voicesMessage = voicesError(error) }
     }
 
     private func rememberNamedVoices(in meeting: Meeting) {

@@ -200,11 +200,18 @@ public struct HeardVoices: Sendable {
         suggestions[number] = nil
     }
 
-    /// Saves each speaker the user named who still has lines, and forgets the remembered voice behind any suggestion the user named someone else.
-    public mutating func remember(in meeting: Meeting, to store: VoiceStore) throws {
-        let rejected = rejected(in: meeting)
-        try store.replaceVoices(from: meeting.id, with: named(in: meeting), removing: rejected)
-        suggestions = suggestions.filter { !rejected.contains($0.value) }
+    /// Saves each speaker the user named who still has lines.
+    public func remember(in meeting: Meeting, to store: VoiceStore) throws {
+        try store.replaceVoices(from: meeting.id, with: named(in: meeting))
+    }
+
+    /// Forgets and returns the remembered voice behind a speaker's suggestion once the user has named that speaker someone else.
+    public mutating func reject(_ number: Int, in meeting: Meeting, from store: VoiceStore) throws -> KnownVoice? {
+        let name = Meeting.nameKey(meeting.participantNames?[number] ?? "")
+        guard let voice = suggestions[number], !name.isEmpty, name != Meeting.nameKey(voice.name) else { return nil }
+        try store.replaceVoices(from: meeting.id, with: named(in: meeting), removing: [voice])
+        suggestions[number] = nil
+        return voice
     }
 
     private func named(in meeting: Meeting) -> [KnownVoice] {
@@ -213,13 +220,6 @@ public struct HeardVoices: Sendable {
             let name = meeting.participantNames?[number]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             guard speaking.contains(number), !name.isEmpty, Meeting.nameKey(name) != suggestions[number].map({ Meeting.nameKey($0.name) }) else { return nil }
             return KnownVoice(name: name, meetingID: meeting.id, participant: number, embedding: embedding)
-        }
-    }
-
-    private func rejected(in meeting: Meeting) -> [KnownVoice] {
-        suggestions.sorted { $0.key < $1.key }.compactMap { number, voice in
-            let name = Meeting.nameKey(meeting.participantNames?[number] ?? "")
-            return name.isEmpty || name == Meeting.nameKey(voice.name) ? nil : voice
         }
     }
 }

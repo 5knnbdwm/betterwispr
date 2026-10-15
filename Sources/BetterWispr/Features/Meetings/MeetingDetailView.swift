@@ -12,6 +12,7 @@ struct MeetingDetailView: View {
     @State private var transcriptQuery = ""
     @State private var showsSearch = false
     @State private var showsEchoes = false
+    @FocusState private var focusedName: Int?
     @Namespace private var tabUnderline
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -488,6 +489,8 @@ struct MeetingDetailView: View {
                         .accessibilityHidden(true)
                     TextField("Speaker \(number)", text: participantName(number))
                         .textFieldStyle(.roundedBorder)
+                        .focused($focusedName, equals: number)
+                        .onSubmit { meetings.commitName(of: number, in: id) }
                         .accessibilityLabel("Name for speaker \(number)")
                     let suggestion = meetings.suggestedName(for: number, in: meeting)
                     if suggestion != nil || !meeting.unusedAttendees.isEmpty { nameMenu(meeting, number, suggestion: suggestion) }
@@ -497,6 +500,9 @@ struct MeetingDetailView: View {
         }
         .font(.callout)
         .help("Name the voices in this meeting. Names appear in the transcript and the notes.")
+        .onChange(of: focusedName) { left, _ in
+            if let left { meetings.commitName(of: left, in: id) }
+        }
     }
 
     private func nameMenu(_ meeting: Meeting, _ number: Int, suggestion: String?) -> some View {
@@ -508,7 +514,10 @@ struct MeetingDetailView: View {
                     Button("Sounds like \(suggestion)") { participantName(number).wrappedValue = suggestion }
                 }
                 ForEach(meeting.unusedAttendees, id: \.self) { attendee in
-                    Button(attendee) { participantName(number).wrappedValue = attendee }
+                    Button(attendee) {
+                        participantName(number).wrappedValue = attendee
+                        meetings.commitName(of: number, in: id)
+                    }
                 }
             }
         } label: {
