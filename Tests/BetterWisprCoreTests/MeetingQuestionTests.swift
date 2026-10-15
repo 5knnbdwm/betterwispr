@@ -130,6 +130,73 @@ import Testing
     #expect(await model.prompts.isEmpty)
 }
 
+@Test func catchUpReadsOnlyTheLastFiveMinutesOfSpeechAndNoThoughts() async throws {
+    var meeting = Meeting(title: "Standup", notes: "Ask about the budget", modelName: "Parakeet", language: "en")
+    meeting.insert(MeetingSegment(speaker: .them, start: 30, duration: 60, text: "Ended before the window.", rawText: ""))
+    meeting.insert(MeetingSegment(speaker: .them, start: 290, duration: 10, text: "Ended as the window opened.", rawText: ""))
+    meeting.insert(MeetingSegment(speaker: .them, start: 295, duration: 10, text: "Still talking as it opened.", rawText: ""))
+    meeting.insert(MeetingSegment(speaker: .me, start: 590, duration: 8, text: "Latest line.", rawText: ""))
+    let model = FakeAskModel(reply: "Two updates [1][2].")
+
+    let recent = MeetingQuestion.catchUp(meeting, at: 600)
+    _ = try await MeetingQuestion.ask(MeetingQuestion.catchUpQuestion, about: [recent], model: model, modelName: "Fake")
+
+    #expect(MeetingQuestion.catchUpWindow == 300)
+    #expect(recent.segments.map(\.text) == ["Still talking as it opened.", "Latest line."])
+    #expect(recent.id == meeting.id)
+    let prompt = try #require(await model.prompts.first)
+    #expect(prompt.contains("[1] 04:55 Them: Still talking as it opened.\n[2] 09:50 Me: Latest line.\n"))
+    #expect(!prompt.contains("budget"))
+    #expect(prompt.hasSuffix("Question: What did I miss in the last 5 minutes? Give the main points, decisions, and anything I was asked."))
+    #expect(!MeetingQuestion.catchUp(meeting, at: 900).hasContent)
+}
+
+@Test func catchUpOverBudgetDropsTheOldestLinesAndSendsTheRest() async throws {
+    var meeting = Meeting(modelName: "Parakeet", language: "en")
+    for second in stride(from: 300, to: 600, by: 2) {
+        meeting.insert(MeetingSegment(speaker: .them, start: TimeInterval(second), duration: 2,
+                                      text: "Update number \(second) with enough words to fill the budget.", rawText: ""))
+    }
+    let model = FakeAskModel(reply: "Updates [1].")
+
+    let recent = MeetingQuestion.catchUp(meeting, at: 600)
+    _ = try await MeetingQuestion.ask(MeetingQuestion.catchUpQuestion, about: [recent], model: model, modelName: "Fake")
+
+    #expect(recent.segments.count < meeting.segments.count)
+    #expect(recent.segments.count > 1)
+    #expect(recent.segments.map(\.id) == Array(meeting.segments.suffix(recent.segments.count).map(\.id)))
+    let prompt = try #require(await model.prompts.first)
+    #expect(prompt.contains("[\(recent.segments.count)] 09:58 Them: Update number 598"))
+    #expect(!prompt.contains("[\(recent.segments.count + 1)]"))
+}
+
+@Test func meetingFilterKeepsMeetingsFromTheChosenDaysWithTheChosenInvitee() throws {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = try #require(TimeZone(identifier: "America/Los_Angeles"))
+    let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 3, day: 20, hour: 9)))
+    func meeting(_ title: String, day: Int, hour: Int, with attendees: [String]? = nil) throws -> Meeting {
+        var meeting = Meeting(title: title, createdAt: try #require(calendar.date(from: DateComponents(year: 2026, month: 3, day: day, hour: hour))),
+                              modelName: "Parakeet", language: "en")
+        meeting.attendees = attendees
+        return meeting
+    }
+    let meetings = [
+        try meeting("This morning", day: 20, hour: 0, with: ["Debra", "ana@example.com"]),
+        try meeting("Last night", day: 19, hour: 23, with: ["Ana"]),
+        try meeting("Week start", day: 14, hour: 0),
+        try meeting("Too old", day: 13, hour: 23, with: ["Debra"]),
+    ]
+    func titles(_ filter: MeetingFilter) -> [String] { filter.apply(to: meetings, calendar: calendar, now: now).map(\.title) }
+
+    #expect(titles(MeetingFilter()) == ["This morning", "Last night", "Week start", "Too old"])
+    #expect(titles(MeetingFilter(days: 1)) == ["This morning"])
+    #expect(titles(MeetingFilter(days: 7)) == ["This morning", "Last night", "Week start"])
+    #expect(titles(MeetingFilter(attendee: "Debra")) == ["This morning", "Too old"])
+    #expect(titles(MeetingFilter(days: 7, attendee: "Debra")) == ["This morning"])
+    #expect(titles(MeetingFilter(attendee: "Nobody")).isEmpty)
+    #expect(MeetingFilter.attendees(in: meetings) == ["Ana", "ana@example.com", "Debra"])
+}
+
 private actor FakeAskModel: NotesLanguageModel {
     let reply: String
     private(set) var prompts: [String] = []

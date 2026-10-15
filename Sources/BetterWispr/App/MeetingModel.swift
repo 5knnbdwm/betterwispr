@@ -8,6 +8,10 @@ enum MeetingPhase: Equatable {
     var isCapturing: Bool { self == .starting || self == .recording }
 }
 
+enum AskThread: Hashable {
+    case meeting(UUID), allMeetings
+}
+
 /// One meeting's capture or processing, so a finished meeting keeps processing while the next one records.
 @MainActor @Observable
 final class MeetingRun {
@@ -44,6 +48,7 @@ final class MeetingModel {
     var levels: (me: Float, them: Float) = (0, 0)
     var elapsed: TimeInterval = 0
     var message: String?
+    var allMeetingsThread: [AskExchange] = []
     var systemAudioIssue: String?
     var microphone: AudioInputDevice?
     var showsCallAudioHint = false
@@ -56,6 +61,7 @@ final class MeetingModel {
     }
 
     @ObservationIgnored private let store: MeetingStore
+    @ObservationIgnored private var writableAskStore: AllMeetingsAskStore?
     @ObservationIgnored private let recorder = MeetingRecorder()
     /// The run that receives the recorder's chunks, including the last ones a stopped meeting hands off.
     @ObservationIgnored private var recorderOwner: MeetingRun?
@@ -74,6 +80,14 @@ final class MeetingModel {
         if !loaded.unreadable.isEmpty {
             let count = loaded.unreadable.count
             message = "\(count) meeting \(count == 1 ? "file" : "files") in \(self.store.directory.path) couldn’t be read and \(count == 1 ? "was" : "were") left untouched."
+        }
+        let askStore = AllMeetingsAskStore(url: self.store.directory.deletingLastPathComponent().appendingPathComponent("ask.json"))
+        do {
+            allMeetingsThread = try askStore.load()
+            writableAskStore = askStore
+        } catch {
+            let unreadable = "\(askStore.url.path) couldn’t be read and was left untouched, so new questions about all meetings won’t be saved."
+            message = [message, unreadable].compactMap { $0 }.joined(separator: " ")
         }
         recorder.onChunk = { [weak self] in self?.enqueue($0) }
         recorder.onLevels = { [weak self] in self?.receive($0) }
@@ -217,6 +231,31 @@ final class MeetingModel {
         }
     }
 
+    func thread(_ thread: AskThread) -> [AskExchange] {
+        switch thread {
+        case .meeting(let id): meeting(id)?.askThread ?? []
+        case .allMeetings: allMeetingsThread
+        }
+    }
+
+    func append(_ exchange: AskExchange, to thread: AskThread) {
+        switch thread {
+        case .meeting(let id): edit(id) { $0.askThread = ($0.askThread ?? []) + [exchange] }
+        case .allMeetings:
+            allMeetingsThread.append(exchange)
+            saveAllMeetingsThread()
+        }
+    }
+
+    func clear(_ thread: AskThread) {
+        switch thread {
+        case .meeting(let id): edit(id) { $0.askThread = nil }
+        case .allMeetings:
+            allMeetingsThread = []
+            saveAllMeetingsThread()
+        }
+    }
+
     func delete(_ id: UUID) {
         guard !isActive(id) else {
             message = "Stop this meeting before deleting it."
@@ -231,6 +270,11 @@ final class MeetingModel {
         }
         meetings.removeAll { $0.id == id }
         if selectedID == id { selectedID = nil }
+        let kept = allMeetingsThread.filter { !$0.answer.citations.contains { $0.line.meetingID == id } }
+        if kept.count != allMeetingsThread.count {
+            allMeetingsThread = kept
+            saveAllMeetingsThread()
+        }
     }
 
     func copy(_ id: UUID, transcriptOnly: Bool = false) {
@@ -424,6 +468,11 @@ final class MeetingModel {
         saves.removeValue(forKey: id)?.cancel()
         guard let meeting = meeting(id) else { return }
         do { try store.save(meeting) } catch { message = "This meeting couldn’t be saved. \(error.localizedDescription)" }
+    }
+
+    private func saveAllMeetingsThread() {
+        guard let writableAskStore else { return }
+        do { try writableAskStore.save(allMeetingsThread) } catch { message = "Questions about all meetings couldn’t be saved. \(error.localizedDescription)" }
     }
 
     private func discardIfEmpty(_ run: MeetingRun) {

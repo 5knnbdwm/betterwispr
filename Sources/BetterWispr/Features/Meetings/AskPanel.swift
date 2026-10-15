@@ -1,27 +1,22 @@
 import BetterWisprCore
 import SwiftUI
 
-struct AskExchange: Identifiable {
-    enum Reply {
-        case waiting, answer(MeetingAnswer), failure(String)
-    }
-
+struct AskQuestion: Identifiable {
     let id = UUID()
-    let question: String
-    var reply = Reply.waiting
-
-    var isWaiting: Bool {
-        if case .waiting = reply { true } else { false }
-    }
+    let text: String
+    let about: [Meeting]
+    var failure: String?
 }
 
 struct AskPanel: View {
     let model: AppModel
+    let thread: AskThread
     let placeholder: String
-    @Binding var exchanges: [AskExchange]
-    let showsMeetingTitles: Bool
+    @Binding var asking: AskQuestion?
     let onCite: (MeetingLine) -> Void
     @State private var draft = ""
+    @State private var confirmsClear = false
+    @State private var filter = MeetingFilter()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
@@ -34,21 +29,83 @@ struct AskPanel: View {
                         .accessibilityLabel(placeholder)
                     Button("Ask", action: ask)
                         .disabled(!canAsk)
-                    if !exchanges.isEmpty, !isWaiting {
-                        Button("Clear") { exchanges.removeAll() }
-                            .help("Clear these questions and answers")
+                    if !exchanges.isEmpty || asking != nil, !isWaiting {
+                        Button("Clear") {
+                            asking = nil
+                            if !exchanges.isEmpty { confirmsClear = true }
+                        }
+                        .help("Clear these questions and answers")
                     }
                 }
                 if let unavailable {
                     Text(unavailable).font(.callout).foregroundStyle(.secondary)
                 }
+                if thread == .allMeetings {
+                    filters
+                }
+                if let recording {
+                    Button("What did I miss?", systemImage: "clock.arrow.circlepath") { catchUp(on: recording) }
+                        .disabled(unavailable != nil || isWaiting)
+                        .help("Answer from the last \(Self.catchUpMinutes) minutes of the transcript")
+                }
             }
-            ForEach(exchanges.reversed()) { exchange in
-                row(exchange)
+            if let asking {
+                pending(asking)
             }
+            ForEach(exchanges.reversed(), content: row)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .confirmationDialog("Clear these questions and answers?", isPresented: $confirmsClear) {
+            Button("Clear", role: .destructive) { model.meetings.clear(thread) }
+        } message: {
+            Text("They’re removed from this Mac. This can’t be undone.")
+        }
     }
+
+    private var filters: some View {
+        let attendees = MeetingFilter.attendees(in: model.meetings.meetings)
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 16) {
+                Picker("When", selection: $filter.days) {
+                    Text("Any time").tag(Int?.none)
+                    Text("Today").tag(Int?.some(1))
+                    Text("Past 7 days").tag(Int?.some(7))
+                    Text("Past 30 days").tag(Int?.some(30))
+                }
+                if !attendees.isEmpty {
+                    Picker("With", selection: $filter.attendee) {
+                        Text("Anyone").tag(String?.none)
+                        ForEach(attendees, id: \.self) { Text($0).tag(String?.some($0)) }
+                    }
+                }
+            }
+            .pickerStyle(.menu)
+            .fixedSize()
+            if noMatch {
+                Text("No meetings match these filters.").font(.callout).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var exchanges: [AskExchange] { model.meetings.thread(thread) }
+
+    private var showsMeetingTitles: Bool { thread == .allMeetings }
+
+    private var meetings: [Meeting] {
+        switch thread {
+        case .meeting(let id): model.meetings.meeting(id).map { [$0] } ?? []
+        case .allMeetings: filter.apply(to: model.meetings.meetings)
+        }
+    }
+
+    private var noMatch: Bool { thread == .allMeetings && !model.meetings.meetings.isEmpty && meetings.isEmpty }
+
+    private var recording: Meeting? {
+        guard case .meeting(let id) = thread, model.meetings.runs[id]?.phase == .recording else { return nil }
+        return model.meetings.meeting(id)
+    }
+
+    private static let catchUpMinutes = Int(MeetingQuestion.catchUpWindow / 60)
 
     private var settings: AppSettings { model.meetings.notesSettings.askSettings }
 
@@ -56,50 +113,66 @@ struct AskPanel: View {
         if case .unavailable(let reason) = MeetingNotesGenerator.availability(settings: settings) { reason } else { nil }
     }
 
-    private var isWaiting: Bool { exchanges.contains(where: \.isWaiting) }
+    private var isWaiting: Bool { asking != nil && asking?.failure == nil }
 
     private var question: String { draft.trimmingCharacters(in: .whitespacesAndNewlines) }
 
-    private var canAsk: Bool { unavailable == nil && !isWaiting && !question.isEmpty }
+    private var canAsk: Bool { unavailable == nil && !isWaiting && !noMatch && !question.isEmpty }
 
     private func ask() {
         guard canAsk else { return }
-        exchanges.append(AskExchange(question: question))
+        asking = AskQuestion(text: question, about: meetings)
         draft = ""
     }
 
-    private func row(_ exchange: AskExchange) -> some View {
+    private func catchUp(on meeting: Meeting) {
+        let recent = MeetingQuestion.catchUp(meeting, at: model.meetings.elapsed)
+        asking = AskQuestion(text: MeetingQuestion.catchUpQuestion, about: [recent],
+                             failure: recent.hasContent ? nil : "Nothing was transcribed in the last \(Self.catchUpMinutes) minutes.")
+    }
+
+    private func pending(_ question: AskQuestion) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(exchange.question)
-                .font(.system(size: 15, weight: .semibold))
-                .textSelection(.enabled)
-            switch exchange.reply {
-            case .waiting:
+            questionText(question.text)
+            if let failure = question.failure {
+                Text(failure).foregroundStyle(.secondary).textSelection(.enabled)
+            } else {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
                     Text("Asking \(settings.notesModelName)…").foregroundStyle(.secondary)
                     Spacer(minLength: 8)
-                    Button("Cancel") { exchanges.removeAll { $0.id == exchange.id } }
+                    Button("Cancel") { asking = nil }
                 }
-            case .failure(let message):
-                Text(message).foregroundStyle(.secondary).textSelection(.enabled)
-            case .answer(let answer):
-                Text((try? AttributedString(markdown: answer.text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
-                    ?? AttributedString(answer.text))
-                    .font(.system(size: 15))
-                    .lineSpacing(4)
-                    .textSelection(.enabled)
-                if !answer.citations.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        ForEach(answer.citations, id: \.self, content: citation)
-                    }
-                }
-                Text("Answered with \(answer.modelName)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func row(_ exchange: AskExchange) -> some View {
+        let answer = exchange.answer
+        return VStack(alignment: .leading, spacing: 10) {
+            questionText(exchange.question)
+            Text((try? AttributedString(markdown: answer.text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
+                ?? AttributedString(answer.text))
+                .font(.system(size: 15))
+                .lineSpacing(4)
+                .textSelection(.enabled)
+            if !answer.citations.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(answer.citations, id: \.self, content: citation)
+                }
+            }
+            Text("Answered with \(answer.modelName)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func questionText(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 15, weight: .semibold))
+            .textSelection(.enabled)
     }
 
     private func citation(_ citation: MeetingAnswer.Citation) -> some View {
@@ -123,21 +196,18 @@ struct AskPanel: View {
 }
 
 extension View {
-    /// Asks the newest waiting exchange about `meetings` with the Ask model, and cancels it when the exchange or the view goes away.
-    func answering(_ exchanges: Binding<[AskExchange]>, model: AppModel, meetings: @escaping @MainActor () -> [Meeting]) -> some View {
-        task(id: exchanges.wrappedValue.last?.id) {
-            guard let exchange = exchanges.wrappedValue.last, exchange.isWaiting else { return }
-            let about = meetings()
-            let settings = model.meetings.notesSettings.askSettings
-            let reply: AskExchange.Reply
+    func answering(_ question: Binding<AskQuestion?>, in thread: AskThread, model: AppModel) -> some View {
+        task(id: question.wrappedValue?.id) {
+            guard let asked = question.wrappedValue, asked.failure == nil else { return }
             do {
-                reply = .answer(try await MeetingQuestion.ask(exchange.question, about: about, settings: settings))
+                let answer = try await MeetingQuestion.ask(asked.text, about: asked.about, settings: model.meetings.notesSettings.askSettings)
+                guard question.wrappedValue?.id == asked.id else { return }
+                model.meetings.append(AskExchange(question: asked.text, answer: answer), to: thread)
+                question.wrappedValue = nil
             } catch {
-                guard !Task.isCancelled else { return }
-                reply = .failure(error.localizedDescription)
+                guard !Task.isCancelled, question.wrappedValue?.id == asked.id else { return }
+                question.wrappedValue?.failure = error.localizedDescription
             }
-            guard let index = exchanges.wrappedValue.firstIndex(where: { $0.id == exchange.id }) else { return }
-            exchanges.wrappedValue[index].reply = reply
         }
     }
 }

@@ -1153,6 +1153,10 @@ Additional regression checks:
   model ID and key. Saving sends nothing; select it under Notes model and test.
   Rotate its key, change its URL, remove it and relaunch. Speech selection stays
   unchanged, keys stay in Keychain, and an edited active URL needs selection again.
+- [ ] Add a notes API connection and pick each Provider preset. Name, URL and
+  model ID fill in, a typed key clears, and Custom keeps the URL with an empty
+  model ID. Save each with its provider's key, select it and test. Editing a
+  saved connection shows no Provider menu.
 - [ ] Select Claude Code or Codex, choose a discovered model or enter an exact ID,
   and test. Refresh the catalog and relaunch: the chosen ID should stay selected,
   and generated summaries should name it. Signed-out, missing/outdated CLI and subscription-limit failures should
@@ -1313,6 +1317,25 @@ were not exercised in this UI pass.
   "Ask about the transcript so far", the answer cites lines already shown, and
   the Ask tab stays open when the summary finishes. Ask on the Notetaker page
   during the overlap; lines from both meetings can be cited.
+- [ ] Ask about one meeting and about all meetings, then quit and relaunch. Both
+  threads come back with their citations and "Answered with" lines, and their
+  citations still open the cited lines. A failed or cancelled question is gone.
+- [ ] Press Clear on each thread. A confirmation appears, Clear empties only that
+  thread, and it stays empty after a relaunch. Clear on a failed question with no
+  saved answers removes it without asking.
+- [ ] Quit, replace `~/Library/Application Support/BetterWispr/ask.json` with
+  invalid JSON and relaunch. The Notetaker page says it couldn't be read, meetings
+  still load, asking still works, and the file's bytes are unchanged after quit.
+- [ ] Ask on the Notetaker page about two meetings, then delete one of them. The
+  answers citing it disappear, and the others remain after a relaunch.
+- [ ] While a meeting records for more than five minutes, open its Ask tab and
+  press What did I miss?. The answer cites only lines from the last five
+  minutes and no My thoughts. Within the first seconds, before any line, it says
+  nothing was transcribed. The button is gone once recording stops.
+- [ ] On the Notetaker page, set When to Today, Past 7 days and Past 30 days,
+  and With to one invitee. Answers cite only matching meetings. A combination
+  with no meetings shows "No meetings match these filters." and disables Ask.
+  With no Calendar invitees in any meeting, the With menu is hidden.
 
 ### Calendar events
 

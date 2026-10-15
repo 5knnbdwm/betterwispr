@@ -78,3 +78,21 @@ import Testing
     #expect(WhisperKitProvider.containsSignal(in: samples))
     #expect(samples.allSatisfy { abs($0) <= 0.001 })
 }
+
+@Test func notesPresetsAreValidConnectionsAndUseTheirHostsFastFields() throws {
+    var hosts: [String] = []
+    for preset in NotesAPIPreset.all {
+        var connection = SpeechConnection(api: .openAICompatible)
+        connection.name = preset.name
+        connection.endpoint = preset.endpoint
+        connection.modelID = preset.modelID
+        let url = try connection.validatedURL()
+        #expect(url.scheme == "https", "\(preset.name)")
+        #expect(url.path().hasSuffix("/chat/completions"), "\(preset.name)")
+        hosts.append(try #require(url.host()))
+    }
+    #expect(hosts == ["api.openai.com", "api.anthropic.com", "generativelanguage.googleapis.com", "openrouter.ai"])
+    #expect(Set(NotesAPIPreset.all.map(\.id)).count == NotesAPIPreset.all.count)
+    let fast = NotesAPIPreset.all.map { APINotesModel.lowLatencyFields(host: URL(string: $0.endpoint)?.host(), model: $0.modelID).keys.sorted() }
+    #expect(fast == [["reasoning_effort", "temperature"], [], [], ["provider"]])
+}

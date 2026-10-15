@@ -1,14 +1,14 @@
 import Foundation
 
-public struct MeetingLine: Hashable, Sendable {
+public struct MeetingLine: Codable, Hashable, Sendable {
     public var meetingID: UUID
     public var segmentID: UUID?
     public var label: String
     public var text: String
 }
 
-public struct MeetingAnswer: Equatable, Sendable {
-    public struct Citation: Hashable, Sendable {
+public struct MeetingAnswer: Codable, Equatable, Sendable {
+    public struct Citation: Codable, Hashable, Sendable {
         public var number: Int
         public var line: MeetingLine
     }
@@ -16,6 +16,18 @@ public struct MeetingAnswer: Equatable, Sendable {
     public var text: String
     public var citations: [Citation]
     public var modelName: String
+}
+
+public struct AskExchange: Codable, Identifiable, Equatable, Sendable {
+    public var id: UUID
+    public var question: String
+    public var answer: MeetingAnswer
+
+    public init(id: UUID = UUID(), question: String, answer: MeetingAnswer) {
+        self.id = id
+        self.question = question
+        self.answer = answer
+    }
 }
 
 public enum MeetingQuestion {
@@ -49,6 +61,20 @@ public enum MeetingQuestion {
             throw MeetingNotesError.unavailable("The model returned an empty answer. Try again or choose another model.")
         }
         return answer(reply, sources: sources, modelName: modelName)
+    }
+
+    public static let catchUpWindow: TimeInterval = 5 * 60
+    public static let catchUpQuestion = "What did I miss in the last \(Int(catchUpWindow / 60)) minutes? Give the main points, decisions, and anything I was asked."
+
+    /// `meeting` without Me's thoughts, keeping the newest lines spoken in the `catchUpWindow` before `elapsed` that fit the budget.
+    public static func catchUp(_ meeting: Meeting, at elapsed: TimeInterval) -> Meeting {
+        var recent = meeting
+        recent.notes = ""
+        recent.segments = meeting.segments.filter { $0.start + $0.duration > elapsed - catchUpWindow }
+        while sources(for: "", in: [recent], budget: MeetingNotesGenerator.budget).count < lines(of: recent).count {
+            recent.segments.removeFirst()
+        }
+        return recent
     }
 
     /// The transcript rows shown by default, then each line of Me's thoughts.

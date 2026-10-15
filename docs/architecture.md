@@ -258,9 +258,31 @@ Another choice reuses the notes providers, their Keychain keys and their
 availability checks, and it is never a fallback: an unavailable provider shows
 its reason instead of asking another one. Removing the notes connection it
 names, or changing that connection's endpoint, resets it to the notes model.
-Questions and answers live in view state and are not saved. The request runs in
-a view task, so Cancel, leaving the meeting or leaving the Notetaker page
-cancels it, and an answer for a removed question is dropped.
+
+A question waiting for its answer is an `AskQuestion` in view state. The request
+runs in a view task, so Cancel, leaving the meeting or leaving the Notetaker page
+cancels it, and an answer for a removed question is dropped. An answered
+question becomes an `AskExchange` holding its `MeetingAnswer`, citations and
+model name. Failed and cancelled questions are never saved. `MeetingModel` keeps
+each meeting's thread in the optional `Meeting.askThread`, saved with the
+meeting, so meeting files from earlier versions decode with no thread. The
+thread about all meetings is `ask.json` beside the `Meetings` folder, written by
+`AllMeetingsAskStore` as version 1, atomically, with mode 0600. Keeping it out of
+`Meetings` means older versions never report it as an unreadable meeting. An
+unreadable or newer `ask.json` is reported and left untouched, and answers about
+all meetings then last only until quit. Deleting a meeting removes the answers
+about all meetings that cite it. Clear empties one thread after a confirmation.
+
+While a meeting records, its Ask tab offers What did I miss?. It asks a fixed
+question about the transcript rows still being spoken in the last
+`MeetingQuestion.catchUpWindow`, five minutes, without My thoughts. When those
+rows exceed `MeetingNotesGenerator.budget`, the oldest are dropped until the rest
+fit, so a busy five minutes is answered from its newest lines.
+
+On the Notetaker page, `MeetingFilter` narrows the meetings Ask reads to those
+created today or in the past 7 or 30 days, counted from local midnight, and to
+those listing one Calendar invitee in `Meeting.attendees`. There is no folder or
+calendar filter, because meetings record neither.
 
 ### Calendar events
 
@@ -406,7 +428,11 @@ sessions, rejects redirects and checks both HTTP status and completion status.
 Any model ID is accepted if the selected server supports OpenAI-compatible chat
 completions and JSON-object output. Saving a connection makes no request; selecting
 it explicitly enables sending transcript and thoughts. Keys are never inferred
-from a speech connection or moved to an edited destination.
+from a speech connection or moved to an edited destination. Adding a connection
+offers `NotesAPIPreset.all`, which fills the name, the chat completions URL and a
+fast model for OpenAI, Anthropic, Google Gemini or OpenRouter. Picking one makes
+no request and clears a typed key. Anthropic's OpenAI compatibility ignores
+`response_format`, so notes from it rely on the prompt alone for JSON.
 
 Claude Code uses `claude --print` and its existing Claude subscription sign-in;
 Codex uses `codex exec` with ChatGPT authentication required. BetterWispr does not
