@@ -231,27 +231,37 @@ below the speech model. Clicking it while another download runs sets
 succeeds.
 
 With `AppSettings.rememberVoices` on, `MeetingModel` keeps each detected
-meeting's speaker embeddings in memory, never in the meeting file.
-`SpeakerRecording.voiceTurns()` runs SpeakerKit with
+meeting's speaker embeddings in memory as a `HeardVoices`, never in the meeting
+file. `SpeakerRecording.voiceTurns()` runs SpeakerKit with
 `SpeakerDetection.sameVoiceDistance`, 0.6, as `clusterDistanceThreshold`. That
 value is SpeakerKit's own default, so diarization is unchanged, and the
 constant states it once for both uses. The embeddings are
-`DiarizationResult.speakerCentroidEmbeddings`, one mean per speaker. When a
-meeting saves, `SpeakerDetection.namedVoices` picks the speakers with a non-blank
-name, and `VoiceStore.replaceVoices(from:with:)` replaces that meeting's entries
-in `Application Support/BetterWispr/Voices.json` (directory 0700, file 0600).
-A speaker that keeps the name it was recognised as is not stored again, so the
-file grows only when the user names someone. After detection,
-`SpeakerDetection.recognise` compares each new speaker with every stored voice
-by Euclidean distance between length-normalised embeddings, the measure
-SpeakerKit clusters with. It names a speaker after the nearest stored voice within
-0.6, giving each name to one speaker, and never replaces a name already typed.
-SpeakerKit's doc comment on `speakerCentroidEmbeddings` says there is no
-universal same-speaker threshold across runs and asks callers to calibrate one. BetterWispr has no corpus to
-calibrate against, so the Settings text tells the user to check the names. A
-`Voices.json` that fails to load is reported and never overwritten. Forget
-Voices deletes it, readable or not. Embeddings in memory are lost at quit, and
-deleting a meeting leaves its stored voices.
+`DiarizationResult.speakerCentroidEmbeddings`, one mean per speaker. After
+detection, `SpeakerDetection.recognise` compares each new speaker with every
+stored voice by Euclidean distance between length-normalised embeddings, the
+measure SpeakerKit clusters with. It matches a speaker to the nearest stored
+voice within 0.6, giving each name to one speaker. SpeakerKit's doc comment on
+`speakerCentroidEmbeddings` says there is no universal same-speaker threshold
+across runs and asks callers to calibrate one. BetterWispr has no corpus to
+calibrate against, so a match is only a suggestion. While a speaker has no
+name, `HeardVoices.suggestion(for:in:)` puts "Sounds like" and the stored name
+first in that speaker's name menu. Nothing writes `participantNames` until the
+user picks a name, so the transcript and the notes prompt hold only names the
+user chose.
+
+When a meeting saves, `HeardVoices.remember(in:to:)` passes each speaker that
+has a non-blank name and still has lines to
+`VoiceStore.replaceVoices(from:with:removing:)`, which replaces that meeting's
+entries in `Application Support/BetterWispr/Voices.json`. `VoiceStore.save`
+writes the file atomically and then sets it to 0600, as `MeetingStore` does. It
+also sets the folder to 0700, even when the folder already exists. A speaker that took its suggested name is not stored again,
+so the file grows only when the user names someone new. A speaker named
+something other than its suggestion removes the stored voice behind the
+suggestion. Merging speakers drops the merged speaker's embedding, so a number
+reused later can't inherit it. Deleting a meeting removes its stored voices. A
+`Voices.json` that fails to load is reported in `MeetingModel.voicesMessage`
+and never overwritten. Forget Voices deletes it, readable or not. Embeddings in
+memory are lost at quit, so speakers named after a relaunch are not stored.
 
 Each meeting being captured or processed is a `MeetingRun` in
 `MeetingModel.runs`. One run records at a time and any number process. Every
