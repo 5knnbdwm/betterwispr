@@ -2,7 +2,6 @@ import AppKit
 import BetterWisprCore
 import SwiftUI
 
-@main
 struct BetterWisprApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 

@@ -150,6 +150,8 @@ struct SettingsView: View {
                     Text("Reads the accounts in the Calendar app on this Mac, including shared and subscribed calendars, and works offline. The event title and invitees go to your notes model with the transcript.")
                 }
 
+                ConnectedAppsSection(model: model)
+
                 SettingsSection("Permissions") {
                     PermissionStatusRow(title: "Microphone", caption: "Needed to hear your voice.", granted: model.microphoneGranted, action: model.requestMicrophone)
                     RowDivider()

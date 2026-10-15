@@ -1,0 +1,59 @@
+import SwiftUI
+
+struct ConnectedAppsSection: View {
+    @Bindable var model: AppModel
+
+    private var executable: String { Bundle.main.executablePath ?? "/Applications/BetterWispr.app/Contents/MacOS/BetterWispr" }
+    private var quotedExecutable: String { "'" + executable.replacingOccurrences(of: "'", with: #"'\''"#) + "'" }
+
+    private var desktopConfig: String {
+        let config = ["mcpServers": ["betterwispr": ["command": executable, "args": ["--mcp"]]]]
+        let data = try! JSONSerialization.data(withJSONObject: config, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    var body: some View {
+        SettingsSection("Connected apps") {
+            SettingToggle("Share meetings with AI apps",
+                          caption: "Lets Claude, Cursor and other apps that support MCP list, search and read your meeting notes and transcripts. They can’t change or delete anything.",
+                          isOn: Binding(get: { model.settings.mcpServer }, set: { model.settings.mcpServer = $0; model.saveSettings() }))
+            if model.settings.mcpServer {
+                RowDivider()
+                SnippetRow(title: "Claude Code", caption: "Run in Terminal.", snippet: "claude mcp add betterwispr -- \(quotedExecutable) --mcp", copy: model.copyText)
+                RowDivider()
+                SnippetRow(title: "Claude Desktop and Cursor",
+                           caption: "Add to ~/Library/Application Support/Claude/claude_desktop_config.json or ~/.cursor/mcp.json, keeping any servers already listed, then restart the app.",
+                           snippet: desktopConfig, copy: model.copyText)
+                RowDivider()
+                SnippetRow(title: "Other apps", caption: "Start this command as a local (stdio) MCP server.", snippet: "\(quotedExecutable) --mcp", copy: model.copyText)
+            }
+        } footer: {
+            Text("An app you connect reads meeting titles, attendees, summaries, your notes and transcripts, and sends what it reads to its AI provider. BetterWispr itself sends nothing. Turn this off to stop sharing right away.")
+        }
+    }
+}
+
+private struct SnippetRow: View {
+    let title: String
+    let caption: String
+    let snippet: String
+    let copy: @MainActor (String) -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            SettingRow(title, caption: caption) {
+                Button("Copy") { copy(snippet) }
+                    .controlSize(.small)
+                    .accessibilityLabel("Copy \(title) setup")
+            }
+            Text(snippet)
+                .font(.callout.monospaced())
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 11)
+        }
+    }
+}
