@@ -147,6 +147,57 @@ FLAC, MOV and M4V files were not tried, and a WAV file was tried only in
   transcribes. No yt-dlp process keeps running after the quit, and after a
   relaunch no chunk audio is left.
 
+## Meeting speakers check, 2026-10-15, version 0.1.6
+
+Apple M4 Pro, macOS 27.0.1, debug builds. `swift build`, all 256 tests in
+`swift test` and `./scripts/build-app.sh` passed. The new tests cover these
+behaviors:
+
+- With room voices, the voice heard longest on the microphone outside echoes
+  stays Me, and every other voice on either side gets a number and its
+  embedding.
+- Moving a Me line to a speaker, merging a room voice, and
+  `Meeting.unusedAttendees`.
+- A remembered voice is recognised at a distance of 0.591 and not at 0.610.
+  Each name goes to the nearest voice only. An embedding of another size, or of
+  length zero, never matches.
+- Only voices the user named are stored, not ones that keep the name they were
+  recognised as. `VoiceStore` replaces one meeting's voices, writes mode 0600,
+  leaves an unreadable file unchanged, rejects version 2, and `forget()`
+  deletes the file.
+
+The recognition and store tests failed when the code was broken on purpose
+with a cutoff of 0.62 or 0.58, with `replaceVoices` ignoring a load error, and
+with a voice that kept its recognised name being stored. No real meeting, real
+voice, onboarding screen or Models setting was exercised. How well room voices
+are separated, and how often a remembered voice gets the right name, have not
+been measured. Measuring either needs recorded meetings with known speakers:
+`fetch_bench_corpus.py --meetings` and `scripts/evaluate_meetings.py` cover
+call audio, and an in-room corpus with far-field microphones would have to be
+added.
+
+- [ ] Run setup on a fresh user. Speaker detection shows below the speech model
+  and downloads nothing until Download is clicked. Clicking it during the
+  speech model download shows "Downloads when the speech model is ready" and it
+  starts after that download. Its Cancel takes it off the queue, and
+  cancelling the speech model download drops it too.
+- [ ] With Use Calendar on, record during an event with invitees. The button
+  beside a speaker's name field lists the invitees, and picking one fills the
+  name and removes it from the other speakers' lists.
+- [ ] Turn on Tell apart people in the room. Hold a meeting with a second
+  person beside the Mac and a call on headphones. Your lines stay Me, the
+  person in the room gets a speaker number, and the call's people get others.
+  Repeat with the call on the Mac's speakers.
+- [ ] Turn on Remember named voices. Name a speaker in a meeting recorded since
+  BetterWispr opened, and check that `Voices.json` appears with mode 0600. In
+  the next meeting with the same person, their speaker takes the name. Rename
+  it and check the file changes.
+- [ ] Forget Voices asks first, then deletes `Voices.json`. Replace the file
+  with text that isn't JSON. The next meeting shows an error naming the file
+  and leaves it as it was, and Forget Voices still deletes it.
+- [ ] Turn off Wi-Fi and repeat the remembered voice check. Names fill in
+  without network access.
+
 ## Speaker detection check, 2026-10-14, version 0.1.6
 
 Apple M4 Pro, macOS 27.0.1, debug builds. `swift build`, all 180 tests in
@@ -263,8 +314,9 @@ download card have not been exercised in the app, and no download was run.
   Them line's speaker name, choose New speaker, and check it reads Speaker 1 and a
   name field appears. Right-click the line's bubble and check the same menu opens
   rather than only the text menu.
-- [ ] Move a line to another speaker and back to Them. Me lines show no speaker
-  menu, and right-clicking a Me line's selected text still offers Copy.
+- [ ] Move a Them line to another speaker and back to Them, and a Me line to a
+  speaker and back to Me. Right-clicking a line's selected text still offers
+  Copy.
 - [ ] With two or more speakers, use Merge into on one. Its lines take the other
   speaker's label, a typed name moves across when the target has none, and the
   summary shows as out of date.
