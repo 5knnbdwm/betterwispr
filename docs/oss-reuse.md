@@ -37,6 +37,24 @@ CC-BY-4.0. Each model folder's README links the original weights' license:
 pyannote segmentation-3.0, WeSpeaker and VBx. BetterWispr does not bundle them;
 they download only from the explicit Speaker detection installation.
 
+`Sources/BetterWisprCore/Notes/LlamaEngine.swift` uses
+[llama.swift](https://github.com/mattt/llama.swift) 2.10549.0 (MIT, copyright
+2025 Mattt) as a SwiftPM dependency for its `LlamaSwift` module. That package
+wraps the prebuilt
+[llama.cpp](https://github.com/ggml-org/llama.cpp) release `b10549`
+xcframework (MIT, copyright 2023-2026 The ggml authors), which
+`scripts/build-app.sh` embeds as `llama.framework`. Neither project's source is
+copied; BetterWispr calls the llama.cpp C API directly. llama.swift's license
+comes from its checkout, and llama.cpp's, which the xcframework does not carry,
+is kept at `Resources/Licenses/llama.cpp-MIT.txt` as published at tag `b10549`.
+Both ship in the app bundle. The weights are `Qwen3.5-2B-Q4_K_M.gguf` from
+[unsloth/Qwen3.5-2B-GGUF](https://huggingface.co/unsloth/Qwen3.5-2B-GGUF) at
+revision `f6d5376be1edb4d416d56da11e5397a961aca8ae`, a quantization of
+[Qwen/Qwen3.5-2B](https://huggingface.co/Qwen/Qwen3.5-2B). Its model card lists
+Apache-2.0 and links Qwen's license. BetterWispr does not bundle the weights;
+they download only from the explicit built-in model installation and are
+checked against a pinned size and SHA-256.
+
 `Sources/BetterWispr/App/AppUpdater.swift` uses
 [Sparkle](https://github.com/sparkle-project/Sparkle) 2.10.0 (MIT) as a SwiftPM
 dependency for in-app updates. No Sparkle source is copied; its license ships in

@@ -23,7 +23,7 @@ Sources/
     Audio/            Microphone and system audio capture, temporary recordings, level metering and media file chunks
     Speech/           SpeechProvider contract, model catalog, Apple and WhisperKit
     Transcription/    English filler/stutter cleanup, spoken email layout, optional notes-model polish, writing styles and vocabulary replacements
-    Notes/            Meeting notes with Apple Intelligence, Ollama, signed-in CLIs and explicit API connections
+    Notes/            Meeting notes with Apple Intelligence, the built-in model, Ollama, signed-in CLIs and explicit API connections
     Integrations/     Clipboard and guarded paste delivery, and the yt-dlp link downloader
   BetterWisprCLI/      Developer entry point for model and file smoke tests
 ```
@@ -80,7 +80,7 @@ the policy immediately and persist through the existing workspace store.
    commands, spoken numbers as digits and the @, # and % symbols for English
    and Auto. For English
    text, **Medium** then asks the notes model the user chose in Models (Apple
-   Intelligence, Ollama, a signed-in CLI or an API connection) for a clarity edit
+   Intelligence, the built-in model, Ollama, a signed-in CLI or an API connection) for a clarity edit
    with `TranscriptPolisher` instructions, plus the selected text, clipboard and
    window text when "Use screen context" is on and the dictation started in
    Medium. Screen context is captured when it is on and either Parakeet with
@@ -169,7 +169,7 @@ tabs backed by the existing meeting fields.
    meeting can start as soon as the recorder has handed those chunks off, while
    the stopped one keeps transcribing, finding speakers and writing notes. If a
    `SpeakerRecording` exists, Argmax SpeakerKit's pyannote pipeline runs on it
-   with models that `SpeakerDetection.diarizer(from:)` loads from disk; it never
+   with models that `SpeakerDetection.installedDiarizer(from:)` loads from disk; it never
    downloads. The models are pinned to one revision of
    `argmaxinc/speakerkit-coreml` and live in
    `BetterWispr/Models/models/argmaxinc/speakerkit-coreml`. Each "Them"
@@ -181,7 +181,7 @@ tabs backed by the existing meeting fields.
    `Meeting.participantNames`, and `MeetingSegment.label(names:)` renders the
    transcript, Markdown and notes input with them. Then it writes
    notes with the explicitly chosen notes model: Apple Intelligence by default,
-   local Ollama, Claude Code, Codex, or an OpenAI-compatible chat API. Transcription
+   the [built-in model](#built-in-notes-model), local Ollama, Claude Code, Codex, or an OpenAI-compatible chat API. Transcription
    selection remains independent. `NotesWriter` combines the transcript and all
    personal thoughts, condensing long inputs before the final structured summary.
    If condensation still exceeds the budget it reports an error instead of
@@ -444,6 +444,66 @@ The detail view names a voice only on segments Speaker detection labeled, so a
 transcript never says "Them". Copy all and the .txt and .md exports use the same
 timestamped lines. `BetterWisprCLI --media PATH|URL` runs the same pipeline and
 prints one JSON segment per line.
+
+## Built-in notes model
+
+The built-in model is a notes provider that runs inside BetterWispr, so meeting
+notes, Medium cleanup, correction review and Ask work without Apple
+Intelligence, Ollama, a CLI or an API key. `NotesModelSelection.builtIn` is
+saved as `AppSettings.notesBuiltIn` and as `askSelection`; a CLI, connection or
+Ollama choice in an older workspace still wins, so existing settings decode
+unchanged. Like every notes provider it is never a fallback: when it is selected
+but missing, notes, Medium and Ask report that instead of asking another model.
+
+`BuiltInModel` pins one file: `Qwen3.5-2B-Q4_K_M.gguf` from
+`unsloth/Qwen3.5-2B-GGUF` at revision
+`f6d5376be1edb4d416d56da11e5397a961aca8ae`, 1,280,835,840 bytes with a fixed
+SHA-256. It downloads only from the Download button in Models or
+`BetterWisprCLI --download-builtin-model`, through WhisperKit's
+`ModelDownloader` into `BetterWispr/Models/models/unsloth/Qwen3.5-2B-GGUF`.
+`install` then checks the size, hashes the file in 8 MB reads, loads it in a
+throwaway engine and samples one token under the notes grammar. Only then does
+it write `.betterwispr-installed` holding the revision and hash. A failure or
+cancel at any step deletes the folder. `isInstalled` compares that marker and
+the file size and never reads the file, and loading opens only the local file,
+so a missing model fails instead of downloading. A finished install from Models
+selects the built-in model unless the user picked another notes model
+meanwhile or a meeting is still recording or processing. Remove frees the
+weights, then deletes the folder and leaves the selection alone.
+
+`LlamaEngine.shared` runs the file through llama.cpp's C API from the
+llama.swift package. One `OSAllocatedUnfairLock` holds its state: idle, loading
+(with the requests waiting for it), loaded, draining while running requests
+finish, or closing while the weights are freed. The weights are memory-mapped
+with every layer on Metal. Each request opens its own 8,192-token context with a
+Q8_0 KV cache and frees it on its own thread, so requests share weights but
+never a context. Prompts use Qwen's chat template with thinking off. Template
+pieces are tokenized with control tokens and message text without them, so a
+transcript cannot close a turn. A prompt that leaves fewer than 1,024 tokens for
+the reply fails before a context opens, and a reply that fills the window fails
+instead of returning cut-off text. Sampling is greedy. Meeting notes add a GBNF
+grammar for the five `NotesDraft` fields; the top token is checked first and the
+whole vocabulary is masked only when the grammar rejects it.
+
+Requests take one of two lanes. Medium edits and correction review use the
+interactive lane, and meeting notes, Ask and the Models Test use the background
+lane. Prefill runs in 256-token batches, and each request checks between batches
+and between tokens whether to go on: a background request pauses while an
+interactive one holds the weights, and a cancelled or timed-out request stops
+within one batch. The polisher's character budget for the built-in model is
+21,000, its 7,168 prompt tokens at the same 3 characters a token guessed for
+Apple's window, so it keeps screen context that Apple's 12,000 would drop.
+
+The weights load on first use, or 450 ms into a Medium dictation through
+`MeetingNotesGenerator.warmUp`, and unload after 300 seconds without a request.
+`shutdown()` refuses new requests, cancels running ones and blocks until every
+llama object is freed. The app calls it last in `applicationWillTerminate` and
+the CLI on every exit path, because llama.cpp's Metal backend aborts the process
+at exit (status 134) while a model is alive. `scripts/build-app.sh` copies
+`llama.framework` into `Contents/Frameworks`, where the executable's
+`@executable_path/../Frameworks` run path finds it. Because the weights are a
+mapped file, resident size counts the mapped pages while the process's own
+footprint stays far smaller; [testing.md](testing.md) records both.
 
 ## Microphone selection
 
