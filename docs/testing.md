@@ -149,7 +149,7 @@ FLAC, MOV and M4V files were not tried, and a WAV file was tried only in
 
 ## Meeting speakers check, 2026-10-15, version 0.1.6
 
-Apple M4 Pro, macOS 27.0.1, debug builds. `swift build`, all 288 tests in
+Apple M4 Pro, macOS 27.0.1, debug builds. `swift build`, all 291 tests in
 `swift test` and `./scripts/build-app.sh` passed. The new tests cover these
 behaviors:
 
@@ -162,10 +162,15 @@ behaviors:
   Each name goes to the nearest voice only. An embedding of another size, or of
   length zero, never matches.
 - A remembered voice is only suggested, and taking the suggestion stores
-  nothing new. Naming that speaker someone else deletes the profile behind the
-  suggestion and stops suggesting it. After a merge, only the voice that kept
-  the lines is stored, a reused number stores nothing, and a named speaker
-  without lines is not stored. Deleting a meeting deletes its profiles and
+  nothing new. After detection through `MeetingModel`, the suggestion is
+  offered and no name is written to the meeting in memory or on disk.
+- Typing a name into a suggested speaker's field and erasing it, with a save
+  in between, keeps the profile. Committing a different name deletes the
+  profile behind the suggestion and stops suggesting it, and saving the meeting
+  the profile came from doesn't store it again.
+- After a merge through `MeetingModel.merge`, only the voice that kept the
+  lines is stored, a reused number stores nothing, and a named speaker without
+  lines is not stored. Deleting a meeting deletes its profiles and
   keeps other meetings' profiles.
 - `VoiceStore` replaces one meeting's voices, sets an existing 0755 folder to
   0700, writes mode 0600, leaves an unreadable file unchanged, rejects version
@@ -177,7 +182,12 @@ with a voice that kept its recognised name being stored. The new tests also
 failed when the code was broken on purpose in each of these ways: storing a
 named speaker without lines, keeping a merged speaker's embedding, keeping a
 rejected profile in the store, suggesting a rejected profile again, skipping
-the cleanup on delete, and leaving the folder's mode unchanged. No real meeting, real
+the cleanup on delete, and leaving the folder's mode unchanged. They also
+failed when detection wrote a suggestion into the speaker names, when `merge`
+kept the merged speaker's embedding, when every save rejected suggestions
+again, and when a rejected voice stayed in the meeting it came from. The name
+field's Return and focus handling, the invitee pick and the delete
+confirmation were not run in the app. No real meeting, real
 voice, onboarding screen or Models setting was exercised. How well room voices
 are separated, and how often a remembered voice gets the right name, have not
 been measured. Measuring either needs recorded meetings with known speakers:
@@ -201,8 +211,12 @@ added.
   BetterWispr opened, and check that `Voices.json` appears with mode 0600. In
   the next meeting with the same person, their speaker's name menu starts with
   "Sounds like" and the name, and the name field stays empty until you pick it.
-  Name that speaker someone else and check the old profile leaves the file.
-  Delete the meeting and check its profiles leave the file.
+  Type a different name, erase it, click elsewhere, and check the profile is
+  still in the file. Name that speaker someone else, press Return, and check
+  the old profile leaves the file. Delete the meeting, check the confirmation
+  says it forgets the voices named in it, and check its profiles leave the
+  file. With Remember named voices off, the confirmation doesn't mention
+  voices.
 - [ ] Forget Voices asks first, then deletes `Voices.json`. Replace the file
   with text that isn't JSON. The next meeting shows an error naming the file
   and leaves it as it was, and Forget Voices still deletes it.

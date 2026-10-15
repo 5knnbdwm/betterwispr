@@ -255,9 +255,13 @@ has a non-blank name and still has lines to
 entries in `Application Support/BetterWispr/Voices.json`. `VoiceStore.save`
 writes the file atomically and then sets it to 0600, as `MeetingStore` does. It
 also sets the folder to 0700, even when the folder already exists. A speaker that took its suggested name is not stored again,
-so the file grows only when the user names someone new. A speaker named
-something other than its suggestion removes the stored voice behind the
-suggestion. Merging speakers drops the merged speaker's embedding, so a number
+so the file grows only when the user names someone new. Saving never
+removes a stored voice. When the user commits a speaker's name with Return, by
+leaving the field or by picking an invitee, `MeetingModel.commitName(of:in:)`
+calls `HeardVoices.reject(_:in:from:)`. A committed name other than the
+suggestion removes the stored voice behind it and ends the suggestion, and the
+model drops that voice's embedding from the meeting it was remembered in, so
+saving that meeting again can't store it back. Merging speakers drops the merged speaker's embedding, so a number
 reused later can't inherit it. Deleting a meeting removes its stored voices. A
 `Voices.json` that fails to load is reported in `MeetingModel.voicesMessage`
 and never overwritten. Forget Voices deletes it, readable or not. Embeddings in
