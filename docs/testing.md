@@ -1358,8 +1358,8 @@ are willing to send to that app's provider.
   updating from 0.1.5. Turn it on. The Claude Code, Claude Desktop and Cursor,
   and Other apps rows appear, each with the path of the running app. Each Copy
   button copies its snippet, and VoiceOver reads "Copy Claude Code setup".
-- [ ] Run the copied `claude mcp add` line, start Claude Code and run `/mcp`.
-  betterwispr shows as connected with three tools. Ask for the last meeting's
+- [ ] Run the copied `claude mcp add` line, start Claude Code in a different
+  folder and run `/mcp`. betterwispr shows as connected with three tools. Ask for the last meeting's
   action items. Claude calls `list_meetings` and `get_meeting`, and the answer
   matches the meeting in BetterWispr.
 - [ ] Add the copied snippet to Claude Desktop's config, keeping any servers

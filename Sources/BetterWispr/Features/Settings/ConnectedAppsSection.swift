@@ -19,7 +19,7 @@ struct ConnectedAppsSection: View {
                           isOn: Binding(get: { model.settings.mcpServer }, set: { model.settings.mcpServer = $0; model.saveSettings() }))
             if model.settings.mcpServer {
                 RowDivider()
-                SnippetRow(title: "Claude Code", caption: "Run in Terminal.", snippet: "claude mcp add betterwispr -- \(quotedExecutable) --mcp", copy: model.copyText)
+                SnippetRow(title: "Claude Code", caption: "Run in Terminal.", snippet: "claude mcp add --scope user betterwispr -- \(quotedExecutable) --mcp", copy: model.copyText)
                 RowDivider()
                 SnippetRow(title: "Claude Desktop and Cursor",
                            caption: "Add to ~/Library/Application Support/Claude/claude_desktop_config.json or ~/.cursor/mcp.json, keeping any servers already listed, then restart the app.",

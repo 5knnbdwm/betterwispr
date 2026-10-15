@@ -208,11 +208,10 @@ private enum MeetingTool: String, CaseIterable {
             let inRange = try arguments.startFilter()
             let offset = try arguments.offset()
             let matches = meetings.filter { inRange($0.createdAt) }.flatMap { meeting in
-                Self.document(meeting).enumerated().filter { _, line in
+                let source = "\(Meeting.oneLine(meeting.displayTitle)), \(Self.stamp(meeting.createdAt)), id \(meeting.id.uuidString)"
+                return Self.document(meeting).enumerated().filter { _, line in
                     !line.hasPrefix("#") && line.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) != nil
-                }.map { line, text in
-                    "\(Meeting.oneLine(meeting.displayTitle)), \(Self.stamp(meeting.createdAt)), id \(meeting.id.uuidString), offset \(line)\n\(text)"
-                }
+                }.map { line, text in "\(source), offset \(line)\n\(text)" }
             }
             let (shown, next) = Self.page(matches, from: offset, atMost: Self.pageSize)
             let heading = matches.isEmpty ? "No matches for \"\(query)\"."
