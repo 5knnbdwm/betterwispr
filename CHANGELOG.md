@@ -7,6 +7,7 @@ All notable changes to BetterWispr are listed here. The format follows
 ## [Unreleased]
 
 ### Added
+- Fn (🌐) can be the dictation shortcut on its own. In Settings, click the keyboard shortcut and press and release Fn. Like other single modifier keys it needs Accessibility, and it only starts dictation when no other modifier is held. Set "Press 🌐 key to" to "Do Nothing" in System Settings > Keyboard so macOS doesn't also show emoji or switch the input source.
 - An optional second shortcut for cancelling a dictation, in Settings > Shortcut. It is off by default and Escape keeps working. Record a combination with a key, such as ⌃⌥K or F5, and it cancels from any app while a dictation is starting, recording or transcribing, without pasting it. A modifier key alone can't be used, and neither can your dictation shortcut. The combination works as usual in other apps whenever you aren't dictating. Clear turns it off.
 
 ## [0.1.6] - 2026-10-15

@@ -54,6 +54,8 @@ import Testing
     #expect(commandOptionD.cancelModifiers == [[]])
     #expect(f5.cancelModifiers == [[]])
     #expect(optionEscape.cancelModifiers == [[]])
+    let fn = try #require(DictationShortcut(keyCode: UInt32(kVK_Function), modifiers: [], key: "Fn"))
+    #expect(fn.cancelModifiers == [[]])
 }
 
 @Test @MainActor func eachShortcutAnswersOnlyItsOwnCarbonHotKey() throws {
@@ -88,17 +90,43 @@ import Testing
     #expect(fired == ["cancel press", "dictation press", "dictation release"])
 }
 
+@Test @MainActor func standaloneFnDeliversPressAndReleaseOnlyWhenAlone() throws {
+    let listener = GlobalShortcut()
+    let shortcut = try #require(DictationShortcut(keyCode: UInt32(kVK_Function), modifiers: [], key: "Fn"))
+    var transitions: [Bool] = []
+    listener.onPress = { transitions.append(true) }
+    listener.onRelease = { transitions.append(false) }
+
+    func send(_ keyCode: Int, _ flags: NSEvent.ModifierFlags) throws {
+        let event = try #require(NSEvent.keyEvent(with: .flagsChanged, location: .zero, modifierFlags: flags,
+                                                timestamp: 0, windowNumber: 0, context: nil, characters: "",
+                                                charactersIgnoringModifiers: "", isARepeat: false, keyCode: UInt16(keyCode)))
+        listener.handleModifierEvent(event, shortcut: shortcut)
+    }
+
+    try send(kVK_Function, [.function, .command])
+    try send(kVK_Function, .command)
+    #expect(transitions.isEmpty)
+
+    try send(kVK_Function, .function)
+    try send(kVK_Function, [])
+    #expect(transitions == [true, false])
+}
+
 @Test @MainActor func cancelShortcutRefusesTheDictationShortcutAndAModifierAloneThenSavesAKeyAndClears() throws {
     let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: folder) }
     let model = AppModel(store: LocalStore(directory: folder), startsServices: false)
     let leftOption = try #require(DictationShortcut(keyCode: UInt32(kVK_Option), modifiers: [], key: "Left Option"))
+    let fn = try #require(DictationShortcut(keyCode: UInt32(kVK_Function), modifiers: [], key: "Fn"))
     let f19 = try #require(DictationShortcut(keyCode: UInt32(kVK_F19), modifiers: [], key: "F19"))
 
     model.changeCancelShortcut(model.settings.shortcut)
     #expect(model.settings.cancelShortcut == nil)
     model.changeCancelShortcut(leftOption)
+    #expect(model.settings.cancelShortcut == nil)
+    model.changeCancelShortcut(fn)
     #expect(model.settings.cancelShortcut == nil)
     model.changeCancelShortcut(f19)
     #expect(model.settings.cancelShortcut == f19)
