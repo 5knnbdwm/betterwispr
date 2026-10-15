@@ -468,8 +468,10 @@ cancel at any step deletes the folder. `isInstalled` compares that marker and
 the file size and never reads the file, and loading opens only the local file,
 so a missing model fails instead of downloading. A finished install from Models
 selects the built-in model unless the user picked another notes model
-meanwhile or a meeting is still recording or processing. Remove frees the
-weights, then deletes the folder and leaves the selection alone.
+meanwhile or a meeting is still recording or processing. Remove deletes the
+marker first, so a request that arrives meanwhile fails as not downloaded
+instead of loading the file. It then frees the weights, deletes the folder and
+leaves the selection alone.
 
 `LlamaEngine.shared` runs the file through llama.cpp's C API from the
 llama.swift package. One `OSAllocatedUnfairLock` holds its state: idle, loading

@@ -53,8 +53,9 @@ public enum BuiltInModel {
         }
     }
 
-    /// Frees the shared engine's weights, then deletes the model; removing twice is harmless.
+    /// Deletes the marker so no new request loads the file, frees the shared engine's weights, then deletes the model; removing twice is harmless.
     public static func remove() async throws {
+        try? FileManager.default.removeItem(at: directory.appending(path: marker))
         await LlamaEngine.shared.unload()
         guard FileManager.default.fileExists(atPath: directory.path) else { return }
         try FileManager.default.removeItem(at: directory)
