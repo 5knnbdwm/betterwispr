@@ -141,4 +141,5 @@ import Testing
     #expect(events.map(\.type) == [.flagsChanged, .keyDown, .keyUp, .flagsChanged])
     #expect(events.map { $0.getIntegerValueField(.keyboardEventKeycode) } == [0x37, 9, 9, 0x37])
     #expect(events.map { $0.flags.contains(.maskCommand) } == [true, true, true, false])
+    #expect(events.map { $0.flags.contains(FocusedAppIntegration.leftCommandDeviceFlag) } == [true, true, true, false])
 }

@@ -66,7 +66,9 @@ public struct FocusedAppIntegration: TextOutputIntegration {
         return .pasted(into: target.localizedName ?? "your app")
     }
 
-    /// Command-V as a physical keyboard sends it, with Command pressed and released as its own events.
+    static let leftCommandDeviceFlag = CGEventFlags(rawValue: 0x8)
+
+    /// Command-V as a physical keyboard sends it, with left Command pressed and released as its own events.
     static func pasteKeystroke() -> [CGEvent]? {
         guard let source = CGEventSource(stateID: .combinedSessionState),
               let commandDown = CGEvent(keyboardEventSource: source, virtualKey: 0x37, keyDown: true),
@@ -75,9 +77,10 @@ public struct FocusedAppIntegration: TextOutputIntegration {
               let commandUp = CGEvent(keyboardEventSource: source, virtualKey: 0x37, keyDown: false) else { return nil }
         commandDown.type = .flagsChanged
         commandUp.type = .flagsChanged
-        commandDown.flags = .maskCommand
-        vDown.flags = .maskCommand
-        vUp.flags = .maskCommand
+        let leftCommand: CGEventFlags = [.maskCommand, leftCommandDeviceFlag]
+        commandDown.flags = leftCommand
+        vDown.flags = leftCommand
+        vUp.flags = leftCommand
         commandUp.flags = []
         return [commandDown, vDown, vUp, commandUp]
     }
