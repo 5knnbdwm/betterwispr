@@ -46,6 +46,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var dictationMode: DictationMode = .hold
     public var unloadModelWhenIdle: ModelIdleUnload = .never
     public var shortcut: DictationShortcut = .optionSpace
+    /// Optional extra shortcut that cancels a dictation without pasting it; Escape always cancels.
+    public var cancelShortcut: DictationShortcut?
     public var learnCorrections: Bool = true
     public var cleanup: CleanupLevel = .light
     /// Sends selected text, clipboard text and the focused window's text to the notes model during Medium cleanup.
@@ -148,6 +150,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         dictationMode = try container.decodeIfPresent(DictationMode.self, forKey: .dictationMode) ?? .hold
         unloadModelWhenIdle = try container.decodeIfPresent(ModelIdleUnload.self, forKey: .unloadModelWhenIdle) ?? .never
         shortcut = try container.decodeIfPresent(DictationShortcut.self, forKey: .shortcut) ?? .optionSpace
+        cancelShortcut = try container.decodeIfPresent(DictationShortcut.self, forKey: .cancelShortcut)
         microphone = try container.decodeIfPresent(AudioInputDevice.self, forKey: .microphone)
         dismissedSpeakerDetectionOffer = try container.decodeIfPresent(Bool.self, forKey: .dismissedSpeakerDetectionOffer) ?? false
         learnCorrections = try container.decodeIfPresent(Bool.self, forKey: .learnCorrections) ?? true

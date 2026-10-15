@@ -841,6 +841,19 @@ retries. They do not access Keychain, mount disk images or submit to Apple.
   required permission and keeps the previous shortcut. Revoke permission with a
   saved modifier shortcut, relaunch, then grant it again and return to BetterWispr;
   the saved shortcut resumes working. Ordinary combinations remain available.
+- [ ] On a fresh install, open Settings > Shortcut and confirm the Cancel
+  shortcut is empty and its caption says Escape still cancels. Record ⌃⌥K. With
+  no dictation running, confirm ⌃⌥K still reaches other apps. Start a dictation
+  into another app, press ⌃⌥K, and confirm the capsule shows Cancelled, no text
+  is pasted, audio cleanup runs and Undo restores the recording. Confirm ⌃⌥K
+  reaches other apps again once the capsule closes, and Escape still cancels.
+- [ ] Try to record a modifier alone (such as Left Option) as the Cancel
+  shortcut and confirm a toast refuses it and the setting is unchanged. Try the
+  dictation shortcut as the Cancel shortcut, and the Cancel shortcut as the
+  dictation shortcut, and confirm each is refused with a toast and both stay
+  as they were. Try a combination another app holds and confirm the failure
+  toast. Clear turns the Cancel shortcut off, and relaunching keeps the setting
+  you left, set or cleared.
 - [ ] Disconnect the input device during capture; retry after reconnecting.
 - [ ] Move between Spaces, fullscreen windows and monitors. Confirm capsule
   positioning, keyboard controls, VoiceOver labels and reduced-motion behavior.

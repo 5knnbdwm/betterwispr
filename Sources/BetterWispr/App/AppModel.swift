@@ -144,6 +144,7 @@ final class AppModel {
     @ObservationIgnored private let correctionWatcher = CorrectionWatcher()
     @ObservationIgnored private let globalShortcut = GlobalShortcut()
     @ObservationIgnored private let cancelShortcut = GlobalShortcut(id: 2)
+    @ObservationIgnored private let customCancelShortcut = GlobalShortcut(id: 3)
     @ObservationIgnored private var microphoneObserver: AudioInputObserver?
     @ObservationIgnored private var shortcutWarning: String?
     @ObservationIgnored private var provider: (any SpeechProvider)?
@@ -219,6 +220,7 @@ final class AppModel {
         globalShortcut.onPress = { [weak self] in self?.shortcutPressed() }
         globalShortcut.onRelease = { [weak self] in self?.shortcutReleased() }
         cancelShortcut.onPress = { [weak self] in self?.cancelRecording() }
+        customCancelShortcut.onPress = { [weak self] in self?.cancelRecording() }
         onBusyChange = { [weak self] busy in self?.armCancelShortcut(busy) }
         warmUpSelectedModel()
         let warmUpAfterWake: @Sendable (Notification) -> Void = { [weak self] _ in
@@ -263,12 +265,22 @@ final class AppModel {
     func suspendShortcut() { globalShortcut.unregister() }
 
     private func armCancelShortcut(_ busy: Bool) {
-        if busy { cancelShortcut.register(keyCode: UInt32(kVK_Escape), modifiers: settings.shortcut.cancelModifiers) }
-        else { cancelShortcut.unregister() }
+        if busy {
+            cancelShortcut.register(keyCode: UInt32(kVK_Escape), modifiers: settings.shortcut.cancelModifiers)
+            if let custom = settings.cancelShortcut { try? customCancelShortcut.register(custom) }
+        } else {
+            cancelShortcut.unregister()
+            customCancelShortcut.unregister()
+        }
     }
 
     func changeShortcut(_ shortcut: DictationShortcut) {
         guard !isBusy else { return }
+        if shortcut == settings.cancelShortcut {
+            registerShortcut()
+            ToastWindow.shared.show(Toast(failure: "Couldn’t use \(shortcut.displayName)", ShortcutError.alreadyAssigned(shortcut)))
+            return
+        }
         do {
             try globalShortcut.register(shortcut)
         } catch {
@@ -278,6 +290,23 @@ final class AppModel {
         }
         if statusMessage == shortcutWarning { statusMessage = "" }
         settings.shortcut = shortcut
+        saveSettings()
+    }
+
+    func changeCancelShortcut(_ shortcut: DictationShortcut?) {
+        guard !isBusy else { return }
+        if let shortcut {
+            do {
+                if shortcut.isModifierOnly { throw ShortcutError.cancelNeedsKey }
+                if shortcut == settings.shortcut { throw ShortcutError.alreadyAssigned(shortcut) }
+                try customCancelShortcut.register(shortcut)
+                customCancelShortcut.unregister()
+            } catch {
+                ToastWindow.shared.show(Toast(failure: "Couldn’t use \(shortcut.displayName)", error))
+                return
+            }
+        }
+        settings.cancelShortcut = shortcut
         saveSettings()
     }
 
