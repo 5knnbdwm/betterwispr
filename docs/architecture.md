@@ -24,7 +24,7 @@ Sources/
     Speech/           SpeechProvider contract, model catalog, Apple and WhisperKit
     Transcription/    English filler/stutter cleanup, spoken email layout, optional notes-model polish, writing styles and vocabulary replacements
     Notes/            Meeting notes with Apple Intelligence, the built-in model, Ollama, signed-in CLIs and explicit API connections
-    Integrations/     Clipboard and guarded paste delivery, and the yt-dlp link downloader
+    Integrations/     Clipboard and guarded paste delivery, the yt-dlp link downloader and the read-only MCP server
   BetterWisprCLI/      Developer entry point for model and file smoke tests
 ```
 
@@ -310,6 +310,59 @@ including an API connection, and the Settings footer says so.
 `Meeting.attendees` and `Meeting.eventID` are optional, so workspaces and
 meetings saved before them load with the integration off, no calendar excluded,
 and no event.
+
+### Connected apps (MCP server)
+
+`MCPServer` in `Integrations/` lets apps that speak the Model Context Protocol,
+such as Claude Desktop, Claude Code and Cursor, read saved meetings. The app
+executable serves it when launched as `BetterWispr --mcp`. `Launch`, the
+package's `@main`, checks for that argument before `BetterWisprApp.main()`, so
+the server process creates no `AppModel`, window, shortcut or audio session,
+and the bundle needs no second executable. The connected app starts the process
+and exchanges newline-delimited JSON-RPC 2.0 over its standard input and output.
+The server opens no socket and makes no network request.
+
+`MCPServer.reply(to:)` turns one input line into one reply line, or none for a
+notification or a blank line, so tests drive it without a process. It answers
+`initialize`, `ping`, `tools/list` and `tools/call`. `initialize` echoes a
+supported protocol version and otherwise offers the newest it knows,
+2025-11-25. Any other method gets -32601, malformed JSON gets -32700, and a
+message that is not a JSON-RPC 2.0 request gets -32600. The stateless
+`server/discover` handshake is not implemented.
+
+There are three tools, each annotated read-only and closed-world.
+`list_meetings` lists meetings newest first. `get_meeting` returns one meeting
+by id. `search_meetings` finds a phrase in meeting lines, ignoring case and
+accents. List and search take an optional `from` and `to`, and a plain date
+covers that whole local day. A meeting's text is a header (id, title, date,
+duration, attendees and speakers) followed by `Meeting.markdown`, the same text
+as Copy notes and transcript, so the summary, action items, the user's notes and
+the timestamped transcript with speaker names match the app.
+
+Every reply is bounded. List and search return at most 50 entries, and a reply
+stops before 30,000 characters, though it always holds at least one entry or
+line. A cut reply ends with the call and offset that continue it, and each
+search match carries the meeting id and line offset that `get_meeting` takes.
+
+Every `tools/call` first loads `workspace.json` through `LocalStore` and checks
+`AppSettings.mcpServer`. A missing, unreadable or unsupported workspace counts as
+off. While off, a tool call returns a tool error that says where to turn it on,
+and no meeting is loaded. `initialize` and `tools/list` still work, so a
+connected app can show the server and its tools. Turning the setting off takes
+effect on the next call, without restarting the connected app. Meetings load
+through `MeetingStore.load()`, which only reads, so an unreadable meeting file is
+skipped, counted in list and search replies, and left as it is. Transcriptions
+from the Transcribe page are not served.
+
+`AppSettings.mcpServer` decodes with `decodeIfPresent` and defaults to false, so
+a workspace saved before it keeps the server off. Settings > Connected apps
+holds the toggle. While it is on, the section shows the `claude mcp add` line, an
+`mcpServers` snippet for Claude Desktop and Cursor, and the bare command, each
+built from `Bundle.main.executablePath` with a Copy button. Its footer says that
+a connected app sends what it reads to its AI provider.
+`scripts/mcp-smoke.py` runs the built bundle with `--mcp` against a temporary
+home holding one synthetic meeting and one unreadable file, checks the replies
+with the setting off and on, and checks that the files are unchanged.
 
 ### Meeting detection
 
