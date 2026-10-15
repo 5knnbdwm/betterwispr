@@ -113,7 +113,7 @@ public final class LlamaEngine: Sendable {
         self.load = load
     }
 
-    /// Cancelling the task stops it within one decode step.
+    /// Cancelling the task stops it by the next prefill batch or decode step.
     public func complete(_ prompt: ChatPrompt, lane: Lane, grammar: String? = nil) async throws -> String {
         try await run(lane: lane) { weights, checkpoint in
             try Self.generate(prompt, grammar: grammar, limit: nil, with: weights, checkpoint: checkpoint)
@@ -333,7 +333,7 @@ public final class LlamaEngine: Sendable {
     }
 }
 
-/// Owns one `llama_model`; `@unchecked Sendable` because the model is immutable after loading and llama.cpp allows contexts on separate threads to share it, and the engine calls `close` only after every context over it is freed.
+/// `@unchecked Sendable`: the model is immutable after loading, llama.cpp lets contexts on separate threads share it, and the engine calls `close` only after every context over it is freed.
 final class LlamaWeights: LanguageWeights, @unchecked Sendable {
     let contextLength = LlamaEngine.contextLength
     private let model: OpaquePointer

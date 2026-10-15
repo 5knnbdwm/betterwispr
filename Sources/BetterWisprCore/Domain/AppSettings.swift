@@ -52,7 +52,6 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var microphone: AudioInputDevice?
     /// The user closed the meeting card that offers the speaker detection download.
     public var dismissedSpeakerDetectionOffer: Bool = false
-    /// The Ollama model that writes meeting notes.
     public var notesModel: String?
     /// Nil asks questions with the notes model.
     public var askSelection: NotesModelSelection?

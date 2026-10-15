@@ -77,7 +77,7 @@ public enum MeetingNotesGenerator {
         return .unavailable("Apple Intelligence needs macOS 26. Choose the built-in model, Claude Code, Codex, Ollama or an API connection in Models.")
     }
 
-    /// `lowLatency` asks API and CLI models for minimal reasoning; meeting notes keep the default requests.
+    /// `lowLatency` asks API and CLI models for minimal reasoning and runs the built-in model on its interactive lane; meeting notes keep the defaults.
     static func languageModel(_ settings: AppSettings, instructions: String = NotesWriter.instructions,
                               lowLatency: Bool = false) throws -> any NotesLanguageModel {
         switch settings.notesSelection {
@@ -98,7 +98,7 @@ public enum MeetingNotesGenerator {
         throw MeetingNotesError.unavailable(appleAvailability.message)
     }
 
-    /// Loads the selected built-in, Ollama or Apple model into memory before a dictation edit. Sends no text; API and CLI models need nothing.
+    /// Loads the selected on-device model into memory; sends no text.
     public static func warmUp(settings: AppSettings) async {
         switch settings.notesSelection {
         case .builtIn: await LlamaEngine.shared.warmUp()
