@@ -253,6 +253,18 @@ private struct SpeechConnectionEditor: View {
                 set: { language = $0 })
     }
 
+    private var preset: Binding<String?> {
+        Binding(get: { NotesAPIPreset.all.first { $0.endpoint == connection.endpoint && $0.modelID == connection.modelID }?.id },
+                set: { id in
+                    let preset = NotesAPIPreset.all.first { $0.id == id }
+                    connection.name = preset?.name ?? connection.name
+                    connection.endpoint = preset?.endpoint ?? connection.endpoint
+                    connection.modelID = preset?.modelID ?? ""
+                    key = ""
+                    error = nil
+                })
+    }
+
     private var original: SpeechConnection? { (forNotes ? model.settings.notesConnections : model.settings.speechConnections).first { $0.id == connection.id } }
     private var canKeepKey: Bool { original?.keychainAccount == connection.keychainAccount }
 
@@ -261,6 +273,12 @@ private struct SpeechConnectionEditor: View {
             Form {
                 Section {
                     if forNotes {
+                        if original == nil {
+                            Picker("Provider", selection: preset) {
+                                Text("Custom").tag(String?.none)
+                                ForEach(NotesAPIPreset.all) { Text($0.name).tag(String?.some($0.id)) }
+                            }
+                        }
                         LabeledContent("API format", value: "OpenAI-compatible chat completions")
                     } else {
                         Picker("Provider", selection: $connection.api) {
