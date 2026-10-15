@@ -205,7 +205,7 @@ final class AppModel {
         if !models.contains(where: { $0.id == settings.selectedModelID }) { settings.selectedModelID = "apple" }
         settings.launchAtLogin = SMAppService.mainApp.status == .enabled
         meetings.notesSettings = settings
-        for cli in Set([settings.notesCLI, settings.askSettings.notesCLI].compactMap { $0 }) { Task { await refreshNotesCLIModels(cli) } }
+        for cli in Set([settings.notesCLI, settings.askSettings.notesCLI, settings.cleanupSettings.notesCLI].compactMap { $0 }) { Task { await refreshNotesCLIModels(cli) } }
         refreshModels()
         refreshCalendars()
         recorder.onLevel = { [weak self] levels in self?.voiceLevels = levels }
@@ -494,7 +494,7 @@ final class AppModel {
                 let lightlyCleaned = TranscriptCleaner.clean(recognized, language: language)
                 let trigger = recording.settings.modes.match(transcript: lightlyCleaned)
                 let mode = trigger?.mode ?? recording.mode
-                let writingSettings = recording.settings.applying(mode)
+                let writingSettings = recording.settings.applying(mode).cleanupSettings
                 let cleanup = writingSettings.cleanup
                 let tone = writingSettings.tone(for: AppCategory(bundleID: appBundleID).style)
                 let base = cleanup == .none ? recognized.trimmingCharacters(in: .whitespacesAndNewlines) : lightlyCleaned
@@ -690,7 +690,7 @@ final class AppModel {
         Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(450))
             guard let self, self.generation == token, self.phase == .recording else { return }
-            let settings = self.settings.applying(self.writingMode)
+            let settings = self.settings.applying(self.writingMode).cleanupSettings
             guard settings.cleanup == .medium, settings.language == "auto" || settings.language.hasPrefix("en"),
                   MeetingNotesGenerator.availability(settings: settings) == .available else { return }
             await MeetingNotesGenerator.warmUp(settings: settings)
@@ -700,7 +700,7 @@ final class AppModel {
     /// Starts reading screen context when Parakeet with the phrase booster can spell names from it or Medium cleanup can show it, with the clipboard, to an available notes model.
     private func captureContext(for settings: AppSettings) -> Task<DictationContext, Never>? {
         guard settings.useScreenContext else { return nil }
-        let showsNotesModel = settings.cleanup == .medium && MeetingNotesGenerator.availability(settings: settings) == .available
+        let showsNotesModel = settings.cleanup == .medium && MeetingNotesGenerator.availability(settings: settings.cleanupSettings) == .available
         guard showsNotesModel || spellsScreenNames(with: selectedModel, language: settings.language) else { return nil }
         return targetApplication.map { DictationContext.capture(from: $0, recognizingScreen: settings.recognizeScreenText, readingClipboard: showsNotesModel) }
     }
@@ -1180,8 +1180,8 @@ final class AppModel {
         if case .cli(let cli) = selection { Task { await refreshNotesCLIModels(cli) } }
     }
 
-    func selectAskModel(_ selection: NotesModelSelection?) {
-        settings.askSelection = selection
+    func selectNotesModel(_ selection: NotesModelSelection?, for choice: WritableKeyPath<AppSettings, NotesModelSelection?>) {
+        settings[keyPath: choice] = selection
         saveNotesSettings()
         if case .cli(let cli) = selection { Task { await refreshNotesCLIModels(cli) } }
     }

@@ -71,6 +71,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var notesModel: String?
     /// Nil asks questions with the notes model.
     public var askSelection: NotesModelSelection?
+    /// Nil edits Medium dictation with the notes model.
+    public var cleanupSelection: NotesModelSelection?
     public var notesBuiltIn: Bool = false
     /// The newest onboarding the user finished or skipped; 0 shows it again.
     public var completedOnboardingVersion: Int = 0
@@ -104,9 +106,16 @@ public struct AppSettings: Codable, Equatable, Sendable {
         return settings
     }
 
+    public var cleanupSettings: AppSettings {
+        var settings = self
+        if let cleanupSelection { settings.notesSelection = cleanupSelection }
+        return settings
+    }
+
     public mutating func deselectNotesConnection(_ id: UUID) {
         if notesConnectionID == id { notesSelection = .apple }
         if askSelection == .connection(id) { askSelection = nil }
+        if cleanupSelection == .connection(id) { cleanupSelection = nil }
     }
 
     public init() {}
@@ -170,6 +179,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         modes = try container.decodeIfPresent([WritingMode].self, forKey: .modes) ?? []
         notesModel = try container.decodeIfPresent(String.self, forKey: .notesModel)
         askSelection = try? container.decodeIfPresent(NotesModelSelection.self, forKey: .askSelection)
+        cleanupSelection = try? container.decodeIfPresent(NotesModelSelection.self, forKey: .cleanupSelection)
         notesBuiltIn = try container.decodeIfPresent(Bool.self, forKey: .notesBuiltIn) ?? false
         completedOnboardingVersion = try container.decodeIfPresent(Int.self, forKey: .completedOnboardingVersion) ?? 0
         onboardingStep = try container.decodeIfPresent(Int.self, forKey: .onboardingStep) ?? 0

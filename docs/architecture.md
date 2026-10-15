@@ -88,13 +88,15 @@ the policy immediately and persist through the existing workspace store.
    so a misheard "Kocia Mark" becomes "question mark". Then apply voice
    commands, spoken numbers as digits and the @, # and % symbols for English
    and Auto. For English
-   text, **Medium** then asks the notes model the user chose in Models (Apple
-   Intelligence, the built-in model, Ollama, a signed-in CLI or an API connection) for a clarity edit
+   text, **Medium** then asks the cleanup provider chosen on the Style page, or
+   the notes model chosen in Models while it stays Same as notes
+   (`AppSettings.cleanupSettings`; Apple Intelligence, the built-in model,
+   Ollama, a signed-in CLI or an API connection), for a clarity edit
    with `TranscriptPolisher` instructions, plus the selected text, clipboard and
    window text when "Use screen context" is on and the dictation started in
    Medium. Screen context is captured when it is on and either Parakeet with
    the phrase booster is selected for English or automatic language, or Medium
-   has an available notes model. Only the Medium case reads the clipboard. The edit is bounded by a timeout and
+   has an available cleanup model. Only the Medium case reads the clipboard. The edit is bounded by a timeout and
    rejected when it answers the dictation, adds new words or changes length too
    much; any failure keeps the Light text, and Medium never picks a different
    model than the one selected.

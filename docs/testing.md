@@ -1003,6 +1003,18 @@ player; real playback and the Automation prompt need these steps.
 - [ ] Revoke Accessibility. Website modes stop matching, app modes still work and
   dictation is not delayed by more than half a second.
 
+### Cleanup provider
+
+- [ ] Choose Medium on the Style page. The Cleanup provider picker shows "Same
+  as notes" with the notes model's name. Dictate an English sentence with a
+  repair ("at 5, no, at 6"); the capsule says "Editing with" the notes model.
+- [ ] Choose another Ollama model or a notes API connection as the cleanup
+  provider. Medium dictation uses it while meeting notes and Ask keep theirs.
+  Remove that API connection; the picker returns to "Same as notes".
+- [ ] Choose an unavailable cleanup provider (Apple Intelligence off, or a CLI
+  with no model). The Style page shows the reason, Medium dictations get Light
+  cleanup and no other provider is asked.
+
 ## Dictation languages and Chinese script
 
 - [ ] With a Whisper model and Detect automatically, Dictation languages shows

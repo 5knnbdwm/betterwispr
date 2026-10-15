@@ -66,7 +66,7 @@ extension CleanupLevel {
         switch self {
         case .none: "Keeps exactly what you said, including filler words."
         case .light: "Removes filler words like “um” and “you know”, stutters like “we we”, and corrections like “at 5, no, at 6”."
-        case .medium: "Also has your notes model fix self-corrections, numbers, punctuation and spoken lists in English dictation."
+        case .medium: "Also has your cleanup model fix self-corrections, numbers, punctuation and spoken lists in English dictation."
         }
     }
 }
@@ -105,9 +105,8 @@ struct StyleView: View {
                     if model.settings.cleanup == .medium {
                         RowDivider()
                         VStack(alignment: .leading, spacing: 8) {
-                            NotesModelPicker(model: model)
-                                .disabled(!model.canEditConnections)
-                            if case .unavailable(let reason) = MeetingNotesGenerator.availability(settings: model.settings) {
+                            NotesModelPicker(model: model, title: "Cleanup provider", choice: \.cleanupSelection)
+                            if case .unavailable(let reason) = MeetingNotesGenerator.availability(settings: model.settings.cleanupSettings) {
                                 Label("\(reason) Until then, Medium dictations get Light cleanup.", systemImage: "exclamationmark.triangle")
                                     .font(.callout)
                                     .foregroundStyle(.secondary)
@@ -234,11 +233,11 @@ struct StyleView: View {
                 set: { model.settings.styles[context] = $0; model.saveSettings() })
     }
 
-    private static let screenContextCaption = "When you speak English to Parakeet with the phrase booster installed, reads your selected text and the window you dictate into on this Mac, and uses the names in them to fix words Parakeet heard as misspellings, such as superbase becoming Supabase. Correctly spelled words stay as heard. With Medium cleanup, your selected text, clipboard and window text also go to your notes model, which may be a cloud service. Nothing is read while a password field is active, and clipboard items marked as passwords are skipped."
+    private static let screenContextCaption = "When you speak English to Parakeet with the phrase booster installed, reads your selected text and the window you dictate into on this Mac, and uses the names in them to fix words Parakeet heard as misspellings, such as superbase becoming Supabase. Correctly spelled words stay as heard. With Medium cleanup, your selected text, clipboard and window text also go to your cleanup model, which may be a cloud service. Nothing is read while a password field is active, and clipboard items marked as passwords are skipped."
 
     private var screenTextCaption: String {
         let status = CGPreflightScreenCaptureAccess() ? "Screen Recording is allowed." : "Needs Screen Recording. Allow BetterWispr under Privacy & Security, Screen & System Audio Recording in System Settings, then reopen BetterWispr."
-        return "When an app shares too little text, reads its window from a screenshot on this Mac. With Medium cleanup, that text also goes to your notes model, which may be a cloud service. \(status)"
+        return "When an app shares too little text, reads its window from a screenshot on this Mac. With Medium cleanup, that text also goes to your cleanup model, which may be a cloud service. \(status)"
     }
 
     private var recognizeScreenText: Binding<Bool> {
