@@ -125,7 +125,6 @@ final class AppModel {
     var installation: ModelInstallation?
     var phraseBoosterInstalled = false
     var speakerDetectionInstalled = false
-    /// Speaker detection was asked for during another download and starts once that download succeeds.
     var speakerDetectionQueued = false
     var microphoneGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
     var accessibilityGranted = AXIsProcessTrusted()

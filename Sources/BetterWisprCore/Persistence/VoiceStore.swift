@@ -1,6 +1,5 @@
 import Foundation
 
-/// A voice the user named in a meeting, kept on this Mac to name the same voice in later meetings.
 public struct KnownVoice: Codable, Equatable, Sendable {
     public var name: String
     public var meetingID: UUID
@@ -15,7 +14,6 @@ public struct KnownVoice: Codable, Equatable, Sendable {
     }
 }
 
-/// Remembered voices in one file; a file that fails to load is left for the caller to report, never overwritten.
 public struct VoiceStore: Sendable {
     public let url: URL
 
@@ -35,7 +33,7 @@ public struct VoiceStore: Sendable {
         return file.voices
     }
 
-    public func save(_ voices: [KnownVoice]) throws {
+    private func save(_ voices: [KnownVoice]) throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true,
                                                attributes: [.posixPermissions: 0o700])
         try JSONEncoder().encode(File(version: 1, voices: voices)).write(to: url, options: .atomic)

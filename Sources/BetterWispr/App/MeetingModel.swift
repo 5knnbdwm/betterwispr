@@ -28,8 +28,7 @@ final class MeetingRun {
     @ObservationIgnored var drain: Task<Void, Never>?
     @ObservationIgnored var work: Task<Void, Never>?
     @ObservationIgnored var voices: SpeakerRecording?
-    /// Microphone audio also goes to speaker detection, to tell apart people in the room.
-    @ObservationIgnored var hearsRoom = false
+    @ObservationIgnored var separatesRoomVoices = false
     @ObservationIgnored var detection: Task<(segments: [MeetingSegment], voices: [Int: [Float]]), Error>?
 
     init(meetingID: UUID, phase: MeetingPhase, language: String? = nil, vocabulary: [VocabularyEntry] = []) {
@@ -57,7 +56,6 @@ final class MeetingModel {
     var notesSettings = AppSettings()
     var ollamaModels: [String] = []
     var builtInModelInstalled = false
-    /// Mirrors the Remember named voices setting; turning it off drops the voices held for naming.
     var remembersVoices = false {
         didSet { if !remembersVoices { heardVoices = [:] } }
     }
@@ -69,7 +67,6 @@ final class MeetingModel {
     @ObservationIgnored private let store: MeetingStore
     @ObservationIgnored private var writableAskStore: AllMeetingsAskStore?
     @ObservationIgnored private let voiceStore: VoiceStore
-    /// Voice embeddings of this session's detected meetings, kept in memory until the user names them, with the names they were recognised as.
     @ObservationIgnored private var heardVoices: [UUID: (voices: [Int: [Float]], recognised: [Int: String])] = [:]
     @ObservationIgnored private let recorder = MeetingRecorder()
     /// The run that receives the recorder's chunks, including the last ones a stopped meeting hands off.
@@ -133,7 +130,7 @@ final class MeetingModel {
         showsCallAudioHint = false
         heard = (false, false)
         run.voices = SpeakerDetection.isInstalled() ? try? SpeakerRecording() : nil
-        run.hearsRoom = separateRoomVoices
+        run.separatesRoomVoices = separateRoomVoices
         elapsed = 0
         let releasing = releasingRecorder
         run.work = Task { [weak self] in
@@ -434,7 +431,7 @@ final class MeetingModel {
                 guard let segment else { continue }
                 edit(id, save: false) { $0.insert(segment) }
                 saveNow(id)
-                if chunk.speaker == .them || run.hearsRoom, let voices = run.voices { try? await voices.append(chunk.url, for: segment.id) }
+                if chunk.speaker == .them || run.separatesRoomVoices, let voices = run.voices { try? await voices.append(chunk.url, for: segment.id) }
             } catch {
                 guard owns(run) else { return }
                 if !(error is CancellationError) {
@@ -491,13 +488,11 @@ final class MeetingModel {
         rememberNamedVoices(in: meeting)
     }
 
-    /// Deletes every remembered voice and the voices held for naming.
     func forgetVoices() throws {
         heardVoices = [:]
         try voiceStore.forget()
     }
 
-    /// Keeps the voices the user named in this meeting, replacing what it stored before.
     private func rememberNamedVoices(in meeting: Meeting) {
         guard remembersVoices, let heard = heardVoices[meeting.id] else { return }
         do {

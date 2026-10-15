@@ -3,7 +3,6 @@ import Foundation
 import SpeakerKit
 import WhisperKit
 
-/// Tells the voices in a meeting apart after it ends, on this Mac.
 public enum SpeakerDetection {
     private static let repo = "argmaxinc/speakerkit-coreml"
     private static let revision = "556fc52a13327837688f02289457cded017802e9"
@@ -15,7 +14,6 @@ public enum SpeakerDetection {
         (info: ModelInfo.plda(), files: ["PldaProjector"])
     ]
 
-    /// SpeakerKit's default clustering distance between length-normalised voice embeddings, also the bar for recognising a remembered voice.
     public static let sameVoiceDistance: Float = 0.6
 
     public static var directory: URL {
@@ -182,7 +180,6 @@ public enum SpeakerDetection {
         }
     }
 
-    /// Euclidean distance between two embeddings scaled to unit length, as SpeakerKit clusters them; nil when they can't be compared.
     static func distance(_ a: [Float], _ b: [Float]) -> Float? {
         guard a.count == b.count, let a = unit(a), let b = unit(b) else { return nil }
         return zip(a, b).reduce(0) { $0 + ($1.0 - $1.1) * ($1.0 - $1.1) }.squareRoot()
@@ -202,7 +199,6 @@ struct VoiceTurn: Equatable, Sendable {
     var length: TimeInterval { end - start }
 }
 
-/// Collects the audio behind each transcribed segment into one 16 kHz file, then finds who spoke each one.
 public actor SpeakerRecording {
     struct Placement: Sendable {
         var segment: UUID
@@ -232,7 +228,6 @@ public actor SpeakerRecording {
         placements.append(Placement(segment: segment, start: start, end: Double(file.length) / Self.format.sampleRate))
     }
 
-    /// Finds the voices behind each collected segment and each voice's embedding; empty when no audio was collected.
     func voiceTurns() async throws -> (turns: [UUID: [VoiceTurn]], embeddings: [String: [Float]]) {
         file = nil
         guard !placements.isEmpty else { return ([:], [:]) }
@@ -246,7 +241,6 @@ public actor SpeakerRecording {
         return (SpeakerDetection.voiceTurns(turns: result.segments, placements: placements), embeddings)
     }
 
-    /// Writes one stretch of a segment's audio to its own file, in seconds from the segment's start.
     func audio(of segment: UUID, from start: TimeInterval, to end: TimeInterval) throws -> URL {
         guard file == nil, let placement = placements.first(where: { $0.segment == segment }) else { throw CocoaError(.fileReadUnknown) }
         let source = try AVAudioFile(forReading: url)

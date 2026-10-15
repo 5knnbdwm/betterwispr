@@ -85,7 +85,6 @@ public struct Meeting: Codable, Identifiable, Equatable, Sendable {
     public var segments: [MeetingSegment]
     public var modelName: String
     public var language: String
-    /// Names the user gave voices in the meeting, by participant number.
     public var participantNames: [Int: String]?
     /// Invitees of the Calendar event the meeting was recorded during, other than the user.
     public var attendees: [String]?
