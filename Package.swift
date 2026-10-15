@@ -17,6 +17,7 @@ let package = Package(
     targets: [
         .target(name: "BetterWisprCore", dependencies: [
             .product(name: "WhisperKit", package: "argmax-oss-swift"),
+            .product(name: "SpeakerKit", package: "argmax-oss-swift"),
             .product(name: "FluidAudio", package: "FluidAudio")
         ]),
         .executableTarget(

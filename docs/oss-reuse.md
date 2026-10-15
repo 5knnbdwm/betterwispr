@@ -24,17 +24,18 @@ as a SwiftPM dependency to run NVIDIA Parakeet TDT on the Neural Engine. No
 FluidAudio source is copied. Models load with `AsrModels.loadLocal`, which never
 fetches missing files; downloads only run from an explicit model installation.
 
-`Sources/BetterWisprCore/Speech/SpeakerDetection.swift` uses FluidAudio's
-`OfflineDiarizerManager` to tell meeting speakers apart. FluidAudio's own
-`OfflineDiarizerModels.load` downloads missing models and downloads again after a
-failed load, so BetterWispr loads the four Core ML models itself.
-`SpeakerDetection.pldaPsi(from:)` adapts the PLDA parameter parsing of FluidAudio
-0.17.5's private `OfflineDiarizerModels.loadPLDAPsi` (Apache-2.0, license shipped
-in the app bundle), rewritten with `Decodable`. The weights are FluidInference's
-Core ML conversion of pyannote speaker-diarization-community-1, which pyannote
-publishes under CC-BY-4.0; the conversion's Hugging Face card lists its license as
-"other". BetterWispr does not bundle them; they download only from the explicit
-Speaker detection installation.
+`Sources/BetterWisprCore/Speech/SpeakerDetection.swift` uses SpeakerKit from
+[argmax-oss-swift](https://github.com/argmaxinc/argmax-oss-swift) 1.1.0 (MIT,
+license and notices shipped in the app bundle) as a SwiftPM dependency to tell
+meeting speakers apart. No SpeakerKit source is copied. It loads with
+`download: false`, so a missing or damaged model fails instead of downloading.
+The weights are Argmax's Core ML conversion of pyannote
+speaker-diarization-community-1, from
+[argmaxinc/speakerkit-coreml](https://huggingface.co/argmaxinc/speakerkit-coreml)
+at revision `556fc52a13327837688f02289457cded017802e9`, published under
+CC-BY-4.0. Each model folder's README links the original weights' license:
+pyannote segmentation-3.0, WeSpeaker and VBx. BetterWispr does not bundle them;
+they download only from the explicit Speaker detection installation.
 
 `Sources/BetterWispr/App/AppUpdater.swift` uses
 [Sparkle](https://github.com/sparkle-project/Sparkle) 2.10.0 (MIT) as a SwiftPM

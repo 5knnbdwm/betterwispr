@@ -509,7 +509,7 @@ struct MeetingDetailView: View {
     }
 
     @ViewBuilder private func speakerDetectionOffer(_ meeting: Meeting) -> some View {
-        if !isActive, SpeakerDetection.isSupported, !model.speakerDetectionInstalled, !model.settings.dismissedSpeakerDetectionOffer,
+        if !isActive, !model.speakerDetectionInstalled, !model.settings.dismissedSpeakerDetectionOffer,
            meeting.segments.contains(where: { $0.speaker == .them }) {
             let installation = model.installation?.id == AppModel.speakerDetectionID ? model.installation : nil
             let installing = installation != nil && installation?.failure == nil

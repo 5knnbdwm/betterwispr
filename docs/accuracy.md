@@ -520,6 +520,10 @@ appeared anywhere in the reference, which scored "Christian countries" to
 
 Measured on an Apple M5 with macOS 27.0.1, release builds of `BetterWisprCLI`
 with the 0.1.5 changes, FluidAudio 0.17.5, `--language en` and Light cleanup.
+Speaker detection here is 0.1.5's FluidAudio 0.17.5 `OfflineDiarizerManager`.
+0.1.6 replaced it with Argmax SpeakerKit. Nothing in this section has been
+measured with SpeakerKit, including the WER of the split rows, which depends on
+where speaker detection hears the voice change.
 `--meeting` plays a file through the app's meeting chunker as call audio,
 transcribes each chunk as a meeting does and labels voices with Speaker
 detection. `scripts/evaluate_meetings.py` scores the segments against

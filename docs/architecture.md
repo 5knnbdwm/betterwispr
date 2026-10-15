@@ -139,19 +139,22 @@ tabs backed by the existing meeting fields.
 3. One serial queue transcribes chunks in order, applies the same cleanup and
    vocabulary as dictation, keeps raw and final text, inserts the segment by start
    time and saves. A failed chunk shows a message and the meeting continues.
-   When speaker detection is installed and the Mac runs macOS 15 or later
-   (FluidAudio issue 878 crashes its Core ML path on macOS 14), each transcribed
-   "Them" chunk is also resampled to 16 kHz mono and appended to one
-   `SpeakerRecording` file, which remembers where each segment sits in it.
+   When speaker detection is installed, each transcribed "Them" chunk is also
+   resampled to 16 kHz mono and appended to one `SpeakerRecording` file, which
+   remembers where each segment sits in it.
 4. Stopping closes both sources and transcribes the remaining chunks. The next
    meeting can start as soon as the recorder has handed those chunks off, while
    the stopped one keeps transcribing, finding speakers and writing notes. If a
-   `SpeakerRecording` exists, FluidAudio's `OfflineDiarizerManager` (pyannote
-   community-1 with VBx clustering) runs on it with models that
-   `SpeakerDetection.loadModels` reads from disk; it never downloads. Each "Them"
+   `SpeakerRecording` exists, Argmax SpeakerKit's pyannote pipeline runs on it
+   with models that `SpeakerDetection.diarizer(from:)` loads from disk; it never
+   downloads. The models are pinned to one revision of
+   `argmaxinc/speakerkit-coreml` and live in
+   `BetterWispr/Models/models/argmaxinc/speakerkit-coreml`. Each "Them"
    segment gets the voice heard longest within it, numbered 1, 2, 3 by first
-   appearance, in `MeetingSegment.participant`. Skip or an error leaves the
-   segments as "Them". Names typed above the transcript are saved in
+   appearance, in `MeetingSegment.participant`. Skip stops waiting at once and
+   leaves the segments as "Them"; detection already running finishes in the
+   background on audio held in memory, so the recording file is deleted
+   normally. An error also leaves the segments as "Them". Names typed above the transcript are saved in
    `Meeting.participantNames`, and `MeetingSegment.label(names:)` renders the
    transcript, Markdown and notes input with them. Then it writes
    notes with the explicitly chosen notes model: Apple Intelligence by default,

@@ -25,7 +25,7 @@ func run() async throws {
             update with its pass latency, then the batch transcription of the same file.
           --meeting PATH [--model MODEL_ID] [--language en] [--vocabulary "Term,Other term"] [--notes OUT.md] [--notes-model OLLAMA_MODEL]
             Plays the file through the meeting chunker as call audio, transcribes each chunk as meetings do and
-            prints one JSON segment per line. Speaker detection labels voices when it is installed (macOS 15).
+            prints one JSON segment per line. Speaker detection labels voices when it is installed.
             --notes writes the meeting with notes from Apple Intelligence or the named Ollama model. With --notes,
             PATH may instead be a .jsonl file of segments from an earlier run, which skips transcription.
           --bench MANIFEST.jsonl [--model MODEL_ID] [--language auto|en] [--vocabulary "Term,Other term"] [--cleanup light|medium] [--notes-model OLLAMA_MODEL]
@@ -147,7 +147,7 @@ func meeting(_ url: URL, provider: any SpeechProvider, language: String?, vocabu
         let segments = try String(contentsOf: url, encoding: .utf8).split(whereSeparator: \.isNewline).map { try JSONDecoder().decode(MeetingSegment.self, from: Data($0.utf8)) }
         return try await write(notes: notes, for: segments, language: language, settings: settings)
     }
-    let voices = SpeakerDetection.isReady ? try SpeakerRecording() : nil
+    let voices = SpeakerDetection.isInstalled() ? try SpeakerRecording() : nil
     defer { voices?.discard() }
     if voices == nil { FileHandle.standardError.write(Data("Speaker detection isn’t installed, so voices stay unlabeled.\n".utf8)) }
     var segments: [MeetingSegment] = []
