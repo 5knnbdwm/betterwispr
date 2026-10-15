@@ -178,6 +178,21 @@ struct ModelsView: View {
                 Text("\(speechModel.sizeLabel) · \(engineLabel(speechModel.engine))")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
+                if let names = speechModel.languageNames {
+                    if names.count == 1 {
+                        Text(names[0])
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        DisclosureGroup("\(names.count) languages") {
+                            Text(names.formatted(.list(type: .and)))
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .font(.caption)
+                    }
+                }
                 if let installation {
                     if installing { ProgressView(value: installation.progress).padding(.top, 4) }
                     Text(installation.failure.map { "Download stopped: \($0)" } ?? installation.progressLabel)
