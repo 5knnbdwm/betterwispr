@@ -12,7 +12,7 @@ public struct NotesCLICatalog: Sendable {
 
     /// Asks the signed-in CLI for its picker catalog. No inference or meeting text is sent.
     public static func load(_ cli: NotesCLI) async throws -> NotesCLICatalog {
-        guard let executable = cli.executable else { throw unavailable(cli) }
+        guard let executable = await cli.locateExecutable() else { throw unavailable(cli) }
         switch cli {
         case .claudeCode:
             let output = try await CLINotesModel.run(executable,
