@@ -2,10 +2,10 @@ import BetterWisprCore
 import SwiftUI
 
 enum AppPage: String, CaseIterable, Identifiable {
-    case overview, insights, meetings, history, models, vocabulary, style, settings, about
+    case overview, insights, meetings, transcribe, history, models, vocabulary, style, settings, about
 
     static let sections: [(title: String?, pages: [AppPage])] = [
-        (nil, [.overview, .insights, .meetings, .history]),
+        (nil, [.overview, .insights, .meetings, .transcribe, .history]),
         ("Personalize", [.models, .vocabulary, .style]),
         ("App", [.settings, .about]),
     ]
@@ -23,6 +23,7 @@ enum AppPage: String, CaseIterable, Identifiable {
         case .overview: "house"
         case .insights: "chart.bar"
         case .meetings: "note.text"
+        case .transcribe: "waveform"
         case .history: "clock"
         case .models: "cpu"
         case .vocabulary: "character.book.closed"
@@ -89,6 +90,7 @@ struct DashboardView: View {
         case .overview: HomeView(model: model)
         case .insights: InsightsView(history: model.history, savesHistory: model.settings.saveHistory)
         case .meetings: MeetingsView(model: model)
+        case .transcribe: TranscribeView(model: model)
         case .history: HistoryView(model: model)
         case .models: ModelsView(model: model)
         case .vocabulary: VocabularyView(model: model)
