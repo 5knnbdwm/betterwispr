@@ -18,10 +18,10 @@ public struct MediaTranscript: Sendable {
 @MainActor
 public enum MediaTranscriber {
     public static func transcribe(_ url: URL, with provider: any SpeechProvider, language: String?, vocabulary: [VocabularyEntry],
-                                  progress: (MediaStage) -> Void = { _ in }) async throws -> MediaTranscript {
+                                  findSpeakers: Bool = SpeakerDetection.isInstalled(), progress: (MediaStage) -> Void = { _ in }) async throws -> MediaTranscript {
         progress(.reading)
         let audio = try await MediaAudio(url: url)
-        let voices = SpeakerDetection.isReady ? try? SpeakerRecording() : nil
+        let voices = findSpeakers ? try? SpeakerRecording() : nil
         defer { voices?.discard() }
         func segment(of chunk: URL, start: TimeInterval, duration: TimeInterval) async throws -> MeetingSegment? {
             let raw = try await provider.transcribe(audioURL: chunk, language: language, vocabulary: VocabularyProcessor.hints(vocabulary))

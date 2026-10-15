@@ -115,7 +115,8 @@ private final class ScriptedProvider: SpeechProvider {
     let provider = ScriptedProvider([{ "um so the api is ready" }, { "  " }, { "thanks everyone" }])
     var stages: [MediaStage] = []
 
-    let transcript = try await MediaTranscriber.transcribe(url, with: provider, language: "en", vocabulary: [VocabularyEntry(phrase: "api", replacement: "API")]) {
+    let transcript = try await MediaTranscriber.transcribe(url, with: provider, language: "en", vocabulary: [VocabularyEntry(phrase: "api", replacement: "API")],
+                                                           findSpeakers: false) {
         stages.append($0)
     }
 
