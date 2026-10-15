@@ -4,7 +4,7 @@ import SwiftUI
 struct MeetingsView: View {
     @Bindable var model: AppModel
     @State private var meetingToDelete: UUID?
-    @State private var askExchanges: [AskExchange] = []
+    @State private var asking: AskQuestion?
     @State private var citation: MeetingLine?
 
     private var meetings: MeetingModel { model.meetings }
@@ -30,16 +30,16 @@ struct MeetingsView: View {
             } else {
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 0) {
-                        NotesHome(model: model, onDelete: { meetingToDelete = $0 }, askExchanges: $askExchanges, onCite: cite).frame(minWidth: 460)
+                        NotesHome(model: model, onDelete: { meetingToDelete = $0 }, asking: $asking, onCite: cite).frame(minWidth: 460)
                         Divider()
                         CurrentNote(model: model).frame(width: 300)
                     }
-                    NotesHome(model: model, onDelete: { meetingToDelete = $0 }, askExchanges: $askExchanges, onCite: cite)
+                    NotesHome(model: model, onDelete: { meetingToDelete = $0 }, asking: $asking, onCite: cite)
                 }
             }
         }
         .background(Color(nsColor: .textBackgroundColor))
-        .answering($askExchanges, model: model) { meetings.meetings }
+        .answering($asking, in: .allMeetings, model: model)
         .alert("Delete this meeting?", isPresented: Binding(
             get: { meetingToDelete != nil },
             set: { if !$0 { meetingToDelete = nil } }
@@ -120,7 +120,7 @@ struct MeetingsView: View {
 private struct NotesHome: View {
     @Bindable var model: AppModel
     let onDelete: (UUID) -> Void
-    @Binding var askExchanges: [AskExchange]
+    @Binding var asking: AskQuestion?
     let onCite: (MeetingLine) -> Void
     @State private var query = ""
     @State private var searching = false
@@ -140,8 +140,7 @@ private struct NotesHome: View {
                         .accessibilityLabel("Search meeting notes")
                 }
                 if !meetings.meetings.isEmpty {
-                    AskPanel(model: model, placeholder: "Ask about all your meetings", exchanges: $askExchanges,
-                             showsMeetingTitles: true, onCite: onCite)
+                    AskPanel(model: model, thread: .allMeetings, placeholder: "Ask about all your meetings", asking: $asking, onCite: onCite)
                 }
                 if filtered.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {

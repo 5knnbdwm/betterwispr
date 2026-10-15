@@ -1,14 +1,14 @@
 import Foundation
 
-public struct MeetingLine: Hashable, Sendable {
+public struct MeetingLine: Codable, Hashable, Sendable {
     public var meetingID: UUID
     public var segmentID: UUID?
     public var label: String
     public var text: String
 }
 
-public struct MeetingAnswer: Equatable, Sendable {
-    public struct Citation: Hashable, Sendable {
+public struct MeetingAnswer: Codable, Equatable, Sendable {
+    public struct Citation: Codable, Hashable, Sendable {
         public var number: Int
         public var line: MeetingLine
     }
@@ -16,6 +16,19 @@ public struct MeetingAnswer: Equatable, Sendable {
     public var text: String
     public var citations: [Citation]
     public var modelName: String
+}
+
+/// A question asked in Ask and the answer it got; questions that failed or were cancelled are never saved.
+public struct AskExchange: Codable, Identifiable, Equatable, Sendable {
+    public var id: UUID
+    public var question: String
+    public var answer: MeetingAnswer
+
+    public init(id: UUID = UUID(), question: String, answer: MeetingAnswer) {
+        self.id = id
+        self.question = question
+        self.answer = answer
+    }
 }
 
 public enum MeetingQuestion {

@@ -7,7 +7,7 @@ struct MeetingDetailView: View {
     let id: UUID
     var citation: Binding<MeetingLine?> = .constant(nil)
     @State private var tab = Tab.transcript
-    @State private var askExchanges: [AskExchange] = []
+    @State private var asking: AskQuestion?
     @State private var citedID: UUID?
     @State private var transcriptQuery = ""
     @State private var showsSearch = false
@@ -39,8 +39,9 @@ struct MeetingDetailView: View {
                             case .transcript: transcript(meeting)
                             case .summary: summary(meeting)
                             case .ask:
-                                AskPanel(model: model, placeholder: isTranscribing ? "Ask about the transcript so far" : "Ask about this meeting",
-                                         exchanges: $askExchanges, showsMeetingTitles: false, onCite: show)
+                                AskPanel(model: model, thread: .meeting(id),
+                                         placeholder: isTranscribing ? "Ask about the transcript so far" : "Ask about this meeting",
+                                         asking: $asking, onCite: show)
                             }
                         }
                         .padding(.horizontal, 32)
@@ -76,7 +77,7 @@ struct MeetingDetailView: View {
                 }
             }
             .onChange(of: meeting.summary?.generatedAt) { if meeting.summary != nil, tab != .ask { tab = .summary } }
-            .answering($askExchanges, model: model) { meetings.meeting(id).map { [$0] } ?? [] }
+            .answering($asking, in: .meeting(id), model: model)
         }
     }
 

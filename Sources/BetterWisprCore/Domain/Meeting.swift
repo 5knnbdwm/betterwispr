@@ -90,6 +90,8 @@ public struct Meeting: Codable, Identifiable, Equatable, Sendable {
     /// Invitees of the Calendar event the meeting was recorded during, other than the user.
     public var attendees: [String]?
     public var eventID: String?
+    /// Questions asked about this meeting alone and their answers, oldest first.
+    public var askThread: [AskExchange]?
 
     public init(id: UUID = UUID(), title: String = "", createdAt: Date = .now, duration: TimeInterval = 0, notes: String = "",
                 summary: MeetingSummary? = nil, segments: [MeetingSegment] = [], modelName: String, language: String) {
