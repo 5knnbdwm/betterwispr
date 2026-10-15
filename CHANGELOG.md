@@ -7,7 +7,7 @@ All notable changes to BetterWispr are listed here. The format follows
 ## [Unreleased]
 
 ### Added
-- A second keyboard shortcut in Settings > Shortcut that cancels the current dictation without pasting it, from any app. It defaults to ⌃⌥Esc; record a different one the same way as the dictation shortcut, and Clear turns it off. It can't be the same combination as the dictation shortcut.
+- An optional second shortcut for cancelling a dictation, in Settings > Shortcut. It is off by default and Escape keeps working. Record a combination with a key, such as ⌃⌥K or F5, and it cancels from any app while a dictation is starting, recording or transcribing, without pasting it. A modifier key alone can't be used, and neither can your dictation shortcut. The combination works as usual in other apps whenever you aren't dictating. Clear turns it off.
 
 ## [0.1.6] - 2026-10-15
 
