@@ -1003,6 +1003,26 @@ player; real playback and the Automation prompt need these steps.
 - [ ] Revoke Accessibility. Website modes stop matching, app modes still work and
   dictation is not delayed by more than half a second.
 
+## Dictation languages and Chinese script
+
+- [ ] With a Whisper model and Detect automatically, Dictation languages shows
+  under Spoken language; with Parakeet, Apple or a fixed language it hides.
+  Pick English and Spanish, quit and relaunch, and the menu still reads
+  "English, Spanish". All languages clears the list.
+- [ ] With English and Spanish picked, dictate a Spanish and an English
+  sentence, then speak a third language you know. The first two come out in
+  their language. The third is decoded as English or Spanish, so expect a
+  translation or garbled text rather than a transcript in that language.
+  Note how much longer stop-to-final takes than with All languages.
+- [ ] Set Spoken language to Chinese, choose Simplified, and dictate a Mandarin
+  sentence; Whisper may write it in Traditional characters. The pasted text and
+  History show Simplified; History's Original transcription shows what the
+  model wrote. Repeat with Traditional.
+- [ ] On Detect automatically with Simplified chosen, dictate Chinese and then
+  Japanese. Only the Chinese dictation is converted.
+- [ ] Add a vocabulary entry written in Traditional characters, choose
+  Traditional, and dictate the phrase. The entry applies to the converted text.
+
 ## Offline models and failure recovery
 
 - [ ] Install a Whisper model/tokenizer explicitly. Verify progress, local storage
