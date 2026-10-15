@@ -373,6 +373,10 @@ struct MeetingDetailView: View {
             Text("Bring it all together").font(.system(size: 24, design: .serif))
             Text("\(meetings.notesSettings.notesModelName) turns your transcript and thoughts into a summary, key points, decisions, and action items.")
                 .foregroundStyle(.secondary)
+            NotesModelPicker(model: model)
+                .pickerStyle(.menu)
+                .fixedSize()
+                .disabled(!meetings.runs.isEmpty)
             Button { meetings.generateNotes(id) } label: {
                 Label("Generate summary", systemImage: "sparkles")
             }
