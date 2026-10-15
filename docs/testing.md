@@ -783,6 +783,7 @@ retries. They do not access Keychain, mount disk images or submit to Apple.
   "Transcript cancelled" with Undo and pastes nothing. Once the capsule is idle,
   Escape reaches TextEdit again. Escape never stops a running notetaker. With a
   ⌘ ⌥ dictation shortcut, ⌘ ⌥ Escape still opens Force Quit while dictating.
+  With an Fn shortcut, pressing Esc while holding Fn cancels.
 - [ ] Hold mode: hold ⌥ Space, speak, release. The 96 × 28 point glass capsule
   shows only the wider waveform, with no cancel or finish buttons. Text is
   inserted once. Tap ⌥ Space briefly; recording stays active hands-free and
@@ -831,7 +832,8 @@ retries. They do not access Keychain, mount disk images or submit to Apple.
   it saves as Left Option, works in hold and toggle mode inside BetterWispr and
   TextEdit, and survives relaunch. Repeat for right Option, Control, Shift and
   Command, and for Fn (🌐), which saves as Fn. Fn with ⌘ or another modifier, and
-  arrow or F-key presses while holding Fn, must not start dictation. The opposite-side key alone must not trigger dictation. Releasing the
+  arrow or F-key presses while holding Fn, must not start dictation. The
+  opposite-side key alone must not trigger dictation. Releasing the
   chosen key must finish hold mode even if another modifier is down. Recording
   ⌥ Space must still save the combination, not Option alone. Cancelling capture,
   leaving Settings and resetting must remove the temporary listeners.
