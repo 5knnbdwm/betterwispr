@@ -34,6 +34,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var showCapsule: Bool = true
     /// Shows Parakeet's provisional words in the capsule while recording.
     public var showLiveText: Bool = true
+    /// Keeps the capsule out of sight while listening and transcribing; anything that needs attention still appears.
+    public var hideCapsuleWhileDictating: Bool = false
     public var soundEffects: Bool = true
     /// Pauses Music and Spotify while the microphone is open, then resumes only what it paused.
     public var pauseMediaWhileDictating: Bool = false
@@ -146,6 +148,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         saveHistory = try container.decode(Bool.self, forKey: .saveHistory)
         showCapsule = try container.decode(Bool.self, forKey: .showCapsule)
         showLiveText = try container.decodeIfPresent(Bool.self, forKey: .showLiveText) ?? true
+        hideCapsuleWhileDictating = try container.decodeIfPresent(Bool.self, forKey: .hideCapsuleWhileDictating) ?? false
         soundEffects = try container.decodeIfPresent(Bool.self, forKey: .soundEffects) ?? true
         pauseMediaWhileDictating = try container.decodeIfPresent(Bool.self, forKey: .pauseMediaWhileDictating) ?? false
         detectMeetings = try container.decodeIfPresent(Bool.self, forKey: .detectMeetings) ?? true

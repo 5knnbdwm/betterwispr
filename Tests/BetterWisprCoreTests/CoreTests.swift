@@ -35,6 +35,7 @@ import Testing
     #expect(settings.unloadModelWhenIdle == .never)
     #expect(!settings.copyToClipboard)
     #expect(settings.soundEffects)
+    #expect(!settings.hideCapsuleWhileDictating)
     #expect(!settings.pauseMediaWhileDictating)
     #expect(!settings.showInDock)
     #expect(settings.theme == .dark)
@@ -50,6 +51,7 @@ import Testing
     toggled.onboardingStep = 2
     toggled.copyToClipboard = true
     toggled.soundEffects = false
+    toggled.hideCapsuleWhileDictating = true
     toggled.pauseMediaWhileDictating = true
     toggled.showInDock = true
     toggled.theme = .system

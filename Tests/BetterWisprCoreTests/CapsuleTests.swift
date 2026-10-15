@@ -26,6 +26,35 @@ import Testing
     #expect(DictationSound.finished.sound(in: directory) == nil)
 }
 
+@Test @MainActor func hiddenCapsuleStaysAwayWhileDictatingButReturnsForTheLimitWarningAndCards() {
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let model = AppModel(store: LocalStore(directory: folder), startsServices: false)
+    defer { model.phase = .idle }
+    model.settings.showCapsule = false
+    model.phase = .recording
+    #expect(model.showsCapsule)
+    model.settings.hideCapsuleWhileDictating = true
+    #expect(!model.showsCapsule)
+
+    var presentations = 0
+    model.onPresentationChange = { presentations += 1 }
+    model.advanceRecording(to: AudioRecorder.maximumDuration - 31)
+    #expect(model.recordingSecondsLeft == nil && !model.showsCapsule && presentations == 0)
+    model.advanceRecording(to: AudioRecorder.maximumDuration - 30)
+    #expect(model.recordingSecondsLeft == 30 && model.showsCapsule && presentations == 1)
+    model.advanceRecording(to: AudioRecorder.maximumDuration - 12)
+    #expect(model.recordingSecondsLeft == 12 && presentations == 1)
+
+    model.phase = .transcribing
+    #expect(!model.showsCapsule)
+    model.phase = .cancelled
+    #expect(model.showsCapsule)
+    model.phase = .failed(DictationFailure(title: "Couldn’t start dictation.", message: "Microphone access is off."))
+    #expect(model.showsCapsule)
+    model.phase = .idle
+    #expect(!model.showsCapsule)
+}
+
 @Test @MainActor func capsuleHoverTracksEachControlAcrossExpansionAndExit() {
     let hover = CapsuleHover()
     hover.update(regions: [.surface: CGRect(x: 202, y: 218, width: 36, height: 6)])

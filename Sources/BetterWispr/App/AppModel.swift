@@ -111,6 +111,12 @@ final class AppModel {
     var voiceLevels = VoiceLevels()
     var isHeldSession = false
     var recordingDuration: TimeInterval = 0
+    /// Counts down the last 30 seconds before a dictation reaches `AudioRecorder.maximumDuration`.
+    var recordingSecondsLeft: Int? {
+        guard phase == .recording else { return nil }
+        let left = Int((AudioRecorder.maximumDuration - recordingDuration).rounded(.up))
+        return left <= 30 ? max(0, left) : nil
+    }
     var history: [Transcript] = []
     var vocabulary: [VocabularyEntry] = []
     var settings = AppSettings()
@@ -340,7 +346,7 @@ final class AppModel {
         liveTranscript = LiveTranscript()
         recordingDuration = 0
         let model = selectedModel
-        let live = model.engine == .parakeet && settings.showLiveText ? LiveTranscriber() : nil
+        let live = model.engine == .parakeet && settings.showLiveText && !settings.hideCapsuleWhileDictating ? LiveTranscriber() : nil
         live?.onUpdate = { [weak self] transcript in
             guard let self, self.generation == token else { return }
             self.liveTranscript = transcript
@@ -384,7 +390,7 @@ final class AppModel {
                     while !Task.isCancelled {
                         try? await Task.sleep(for: .milliseconds(100))
                         guard !Task.isCancelled, let self, self.generation == token else { return }
-                        self.recordingDuration = Date().timeIntervalSince(started)
+                        self.advanceRecording(to: Date().timeIntervalSince(started))
                         // Keep dictation bounded; a new recording can start immediately afterwards.
                         if self.recordingDuration >= AudioRecorder.maximumDuration { self.finishRecording(); return }
                     }
@@ -397,6 +403,12 @@ final class AppModel {
                 self.fail(DictationFailure(title: "Couldn’t start dictation.", message: error.localizedDescription))
             }
         }
+    }
+
+    func advanceRecording(to duration: TimeInterval) {
+        let warned = recordingSecondsLeft != nil
+        recordingDuration = duration
+        if !warned, recordingSecondsLeft != nil { onPresentationChange?() }
     }
 
     /// Runs preview passes once the warm-up load has finished; it never starts a load itself.
