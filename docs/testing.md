@@ -129,11 +129,11 @@ download card have not been exercised in the app, and no download was run.
   summary shows as out of date.
 - [ ] While a meeting records, transcribes or finds speakers, no speaker menu or
   Merge into menu shows.
-- [ ] On macOS 15 without speaker detection, a finished meeting with Them lines
+- [ ] Without speaker detection, a finished meeting with Them lines
   shows the download card. Download shows progress, Cancel stops it, a failure
   shows Retry, and success hides the card. Don’t show again hides it in every
   meeting after relaunch. Nothing downloads until Download is clicked.
-- [ ] On macOS 14, or with speaker detection installed, the card never shows.
+- [ ] With speaker detection installed, the card never shows.
 
 ## Live meeting capture recheck, 2026-10-10, version 0.1.4
 
