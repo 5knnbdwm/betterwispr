@@ -1,4 +1,4 @@
-import { ArrowRightIcon, CheckIcon } from "@phosphor-icons/react";
+import { ArrowRightIcon, CheckIcon, CoffeeIcon } from "@phosphor-icons/react";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
 import DownloadCTA, { ClosingCTA } from "@/components/download-cta";
@@ -6,6 +6,7 @@ import HeroDemo from "@/components/hero-demo";
 import FeatureBento from "@/components/feature-bento";
 import Testimonials, { type Testimonial } from "@/components/ui/cards";
 import { comparisons } from "@/lib/comparisons";
+import { BUY_ME_A_COFFEE_URL } from "@/lib/links";
 import { pageHead } from "@/lib/seo";
 
 export const Route = createFileRoute("/")({
@@ -347,6 +348,37 @@ function HomeComponent() {
                 <p className="mt-4 text-base text-zinc-600">{answer}</p>
               </details>
             ))}
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="support"
+        className="page-shell pb-24"
+        aria-labelledby="support-title"
+      >
+        <div className="grid gap-8 border-t border-zinc-200 pt-12 md:grid-cols-[1fr_2fr]">
+          <div>
+            <p className="eyebrow">Support the project</p>
+            <h2 id="support-title" className="mt-4 text-3xl tracking-tight">
+              Free to use.
+              <br />
+              Fueled by coffee.
+            </h2>
+          </div>
+          <div>
+            <p className="max-w-lg text-base text-zinc-600">
+              BetterWispr has no subscription and no account. If it saves you
+              some typing, you can support its development with a donation of
+              any amount.
+            </p>
+            <a
+              href={BUY_ME_A_COFFEE_URL}
+              className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-lg bg-[#ffdd00] px-3 py-2 text-base font-semibold text-zinc-900 transition-all duration-700 ease-fluid hover:bg-[#ffe54d] active:scale-[0.98]"
+            >
+              <CoffeeIcon weight="fill" className="size-5" aria-hidden="true" />
+              Buy me a coffee
+            </a>
           </div>
         </div>
       </section>

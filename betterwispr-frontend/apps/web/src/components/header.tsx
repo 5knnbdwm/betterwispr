@@ -1,10 +1,10 @@
-import { ListIcon, XIcon } from "@phosphor-icons/react";
+import { CoffeeIcon, ListIcon, XIcon } from "@phosphor-icons/react";
 import { Link } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import BrandMark from "@/components/brand-mark";
 import DownloadCTA from "@/components/download-cta";
 import StarOnGithub from "@/components/star-on-github";
-import { GITHUB_URL } from "@/lib/links";
+import { BUY_ME_A_COFFEE_URL, GITHUB_URL } from "@/lib/links";
 
 export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -80,6 +80,13 @@ export default function Header() {
           >
             Changelog
           </Link>
+          <a
+            href={BUY_ME_A_COFFEE_URL}
+            className="flex items-center gap-2 rounded-lg px-3 py-3 text-base text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 sm:gap-1.5 sm:px-0 sm:py-2 sm:text-sm sm:hover:bg-transparent"
+          >
+            <CoffeeIcon className="size-4" aria-hidden="true" />
+            Buy me a coffee
+          </a>
           <a
             href={GITHUB_URL}
             className="rounded-lg px-3 py-3 text-base text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 sm:hidden"

@@ -10,6 +10,8 @@ BetterWispr is a private, offline speech-to-text app and an open-source alternat
 
 [Download the latest release](https://github.com/opennookorg/betterwispr/releases/latest) · [Website](https://betterwispr.com) · [Changelog](CHANGELOG.md)
 
+[![Buy me a coffee](https://shieldcn.dev/badge/Buy%20me%20a%20coffee-Support-FFDD00.svg?logo=buymeacoffee&variant=branded)](https://buymeacoffee.com/code_kartik)
+
 </div>
 
 ## Features
