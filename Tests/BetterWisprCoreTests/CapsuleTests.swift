@@ -141,6 +141,35 @@ import Testing
     #expect(model.phase == .idle)
 }
 
+@Test @MainActor func cancelShortcutArmsOnceWhenADictationTurnsBusyAndDisarmsOnceWhenItStops() throws {
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let model = AppModel(store: LocalStore(directory: folder), startsServices: false)
+    model.settings.soundEffects = false
+    model.settings.autoPaste = false
+    model.settings.copyToClipboard = false
+    defer { model.discardRecording() }
+    var armed: [Bool] = []
+    model.onBusyChange = { armed.append($0) }
+
+    model.toggleRecording()
+    #expect(model.phase == .preparing && armed == [true])
+    model.phase = .recording
+    model.phase = .transcribing
+    model.cancelRecording()
+    let url = folder.appendingPathComponent("cancelled.caf")
+    try Data("synthetic busy edge check".utf8).write(to: url)
+    model.transcribe(DictationRecording(
+        audio: RecordedAudio(url: url, duration: 1, hasSpeech: true), model: model.selectedModel,
+        settings: model.settings, vocabulary: [], target: nil))
+    model.cancelRecording()
+    model.undoCancellation()
+    model.discardRecording()
+    model.dismissCard()
+    #expect(armed == [true, false, true, false, true, false])
+}
+
 @Test @MainActor func darkIsTheDefaultThemeAndEachThemeSetsTheAppAppearance() throws {
     let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     defer {

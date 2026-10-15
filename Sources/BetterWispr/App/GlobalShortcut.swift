@@ -2,16 +2,22 @@ import AppKit
 import BetterWisprCore
 import Carbon
 import IOKit.hidsystem
+import OSLog
 
 @MainActor
 final class GlobalShortcut {
-    private var hotKey: EventHotKeyRef?
+    private let identifier: EventHotKeyID
+    private var hotKeys: [EventHotKeyRef] = []
     private var handler: EventHandlerRef?
     private var localMonitor: Any?
     private var globalMonitor: Any?
     private var modifierPressed = false
     var onPress: (() -> Void)?
     var onRelease: (() -> Void)?
+
+    init(id: UInt32 = 1) {
+        identifier = EventHotKeyID(signature: 0x42575350, id: id)
+    }
 
     func register(_ shortcut: DictationShortcut) throws {
         unregister()
@@ -30,16 +36,28 @@ final class GlobalShortcut {
             }
             return
         }
-        guard installHandler() else { throw ShortcutError.unavailable(shortcut) }
-        let identifier = EventHotKeyID(signature: 0x42575350, id: 1)
-        let status = RegisterEventHotKey(shortcut.keyCode, shortcut.modifiers.rawValue, identifier,
-                                         GetApplicationEventTarget(), 0, &hotKey)
-        guard status == noErr else { hotKey = nil; throw ShortcutError.unavailable(shortcut) }
+        guard register(keyCode: shortcut.keyCode, modifiers: [shortcut.modifiers]) else { throw ShortcutError.unavailable(shortcut) }
+    }
+
+    @discardableResult
+    func register(keyCode: UInt32, modifiers: [ShortcutModifiers]) -> Bool {
+        unregister()
+        guard installHandler() else { return false }
+        for modifier in modifiers {
+            var hotKey: EventHotKeyRef?
+            let status = RegisterEventHotKey(keyCode, modifier.rawValue, identifier, GetApplicationEventTarget(), 0, &hotKey)
+            if status == noErr, let hotKey {
+                hotKeys.append(hotKey)
+            } else {
+                Logger(subsystem: "org.betterwispr.app", category: "GlobalShortcut").error("Hot key registration failed: id=\(self.identifier.id) keyCode=\(keyCode) modifiers=\(modifier.symbols, privacy: .public) status=\(status)")
+            }
+        }
+        return hotKeys.count == modifiers.count
     }
 
     func unregister() {
-        if let hotKey { UnregisterEventHotKey(hotKey) }
-        hotKey = nil
+        hotKeys.forEach { UnregisterEventHotKey($0) }
+        hotKeys = []
         if let localMonitor { NSEvent.removeMonitor(localMonitor) }
         if let globalMonitor { NSEvent.removeMonitor(globalMonitor) }
         localMonitor = nil
@@ -75,6 +93,15 @@ final class GlobalShortcut {
         kVK_Command: NX_DEVICELCMDKEYMASK, kVK_RightCommand: NX_DEVICERCMDKEYMASK
     ]
 
+    func handle(_ event: EventRef) -> OSStatus {
+        var received = EventHotKeyID()
+        guard GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID), nil,
+                                MemoryLayout<EventHotKeyID>.size, nil, &received) == noErr,
+              received.signature == identifier.signature, received.id == identifier.id else { return OSStatus(eventNotHandledErr) }
+        (GetEventKind(event) == UInt32(kEventHotKeyPressed) ? onPress : onRelease)?()
+        return noErr
+    }
+
     private func installHandler() -> Bool {
         guard handler == nil else { return true }
         var specs = [EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed)),
@@ -82,12 +109,7 @@ final class GlobalShortcut {
         let context = Unmanaged.passUnretained(self).toOpaque()
         return InstallEventHandler(GetApplicationEventTarget(), { _, event, context in
             guard let event, let context else { return OSStatus(eventNotHandledErr) }
-            let pressed = GetEventKind(event) == UInt32(kEventHotKeyPressed)
-            MainActor.assumeIsolated {
-                let shortcut = Unmanaged<GlobalShortcut>.fromOpaque(context).takeUnretainedValue()
-                (pressed ? shortcut.onPress : shortcut.onRelease)?()
-            }
-            return noErr
+            return MainActor.assumeIsolated { Unmanaged<GlobalShortcut>.fromOpaque(context).takeUnretainedValue().handle(event) }
         }, specs.count, &specs, context, &handler) == noErr
     }
 }

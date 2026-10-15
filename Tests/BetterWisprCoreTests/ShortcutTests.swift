@@ -41,3 +41,49 @@ import Testing
     try send(kVK_Option, [])
     #expect(transitions == [true, false, true, false])
 }
+
+@Test func escapeCancelsUnderTheModifiersStillHeldFromTheDictationShortcutExceptCommand() throws {
+    let rightCommand = try #require(DictationShortcut(keyCode: UInt32(kVK_RightCommand), modifiers: [], key: "Right Command"))
+    let f5 = try #require(DictationShortcut(keyCode: UInt32(kVK_F5), modifiers: [], key: "F5"))
+    let optionEscape = try #require(DictationShortcut(keyCode: UInt32(kVK_Escape), modifiers: .option, key: "Esc"))
+    let controlShiftD = try #require(DictationShortcut(keyCode: UInt32(kVK_ANSI_D), modifiers: [.control, .shift], key: "D"))
+    let commandOptionD = try #require(DictationShortcut(keyCode: UInt32(kVK_ANSI_D), modifiers: [.command, .option], key: "D"))
+    #expect(DictationShortcut.optionSpace.cancelModifiers == [[], .option])
+    #expect(controlShiftD.cancelModifiers == [[], [.control, .shift]])
+    #expect(rightCommand.cancelModifiers == [[]])
+    #expect(commandOptionD.cancelModifiers == [[]])
+    #expect(f5.cancelModifiers == [[]])
+    #expect(optionEscape.cancelModifiers == [[]])
+}
+
+@Test @MainActor func eachShortcutAnswersOnlyItsOwnCarbonHotKey() throws {
+    let dictation = GlobalShortcut()
+    let cancel = GlobalShortcut(id: 2)
+    var fired: [String] = []
+    dictation.onPress = { fired.append("dictation press") }
+    dictation.onRelease = { fired.append("dictation release") }
+    cancel.onPress = { fired.append("cancel press") }
+    cancel.onRelease = { fired.append("cancel release") }
+
+    func send(_ kind: Int, signature: OSType = 0x42575350, id: UInt32) throws -> [OSStatus] {
+        var event: EventRef?
+        try #require(CreateEvent(nil, OSType(kEventClassKeyboard), UInt32(kind), 0, EventAttributes(kEventAttributeNone), &event) == noErr)
+        let created = try #require(event)
+        defer { ReleaseEvent(created) }
+        var hotKey = EventHotKeyID(signature: signature, id: id)
+        try #require(SetEventParameter(created, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
+                                       MemoryLayout<EventHotKeyID>.size, &hotKey) == noErr)
+        return [dictation.handle(created), cancel.handle(created)]
+    }
+
+    let handled = OSStatus(noErr)
+    let passed = OSStatus(eventNotHandledErr)
+    #expect(try send(kEventHotKeyPressed, id: 2) == [passed, handled])
+    #expect(fired == ["cancel press"])
+    #expect(try send(kEventHotKeyPressed, id: 1) == [handled, passed])
+    #expect(try send(kEventHotKeyReleased, id: 1) == [handled, passed])
+    #expect(fired == ["cancel press", "dictation press", "dictation release"])
+    #expect(try send(kEventHotKeyPressed, signature: 0x4F544852, id: 1) == [passed, passed])
+    #expect(try send(kEventHotKeyPressed, signature: 0x4F544852, id: 2) == [passed, passed])
+    #expect(fired == ["cancel press", "dictation press", "dictation release"])
+}
