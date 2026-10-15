@@ -73,6 +73,12 @@ falls back to a cloud provider on its own.
 
 Build instructions, project layout and guidelines are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## Star history
+
+<p align="center">
+  <a href="https://github.com/opennookorg/betterwispr/stargazers"><picture><source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/chart/github/stars/opennookorg/betterwispr.svg?mode=dark" /><img alt="Star history of opennookorg/betterwispr" src="https://shieldcn.dev/chart/github/stars/opennookorg/betterwispr.svg?mode=light" /></picture></a>
+</p>
+
 ## License
 
 [Apache-2.0](LICENSE). Third-party code and model weights keep their own terms;
