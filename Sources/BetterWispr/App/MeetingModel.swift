@@ -17,6 +17,8 @@ final class MeetingRun {
     var generationStep: (Int, Int)?
     @ObservationIgnored var language: String?
     @ObservationIgnored var vocabulary: [VocabularyEntry]
+    @ObservationIgnored var hints: [String]
+    @ObservationIgnored var eventTitle = ""
     @ObservationIgnored var provider: (any SpeechProvider)?
     @ObservationIgnored var queue: [MeetingAudioChunk] = []
     @ObservationIgnored var drain: Task<Void, Never>?
@@ -29,6 +31,7 @@ final class MeetingRun {
         self.phase = phase
         self.language = language
         self.vocabulary = vocabulary
+        hints = VocabularyProcessor.hints(vocabulary)
     }
 }
 
@@ -85,10 +88,15 @@ final class MeetingModel {
     /// The meeting being recorded, otherwise the newest one still processing.
     var activeMeetingID: UUID? { meetings.first { runs[$0.id] != nil }?.id }
 
-    func start(model: SpeechModel, language: String?, vocabulary: [VocabularyEntry], silenceThreshold: Float, microphone: AudioInputDevice?) {
+    func start(model: SpeechModel, language: String?, vocabulary: [VocabularyEntry], silenceThreshold: Float, microphone: AudioInputDevice?,
+               event: CalendarEvent? = nil) {
         guard capturing == nil else { return }
-        let meeting = Meeting(modelName: model.name, language: language ?? "auto")
+        var meeting = Meeting(title: event?.title ?? "", modelName: model.name, language: language ?? "auto")
+        meeting.attendees = event?.attendees
+        meeting.eventID = event?.id
         let run = MeetingRun(meetingID: meeting.id, phase: .starting, language: language, vocabulary: vocabulary)
+        run.hints += (event?.attendees ?? []).filter { !$0.contains("@") }
+        run.eventTitle = event?.title.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         meetings.insert(meeting, at: 0)
         saveNow(meeting.id)
         runs[meeting.id] = run
@@ -270,7 +278,7 @@ final class MeetingModel {
         run.voices?.discard()
         run.voices = nil
         run.provider = nil
-        discardIfEmpty(run.meetingID)
+        discardIfEmpty(run)
     }
 
     private func findSpeakers(for run: MeetingRun, from voices: SpeakerRecording) async {
@@ -308,7 +316,7 @@ final class MeetingModel {
         let sourceFingerprint = meeting.summarySourceFingerprint
         let modelName = notesSettings.notesModelName
         do {
-            let notes = try await MeetingNotesGenerator.generate(segments: meeting.segments, names: meeting.participantNames, userNotes: meeting.notes, settings: notesSettings) { [weak self] step, total in
+            let notes = try await MeetingNotesGenerator.generate(segments: meeting.segments, names: meeting.participantNames, userNotes: meeting.notes, invite: meeting.calendarInvite, settings: notesSettings) { [weak self] step, total in
                 guard let self, self.owns(run) else { return }
                 run.generationStep = (step, total)
             }
@@ -370,7 +378,7 @@ final class MeetingModel {
     }
 
     private func segment(of audio: URL, speaker: Speaker, start: TimeInterval, duration: TimeInterval, with provider: any SpeechProvider, for run: MeetingRun) async throws -> MeetingSegment? {
-        let raw = try await provider.transcribe(audioURL: audio, language: run.language, vocabulary: VocabularyProcessor.hints(run.vocabulary))
+        let raw = try await provider.transcribe(audioURL: audio, language: run.language, vocabulary: run.hints)
         let text = VocabularyProcessor.apply(run.vocabulary, to: TranscriptCleaner.clean(raw, language: run.language))
         return text.isEmpty ? nil : MeetingSegment(speaker: speaker, start: start, duration: duration, text: text, rawText: raw)
     }
@@ -414,9 +422,10 @@ final class MeetingModel {
         do { try store.save(meeting) } catch { message = "This meeting couldn’t be saved. \(error.localizedDescription)" }
     }
 
-    private func discardIfEmpty(_ id: UUID) {
-        guard let meeting = meeting(id), !meeting.hasContent, meeting.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        delete(id)
+    private func discardIfEmpty(_ run: MeetingRun) {
+        guard let meeting = meeting(run.meetingID), !meeting.hasContent,
+              ["", run.eventTitle].contains(meeting.title.trimmingCharacters(in: .whitespacesAndNewlines)) else { return }
+        delete(run.meetingID)
     }
 
     /// Deletes meeting chunk files a crash or a quit mid-transcription left in the temporary folder.

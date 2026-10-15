@@ -76,6 +76,14 @@ struct MeetingDetailView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .help(meeting.createdAt.formatted(date: .long, time: .shortened))
+            if let attendees = meeting.attendees, !attendees.isEmpty {
+                Label(attendees.formatted(.list(type: .and)), systemImage: "person.2")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .help(attendees.joined(separator: "\n"))
+                    .accessibilityLabel("Invited: \(attendees.formatted(.list(type: .and)))")
+            }
         }
     }
 

@@ -116,6 +116,9 @@ final class AppModel {
     var speakerDetectionInstalled = false
     var microphoneGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
     var accessibilityGranted = AXIsProcessTrusted()
+    var calendarGranted = CalendarEvents.isAuthorized
+    var calendarAccounts: [CalendarAccount] = []
+    @ObservationIgnored let calendarEvents = CalendarEvents()
     var microphones: [AudioInputDevice] = []
     var automaticMicrophone: AudioInputDevice?
     var onPresentationChange: (() -> Void)?
@@ -188,6 +191,7 @@ final class AppModel {
         meetings.notesSettings = settings
         if let cli = settings.notesCLI { Task { await refreshNotesCLIModels(cli) } }
         refreshModels()
+        refreshCalendars()
         recorder.onLevel = { [weak self] levels in self?.voiceLevels = levels }
         recorder.onError = { [weak self] error in
             guard let self, self.phase == .recording else { return }
@@ -1025,11 +1029,35 @@ final class AppModel {
         accessibilityGranted = AXIsProcessTrustedWithOptions([key: true] as CFDictionary)
     }
 
+    /// Turning the integration on asks for Calendar access; a denial turns it back off and opens Privacy settings.
+    func useCalendar(_ isOn: Bool) {
+        settings.useCalendar = isOn
+        saveSettings()
+        guard isOn else { return }
+        Task {
+            calendarGranted = await calendarEvents.requestAccess()
+            guard calendarGranted else {
+                settings.useCalendar = false
+                saveSettings()
+                NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars")!)
+                return
+            }
+            calendarAccounts = await calendarEvents.accounts()
+        }
+    }
+
     func refreshPermissions() {
+        refreshCalendars()
         microphoneGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
         let previouslyGranted = accessibilityGranted
         accessibilityGranted = AXIsProcessTrusted()
         if previouslyGranted != accessibilityGranted, settings.shortcut.isModifierOnly, !isBusy { registerShortcut() }
+    }
+
+    private func refreshCalendars() {
+        calendarGranted = CalendarEvents.isAuthorized
+        guard settings.useCalendar, calendarGranted else { calendarAccounts = []; return }
+        Task { calendarAccounts = await calendarEvents.accounts() }
     }
 
     func selectMicrophone(_ choice: AudioInputDevice?) {
