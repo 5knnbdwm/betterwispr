@@ -16,6 +16,11 @@ extension AXUIElement {
 
     var isSecureField: Bool { string(kAXSubroleAttribute) == kAXSecureTextFieldSubrole }
 
+    /// The selected text of this app's focused element, never from a password field.
+    var selectedText: String? {
+        element(kAXFocusedUIElementAttribute).flatMap { $0.isSecureField ? nil : $0.string(kAXSelectedTextAttribute) }
+    }
+
     var frame: CGRect? {
         var origin = CGPoint.zero, size = CGSize.zero
         guard let position = axValue(kAXPositionAttribute), AXValueGetValue(position, .cgPoint, &origin),

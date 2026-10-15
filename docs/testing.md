@@ -1015,6 +1015,33 @@ player; real playback and the Automation prompt need these steps.
   with no model). The Style page shows the reason, Medium dictations get Light
   cleanup and no other provider is asked.
 
+### Selected text cleanup
+
+- [ ] On a fresh install, Settings > Shortcut shows "Clean up selected text"
+  empty. Record ⌃⌥C. In TextEdit, select "so um we should probably ship it on
+  friday i think" and press ⌃⌥C. A "Cleaning up…" toast names the cleanup
+  provider, then the edit replaces the selection and the toast says "Cleaned
+  up". ⌘Z in TextEdit brings the original back, and the clipboard holds what it
+  held before.
+- [ ] Press ⌃⌥C with nothing selected, with three words, with a French
+  sentence and in a password field. Each shows its own toast and changes
+  nothing. With an unavailable cleanup provider the toast gives the reason and
+  no other provider is asked.
+- [ ] Press ⌃⌥C, then switch apps or change the selection before the edit
+  arrives. Nothing is pasted, the toast says "Copied, not pasted" and ⌘V pastes
+  the edit. Click Cancel on the progress toast in another run; nothing is
+  pasted or copied. Pressing ⌃⌥C while an edit runs shows the progress toast
+  again.
+- [ ] Press ⌃⌥C during a dictation. The toast says "Finish dictating first" and
+  the dictation continues. Revoke Accessibility and press it; the toast offers
+  Allow.
+- [ ] Try a modifier alone, the dictation shortcut and the Cancel shortcut as
+  this shortcut, and this shortcut as the other two. Each is refused with a
+  toast. Clear turns it off, ⌃⌥C reaches other apps again, and relaunching
+  keeps the setting you left.
+- [ ] Repeat in Safari or Chrome text areas, Notes, Mail and Slack. Record the
+  apps whose selection can't be read; they show "No selected text found".
+
 ## Dictation languages and Chinese script
 
 - [ ] With a Whisper model and Detect automatically, Dictation languages shows

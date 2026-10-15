@@ -129,6 +129,20 @@ running process so a closed app is never launched, and never prompt during
 dictation; consent is asked once when the setting turns on. Quitting waits for
 the resume through `terminateLater`. Meeting capture does not pause media.
 
+The optional Clean up selected text shortcut (`AppSettings.selectedTextShortcut`,
+`GlobalShortcut` id 4) edits text outside a dictation and is refused while one
+runs. `AppModel.cleanUpSelectedText` reads the frontmost app's selection through
+Accessibility with `DictationContext.selectedText(in:)`, which returns nothing
+under secure input or from a password field. Empty, short (under
+`TranscriptPolisher.minimumWords`) and non-English selections are refused. The
+trimmed text goes to `TranscriptPolisher` with `AppSettings.cleanupSettings` and
+vocabulary hints, without screen context or mode instructions. Before pasting,
+the selection is read again. An unchanged selection is replaced through
+`FocusedAppIntegration`, which still requires the same frontmost app and
+restores the clipboard. Any other case copies the edit for manual paste. Each
+outcome is one `SelectedTextCleanup` toast, Cancel on the progress toast drops
+the result, and nothing is saved to history.
+
 Swift UI-facing state and speech-provider methods are isolated to `@MainActor`.
 Audio callbacks must not mutate view state unsafely. Cancelled operations must
 not publish stale text or paste a result from a prior session. Keep these

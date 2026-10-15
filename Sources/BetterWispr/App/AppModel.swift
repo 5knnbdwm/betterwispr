@@ -145,6 +145,8 @@ final class AppModel {
     @ObservationIgnored private let globalShortcut = GlobalShortcut()
     @ObservationIgnored private let cancelShortcut = GlobalShortcut(id: 2)
     @ObservationIgnored private let customCancelShortcut = GlobalShortcut(id: 3)
+    @ObservationIgnored private let selectedTextShortcut = GlobalShortcut(id: 4)
+    @ObservationIgnored private var selectedTextCleanup: Task<Void, Never>?
     @ObservationIgnored private var microphoneObserver: AudioInputObserver?
     @ObservationIgnored private var shortcutWarning: String?
     @ObservationIgnored private var provider: (any SpeechProvider)?
@@ -221,6 +223,7 @@ final class AppModel {
         globalShortcut.onRelease = { [weak self] in self?.shortcutReleased() }
         cancelShortcut.onPress = { [weak self] in self?.cancelRecording() }
         customCancelShortcut.onPress = { [weak self] in self?.cancelRecording() }
+        selectedTextShortcut.onPress = { [weak self] in self?.cleanUpSelectedText() }
         onBusyChange = { [weak self] busy in self?.armCancelShortcut(busy) }
         warmUpSelectedModel()
         let warmUpAfterWake: @Sendable (Notification) -> Void = { [weak self] _ in
@@ -253,6 +256,7 @@ final class AppModel {
     }
 
     func registerShortcut() {
+        if let shortcut = settings.selectedTextShortcut { try? selectedTextShortcut.register(shortcut) }
         do {
             try globalShortcut.register(settings.shortcut)
             if statusMessage == shortcutWarning { statusMessage = "" }
@@ -262,7 +266,10 @@ final class AppModel {
         }
     }
 
-    func suspendShortcut() { globalShortcut.unregister() }
+    func suspendShortcut() {
+        globalShortcut.unregister()
+        selectedTextShortcut.unregister()
+    }
 
     private func armCancelShortcut(_ busy: Bool) {
         if busy {
@@ -276,7 +283,7 @@ final class AppModel {
 
     func changeShortcut(_ shortcut: DictationShortcut) {
         guard !isBusy else { return }
-        if shortcut == settings.cancelShortcut {
+        if shortcut == settings.cancelShortcut || shortcut == settings.selectedTextShortcut {
             registerShortcut()
             ToastWindow.shared.show(Toast(failure: "Couldn’t use \(shortcut.displayName)", ShortcutError.alreadyAssigned(shortcut)))
             return
@@ -297,8 +304,8 @@ final class AppModel {
         guard !isBusy else { return }
         if let shortcut {
             do {
-                if shortcut.isModifierOnly { throw ShortcutError.cancelNeedsKey }
-                if shortcut == settings.shortcut { throw ShortcutError.alreadyAssigned(shortcut) }
+                if shortcut.isModifierOnly { throw ShortcutError.needsKey }
+                if shortcut == settings.shortcut || shortcut == settings.selectedTextShortcut { throw ShortcutError.alreadyAssigned(shortcut) }
                 try customCancelShortcut.register(shortcut)
                 customCancelShortcut.unregister()
             } catch {
@@ -308,6 +315,72 @@ final class AppModel {
         }
         settings.cancelShortcut = shortcut
         saveSettings()
+    }
+
+    func changeSelectedTextShortcut(_ shortcut: DictationShortcut?) {
+        guard !isBusy else { return }
+        if let shortcut {
+            do {
+                if shortcut.isModifierOnly { throw ShortcutError.needsKey }
+                if shortcut == settings.shortcut || shortcut == settings.cancelShortcut { throw ShortcutError.alreadyAssigned(shortcut) }
+                try selectedTextShortcut.register(shortcut)
+            } catch {
+                ToastWindow.shared.show(Toast(failure: "Couldn’t use \(shortcut.displayName)", error))
+                return
+            }
+        } else {
+            selectedTextShortcut.unregister()
+        }
+        settings.selectedTextShortcut = shortcut
+        saveSettings()
+    }
+
+    /// Replaces the text selected in the frontmost app with a Medium edit by the cleanup provider.
+    func cleanUpSelectedText() {
+        guard selectedTextCleanup == nil else { showSelectedTextProgress(); return }
+        selectedTextCleanup = Task { [weak self] in
+            guard let self, let outcome = await self.selectedTextOutcome(), !Task.isCancelled else { return }
+            self.selectedTextCleanup = nil
+            ToastWindow.shared.show(outcome.toast(allowingAccessibility: self.requestAccessibility))
+        }
+    }
+
+    private func selectedTextOutcome() async -> SelectedTextCleanup? {
+        guard !isBusy else { return .busy }
+        guard AXIsProcessTrusted() else { return .needsAccessibility }
+        guard let app = NSWorkspace.shared.frontmostApplication, app.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return .noOtherApp }
+        guard !IsSecureEventInputEnabled() else { return .secureInput }
+        let selected = await DictationContext.selectedText(in: app) ?? ""
+        let settings = settings.cleanupSettings
+        if let refusal = SelectedTextCleanup.refusal(of: selected, settings: settings) { return refusal }
+        showSelectedTextProgress()
+        let edited = await TranscriptPolisher.polish(selected.trimmingCharacters(in: .whitespacesAndNewlines), settings: settings,
+                                                     vocabulary: VocabularyProcessor.hints(vocabulary), context: nil)
+        guard !Task.isCancelled else { return nil }
+        guard let edited else { return .leftAsIs(model: settings.notesModelName) }
+        guard let replacement = SelectedTextCleanup.replacement(of: selected, with: edited) else { return .alreadyClean }
+        let stillSelected = await DictationContext.selectedText(in: app) == selected
+        guard !Task.isCancelled else { return nil }
+        do {
+            guard stillSelected else {
+                _ = try await ClipboardIntegration().deliver(replacement, to: nil)
+                return .copied
+            }
+            switch try await FocusedAppIntegration(keepsCopy: false).deliver(replacement, to: app) {
+            case .pasted(let name): return .replaced(in: name)
+            case .copied, .copiedForManualPaste: return .copied
+            }
+        } catch {
+            return .failed(error.localizedDescription)
+        }
+    }
+
+    private func showSelectedTextProgress() {
+        ToastWindow.shared.show(Toast(title: "Cleaning up…", message: "With \(settings.cleanupSettings.notesModelName). Keep the text selected.",
+                                      systemImage: "wand.and.stars", action: Toast.Action(title: "Cancel") { [weak self] in
+            self?.selectedTextCleanup?.cancel()
+            self?.selectedTextCleanup = nil
+        }))
     }
 
     func toggleRecording() {
