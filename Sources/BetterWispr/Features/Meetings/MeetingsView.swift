@@ -39,7 +39,7 @@ struct MeetingsView: View {
                 meetingToDelete = nil
             }
         } message: {
-            Text("This removes the meeting, its notes and transcript from this Mac. It cannot be undone.")
+            Text("This removes the meeting, its notes and transcript from this Mac\(meetings.remembersVoices ? " and forgets the voices named in it" : ""). It cannot be undone.")
         }
     }
 
