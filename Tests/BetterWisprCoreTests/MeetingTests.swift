@@ -224,12 +224,35 @@ import Testing
     #expect(prompts.count > 2)
 }
 
-@Test func notesWriterRefusesToSilentlyTruncateAnUncondensedMeeting() async {
+@Test func notesWriterDraftsEachChunkWhenTheModelReturnsMoreThanItWasGiven() async throws {
     let model = NonCondensingNotesModel()
-    await #expect(throws: MeetingNotesError.self) {
-        try await NotesWriter.write(parts: [String(repeating: "a", count: 6000), "Last decision"], notes: "", model: model) { _, _ in }
-    }
+    let notes = try await NotesWriter.write(parts: [String(repeating: "a", count: 6000), "Last decision"], notes: "", model: model) { _, _ in }
+    let sources = await model.draftSources
+    #expect(notes.title == "Long meeting")
     #expect(await model.condenseCalls == 2)
+    #expect(sources.count > 1)
+    #expect(sources.joined(separator: " ").split(whereSeparator: \.isWhitespace).count == 3000)
+    #expect(sources.allSatisfy { $0.count <= MeetingNotesGenerator.budget })
+}
+
+@Test(arguments: [4, 10, 21])
+func notesWriterWritesNotesForEveryPartWhenTheModelCopiesItsInputBack(parts: Int) async throws {
+    let model = CopyingNotesModel()
+    let steps = StepLog()
+    let notes = try await NotesWriter.write(parts: markedTranscript(parts: parts), notes: "", model: model) { steps.record($0, $1) }
+    let sources = await model.draftSources
+    let seen = await steps.seen
+    let last = try #require(seen.last)
+    #expect(notes.title == "marker1")
+    #expect(notes.summary.keyPoints == (1...parts).map { "marker\($0)" })
+    #expect(notes.summary.decisions.count == parts)
+    #expect(notes.summary.actionItems.count == parts)
+    #expect(sources.count == parts)
+    #expect(sources.allSatisfy { $0.count <= MeetingNotesGenerator.budget })
+    #expect(await model.condenseCalls == parts)
+    #expect(last.step == last.total)
+    #expect(seen.allSatisfy { $0.step <= $0.total })
+    #expect(seen.map(\.step) == seen.map(\.step).sorted())
 }
 
 @Test func notesDraftGetsTheCalendarInviteAsSourceMaterialOnlyForCalendarMeetings() async throws {
@@ -308,8 +331,23 @@ private actor CondensingNotesModel: NotesLanguageModel {
     }
 }
 
+private func markedTranscript(parts: Int) -> [String] {
+    (1...parts).map { "Me: marker\($0) " + Array(repeating: "abcde", count: 985).joined(separator: " ") }
+}
+
+private func source(of prompt: String) -> String {
+    prompt.components(separatedBy: "\n\n").dropFirst().joined(separator: "\n\n")
+}
+
+@MainActor private final class StepLog {
+    private(set) var seen: [(step: Int, total: Int)] = []
+
+    func record(_ step: Int, _ total: Int) { seen.append((step, total)) }
+}
+
 private actor NonCondensingNotesModel: NotesLanguageModel {
     private(set) var condenseCalls = 0
+    private(set) var draftSources: [String] = []
 
     func respond(to prompt: String) -> String {
         condenseCalls += 1
@@ -317,8 +355,26 @@ private actor NonCondensingNotesModel: NotesLanguageModel {
     }
 
     func draft(_ prompt: String) -> NotesDraft {
-        Issue.record("Oversized source must not be truncated into a final draft")
-        return NotesDraft(title: "", overview: "", keyPoints: [], decisions: [], actionItems: [])
+        draftSources.append(source(of: prompt))
+        return NotesDraft(title: "Long meeting", overview: "Condensed.", keyPoints: [], decisions: [], actionItems: [])
+    }
+}
+
+private actor CopyingNotesModel: NotesLanguageModel {
+    private(set) var condenseCalls = 0
+    private(set) var draftSources: [String] = []
+
+    func respond(to prompt: String) -> String {
+        condenseCalls += 1
+        return source(of: prompt)
+    }
+
+    func draft(_ prompt: String) -> NotesDraft {
+        let text = source(of: prompt)
+        draftSources.append(text)
+        let markers = text.matches(of: /marker\d+/).map { String($0.output) }
+        return NotesDraft(title: markers.first ?? "", overview: "Covered \(markers.joined(separator: ", ")).",
+                          keyPoints: markers, decisions: markers.map { "Decided \($0)" }, actionItems: markers.map { "Do \($0)" })
     }
 }
 
