@@ -103,14 +103,16 @@ private final class PassLog {
         return LivePass(words: words("Hello there"), confidence: 1)
     }
     #expect(transcriber.state == .running)
-    try await Task.sleep(for: .milliseconds(300))
-    #expect(log.sliceCounts == [48_000])
+    let firstDeadline = ContinuousClock.now + .seconds(2)
+    while log.updates.isEmpty, ContinuousClock.now < firstDeadline { try await Task.sleep(for: .milliseconds(10)) }
+    try #require(log.sliceCounts == [48_000])
     #expect(log.updates == [LiveTranscript(confirmed: "", hypothesis: "Hello there")])
     transcriber.append([Float](repeating: 0, count: 1_000))
     try await Task.sleep(for: .milliseconds(300))
     #expect(log.sliceCounts.count == 1)
     transcriber.append(silence)
-    try await Task.sleep(for: .milliseconds(300))
+    let secondDeadline = ContinuousClock.now + .seconds(2)
+    while log.updates.count < 2, ContinuousClock.now < secondDeadline { try await Task.sleep(for: .milliseconds(10)) }
     #expect(log.sliceCounts == [48_000, 81_000])
     await transcriber.stop()
     #expect(transcriber.state == .stopped)
