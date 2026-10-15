@@ -1364,6 +1364,37 @@ you, and a subscribed calendar. Reset the permission first with
   event. The window keeps responding while the note starts. Double-click Start
   Notetaker; only one meeting starts.
 
+### Connected apps
+
+`MCPServerTests` drive `MCPServer.reply(to:)` with temporary folders. They cover
+the handshake, the tool list, each tool, paging, date ranges, the refusal while
+the setting is off or the workspace is unreadable, skipped meeting files and
+protocol errors. `python3 scripts/mcp-smoke.py` runs the built bundle with
+`--mcp` against a temporary home with one synthetic meeting and prints the
+exchange. Neither one opens Settings or connects a real AI app. Use meetings you
+are willing to send to that app's provider.
+
+- [ ] In Settings > Connected apps, the toggle is off on a new install and after
+  updating from 0.1.5. Turn it on. The Claude Code, Claude Desktop and Cursor,
+  and Other apps rows appear, each with the path of the running app. Each Copy
+  button copies its snippet, and VoiceOver reads "Copy Claude Code setup".
+- [ ] Run the copied `claude mcp add` line, start Claude Code in a different
+  folder and run `/mcp`. betterwispr shows as connected with three tools. Ask for the last meeting's
+  action items. Claude calls `list_meetings` and `get_meeting`, and the answer
+  matches the meeting in BetterWispr.
+- [ ] Add the copied snippet to Claude Desktop's config, keeping any servers
+  already there, and restart it. Ask it to search meetings for a phrase said in
+  one of them and to open the match. Repeat with Cursor's `~/.cursor/mcp.json`.
+- [ ] Turn Connected apps off while Claude Desktop stays open. Its next tool call
+  answers that Connected apps is off, without a restart. Turn it back on and the
+  next call works.
+- [ ] Ask about a meeting longer than an hour. The reply arrives in parts, and
+  the app follows the continue offset to the end of the transcript.
+- [ ] While an app is connected, record a meeting. BetterWispr keeps recording
+  normally, and the new meeting appears in `list_meetings` once it is saved.
+- [ ] Watch a network monitor while an app calls the tools. The `BetterWispr
+  --mcp` process makes no connections.
+
 ## Accuracy
 
 - [ ] Follow [the corpus and scoring protocol](accuracy.md). Use consented natural

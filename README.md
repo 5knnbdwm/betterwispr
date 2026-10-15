@@ -23,6 +23,7 @@ BetterWispr is a private, offline speech-to-text app and an open-source alternat
 - **Voice commands**: say "comma", "new line", "scratch that" or "sorry, remove that", and "at the rate KV" for "@KV".
 - **Meetings**: live transcript of you and the other side, plus on-device titles, summaries and action items with Apple Intelligence or a local Ollama model.
 - **Transcribe files and links**: drop in an audio or video file or paste a video link and get a timestamped transcript with the model you choose, to copy or export as text or Markdown. Links use yt-dlp, which BetterWispr installs only when you click Install.
+- **Connected apps**: let Claude, Cursor and other apps that support MCP list, search and read your meeting notes and transcripts. Off by default and read-only.
 - **History**: raw and corrected transcripts, stored locally (can be turned off).
 - **Bring your own model**: optional Sarvam AI, Smallest AI or any OpenAI-compatible endpoint.
 
@@ -65,6 +66,7 @@ falls back to a cloud provider on its own.
 - Models live in the `Models` folder next to it.
 - Audio is written to temporary files and deleted after each recording.
 - Built-in models only touch the network when you explicitly download one.
+- Connected apps is off by default. When you turn it on, apps you connect read your meetings through `BetterWispr --mcp` on this Mac and send what they read to their own AI provider.
 
 ## Troubleshooting
 

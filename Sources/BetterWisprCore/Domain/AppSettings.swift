@@ -43,6 +43,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var useCalendar: Bool = false
     /// Calendars, by EventKit calendar identifier, that meeting notes ignore.
     public var excludedCalendarIDs: Set<String> = []
+    /// Lets AI apps read saved meetings through `BetterWispr --mcp`.
+    public var mcpServer: Bool = false
     public var theme: AppTheme = .dark
     public var launchAtLogin: Bool = false
     public var showInDock: Bool = false
@@ -149,6 +151,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         detectMeetings = try container.decodeIfPresent(Bool.self, forKey: .detectMeetings) ?? true
         useCalendar = try container.decodeIfPresent(Bool.self, forKey: .useCalendar) ?? false
         excludedCalendarIDs = try container.decodeIfPresent(Set<String>.self, forKey: .excludedCalendarIDs) ?? []
+        mcpServer = try container.decodeIfPresent(Bool.self, forKey: .mcpServer) ?? false
         theme = try container.decodeIfPresent(AppTheme.self, forKey: .theme) ?? .dark
         launchAtLogin = try container.decode(Bool.self, forKey: .launchAtLogin)
         showInDock = try container.decodeIfPresent(Bool.self, forKey: .showInDock) ?? false
