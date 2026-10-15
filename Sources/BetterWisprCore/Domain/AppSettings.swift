@@ -46,8 +46,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var dictationMode: DictationMode = .hold
     public var unloadModelWhenIdle: ModelIdleUnload = .never
     public var shortcut: DictationShortcut = .optionSpace
-    /// Stops a dictation without pasting it. Clear sets it to nil.
-    public var cancelShortcut: DictationShortcut? = .controlOptionEscape
+    /// Optional extra shortcut that cancels a dictation without pasting it; Escape always cancels.
+    public var cancelShortcut: DictationShortcut?
     public var learnCorrections: Bool = true
     public var cleanup: CleanupLevel = .light
     /// Sends selected text, clipboard text and the focused window's text to the notes model during Medium cleanup.
