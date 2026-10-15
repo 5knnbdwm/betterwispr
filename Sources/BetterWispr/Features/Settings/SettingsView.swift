@@ -93,7 +93,7 @@ struct SettingsView: View {
                 SettingsSection("App") {
                     SettingToggle("Show in Dock", caption: "When off, use the menu bar to open BetterWispr. Your dictation shortcut still works.", isOn: setting(\.showInDock))
                     RowDivider()
-                    SettingToggle("Dictation sounds", caption: "Soft cues when you finish, cancel or need attention. Quiet during meeting capture.", isOn: setting(\.soundEffects))
+                    SettingToggle("Dictation sounds", caption: "Soft cues when dictation starts listening, finishes, cancels or needs attention. Quiet during meeting capture.", isOn: setting(\.soundEffects))
                     RowDivider()
                     SettingToggle("Pause music while dictating", caption: "Pauses Music and Spotify while you speak, then resumes them. Browsers and other players keep playing. macOS asks for permission for each of these apps that is open when you turn this on.", isOn: pauseMediaWhileDictating)
                     RowDivider()

@@ -334,6 +334,7 @@ final class AppModel {
                 }
                 self.microphoneGranted = true
                 self.phase = .recording
+                self.playFeedback(.started)
                 let shortcut = self.settings.shortcut.displayName
                 self.statusMessage = self.isHeldSession ? "Listening. Release \(shortcut) to finish." : "Listening. Press \(shortcut) or click ✓ to finish."
                 self.warmUpSelectedModel()
@@ -1143,10 +1144,10 @@ final class AppModel {
 
     private func playFeedback(_ cue: DictationSound) {
         feedbackSound?.stop()
-        guard settings.soundEffects, meetings.capturingID == nil, let url = cue.url else { return }
-        feedbackSound = NSSound(contentsOf: url, byReference: false)
-        feedbackSound?.volume = 0.6
-        feedbackSound?.play()
+        guard settings.soundEffects, meetings.capturingID == nil, let sound = cue.sound else { return }
+        sound.volume = 0.6
+        sound.play()
+        feedbackSound = sound
     }
 
     /// Shows a capsule card that closes itself unless another phase replaced it first.
