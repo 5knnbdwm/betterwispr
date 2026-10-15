@@ -285,6 +285,7 @@ the VoiceInk code adapted elsewhere is listed in the entries above.
 | [Recap](https://github.com/RecapAI/Recap) | MIT | Native meeting summaries reviewed for product shape. No source copied. |
 | [anarlog (formerly Hyprnote)](https://github.com/fastrepl/anarlog) | MIT | Rust meeting notes app, reference only. Its short pause-ended chunks informed the 3 to 20 second meeting chunks. No source copied. |
 | [Meetily](https://github.com/Zackriya-Solutions/meetily) | MIT | Rust meeting minutes app, reference only. No source copied. |
+| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | Unlicense | Fetches the audio of a pasted link for the Transcribe page and `BetterWisprCLI --media`. Not bundled. The `yt-dlp_macos` release binary is downloaded at runtime only when the user installs or updates it, and is checked against the release's `SHA2-256SUMS`. No source copied. |
 
 The research table is not the dependency lock file: the actual compiled versions
 are recorded in `Package.swift` and `Package.resolved`, and a separately installed

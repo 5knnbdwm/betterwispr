@@ -116,6 +116,7 @@ final class AppModel {
     var models: [SpeechModel] { SpeechModel.catalog + settings.speechConnections.map(\.speechModel) }
     @ObservationIgnored lazy var updater = AppUpdater()
     let meetings: MeetingModel
+    let transcriptions: TranscriptionModel
     let meetingDetector: MeetingDetector
     var installation: ModelInstallation?
     var phraseBoosterInstalled = false
@@ -181,6 +182,7 @@ final class AppModel {
         self.mediaPauser = mediaPauser
         self.startsServices = startsServices
         meetings = MeetingModel(store: startsServices ? nil : MeetingStore(directory: store.directory.appendingPathComponent("Meetings")))
+        transcriptions = TranscriptionModel(store: startsServices ? nil : MeetingStore(directory: store.directory.appendingPathComponent("Transcriptions")))
         meetingDetector = MeetingDetector(meetings: meetings)
         do {
             let state = try store.load()
@@ -753,7 +755,7 @@ final class AppModel {
         return model.engine == .apple || model.engine == .api || installedModelIDs.contains(model.id)
     }
 
-    var canEditConnections: Bool { !isBusy && meetings.runs.isEmpty }
+    var canEditConnections: Bool { !isBusy && meetings.runs.isEmpty && transcriptions.job == nil }
 
     func saveConnection(_ connection: SpeechConnection, key: String?, forNotes: Bool = false) throws {
         guard canEditConnections else { throw SpeechError.busy }

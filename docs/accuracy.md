@@ -2,8 +2,9 @@
 
 Research reviewed 2026-10-08. Measured below are read speech, accented
 video-call conversation, held-out Indian English, recorded meetings with speaker
-labels, meeting notes judged against their transcripts, and Light cleanup on 290
-dictations saved on the development Mac. Recognition accuracy on natural
+labels, long talks and an interview transcribed from video files, meeting notes
+judged against their transcripts, and Light cleanup on 290 dictations saved on
+the development Mac. Recognition accuracy on natural
 dictation is still not measured: BetterWispr keeps no dictation audio, so there
 is nothing to score a reference against.
 The goal is to reduce real dictation errors on the user's hardware and languages;
@@ -669,6 +670,85 @@ file.
   runs. Every run before and after wrote "12.50 euro" as 1250.
 - One judge model scored the notes, and no person checked its counts.
 
+## Files and links, 2026-10-14
+
+Measured on an Apple M4 Pro with macOS 27.0.1, release builds of
+`BetterWisprCLI`, FluidAudio 0.17.5, Parakeet Ultra, `--language en` and Light
+cleanup. The corpus is the audio and English captions of three TED videos on
+YouTube: a 20 minute talk, a 41 minute interview between two people
+(`zIwLWfaAg-8`) and a 21 minute talk (`iCvmsMzlF7o`). Each reference is the
+caption text without cue timings, speaker prefixes, tags or parenthesized sound
+notes. Both sides are normalized as `scripts/evaluate_transcripts.py` does, and
+the cleanup's filler words (uh, um, er, hm, mm and their spellings) are removed
+from both. Word errors are the word edit distance. The captions are edited and
+leave out disfluencies, so insertions are high and about the same for every
+policy. The audio and captions are not committed.
+
+The chunk policy came first. Each pause-cut row cut a 16 kHz WAV copy of the
+file at the quietest point of a 300 ms moving average of 10 ms levels inside its
+window and sent the pieces through `--bench`. The whole-file row sent the file
+in one call, and the meeting chunker row played it through `--meeting`.
+
+| Policy | TED talk, 3,249 words | Interview, 6,139 | Talk 2, 3,204 | Total |
+| --- | ---: | ---: | ---: | ---: |
+| Whole file in one call | 243 | 873 | 166 | 1,282 |
+| Pause cut, 8 to 14.5 s | 244 | 865 | 158 | 1,267 |
+| Pause cut, 15 to 29.5 s | 240 | 843 | 173 | 1,256 |
+| Pause cut, 30 to 59.5 s | 230 | 840 | 159 | 1,229 |
+| Pause cut, 60 to 119.5 s | 233 | 847 | 157 | 1,237 |
+| Meeting chunker, 3 to 20 s | 257 | 909 | 169 | 1,335 |
+
+- The meeting chunker loses words. It deleted 42, 95 and 35 words against 17,
+  74 and 26 for the 60 to 119.5 s cut. Its 3 s minimum, forced 20 s cuts and
+  speech gate suit live calls, not files.
+- Files and links are cut at the quietest point 30 to 59.5 s after the previous
+  cut, and every chunk is transcribed. 59.5 s stays inside the 125 s limit of
+  API connections and the 120 s timeout of Apple speech.
+- No interval was computed. The 30 and 60 second rows differ by 8 errors in
+  12,592 words, which does not establish that either is better. The shorter
+  chunks were kept for the engine limits.
+
+The Swift `--media` command, which the app shares, on 2026-10-15:
+
+| Input | Word errors | Substituted | Deleted | Inserted |
+| --- | ---: | ---: | ---: | ---: |
+| TED talk, m4a | 235 | 45 | 18 | 172 |
+| Interview, m4a | 839 | 132 | 79 | 633 |
+| Talk 2, m4a | 159 | 28 | 26 | 106 |
+| TED talk, mp3 | 241 | 41 | 17 | 183 |
+| TED talk, mp4 with a video track | 249 | 43 | 19 | 187 |
+
+- The three m4a files total 1,233 errors against 1,229 for the prototype's
+  30 to 59.5 s row, at most 5 apart on any file. The port decodes with
+  AVFoundation and `AVAudioConverter` instead of `afconvert`, so its levels and
+  cut points can differ slightly.
+- A second m4a run of the TED talk gave the same text, raw text and timings.
+- The mp3 and mp4 are ffmpeg conversions of the TED m4a. The mp4's cuts land
+  about 48 ms after the m4a's, likely AAC encoder priming, so a few words around
+  each cut change. Neither row is a claim about format accuracy.
+- The substituted, deleted and inserted counts come from a difflib alignment and
+  only approximate the split of the edit distance.
+- Whisper, Apple speech and API connections were not measured. No Whisper model
+  is installed on this Mac.
+
+Speaker detection, after the rebase onto the SpeakerKit detection from #34, on
+2026-10-15. The interview captions name the speaker of each turn, so each
+second of a labelled segment was compared with the captioned speaker under that
+second. A turn change inside a cue was placed by its character position.
+
+| Input | Captioned seconds | Agree with the captions | Voices |
+| --- | ---: | ---: | --- |
+| Interview, m4a | 2,259 | 94.3% | 1 and 3 for the host, 2 for the guest |
+| TED talk, m4a, one speaker | none | | 1 for 96.2% of the audio, 2 for 0.7%, 3 for 3.0% |
+
+- The agreement uses the voice to speaker mapping that agrees best. Segments
+  are 30 to 59.5 s chunks, or the pieces a chunk is split into when several
+  voices speak in it, so a segment that still holds both people counts against
+  the score.
+- The TED talk scored 237 word errors with detection, against 235 without it.
+  Detection transcribes a split chunk again in pieces, so the text changes a
+  little. This was one run, not a measurement of either way.
+
 ## Reproducible evaluation
 
 Create a consented local corpus of natural 3–30 second dictation clips, with a
@@ -703,6 +783,7 @@ swift build -c release --product BetterWisprCLI
 .build/release/BetterWisprCLI --meeting /tmp/meetings/ami-ES2004a.wav --model parakeet-ultra --language en > ES2004a.jsonl
 python3 scripts/evaluate_meetings.py /tmp/meetings/ami-ES2004a.json ES2004a.jsonl
 .build/release/BetterWisprCLI --meeting ES2004a.jsonl --notes ES2004a.md
+.build/release/BetterWisprCLI --media talk.m4a --model parakeet-ultra --language en > talk.jsonl
 python3 scripts/evaluate_transcripts.py results.jsonl --group language
 python3 scripts/evaluate_transcripts.py /path/to/pairs.jsonl
 python3 scripts/evaluate_transcripts.py /path/to/pairs.jsonl --raw

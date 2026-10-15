@@ -6,6 +6,73 @@ version, Mac model, input device, engine/model and date for future runs. A
 successful build does not verify microphone capture, clipboard behavior or
 general recognition accuracy.
 
+## File and link transcription check, 2026-10-15
+
+Apple M4 Pro, macOS 27.0.1, Parakeet Ultra, English. Speaker detection was not
+installed for the checks below until the last one. The CLI checks used a
+release build of `BetterWisprCLI --media`, which runs the same `MediaAudio`,
+`MediaTranscriber` and `YTDLP` code as the Transcribe page.
+[Accuracy](accuracy.md) has the numbers.
+
+- `--media` on the 20-minute TED talk as m4a, mp3 and an mp4 with H.264 video,
+  and on two more TED videos as m4a. Every run exited 0 and was scored against
+  the captions. Rerunning the TED m4a gave the same text and timings.
+- `--download-yt-dlp` installed yt-dlp 2026.08.19 into
+  `Application Support/BetterWispr/Tools` after the checksum matched.
+- `--media` on an 81-second YouTube link downloaded and transcribed it in 6.3
+  seconds. `javascript:alert(1)` and `not a link` were refused before any
+  download. A link that returns 404 and a YouTube video that doesn't exist
+  failed with yt-dlp's last error line. No `betterwispr-media-` folder or file
+  was left in the temporary directory after any of these runs.
+- Stopping `--media` with SIGTERM while it transcribed left one
+  `betterwispr-media-*.caf` chunk. Launching the debug app bundle with
+  `CFFIXED_USER_HOME` pointed at an empty folder removed it.
+- `swift test` covers the cut rule, chunk coverage of a file with silent gaps,
+  unreadable files, cleanup and deletion of every chunk, cancellation and a
+  failed chunk leaving no audio, the link rule, the checksum check, yt-dlp's
+  arguments, progress and error lines, its private folder after success, error
+  and cancel, and the app's job saving, cancelling and connection lock.
+- After rebasing onto main with the SpeakerKit speaker detection from #34, its
+  models installed, `--media` ran on the TED m4a and the interview. Both
+  exited 0 and ended with Finding speakers. [Accuracy](accuracy.md) has the
+  labels.
+- `swift build`, `swift test` and `./scripts/build-app.sh` passed. The
+  Transcribe page was rendered offscreen with two saved transcripts, a running
+  job and an open transcript, and the renders were checked by eye.
+
+Not exercised in the app: the sidebar entry, dropping or choosing a file,
+pasting a link, the Install and Update buttons, Cancel, the model menu, an API
+connection, Copy all, Export, Delete, Speaker detection labels, and quitting
+during a job. The dashboard did not open during the launch check. AIFF, CAF,
+FLAC, MOV and M4V files were not tried, and a WAV file was tried only in
+`swift test`. Pressing Control-C on a running `--media` was not tried.
+
+- [ ] Open Transcribe from the sidebar. Drop an m4a and a mov onto the drop
+  area, and choose a WAV with Choose File. Each shows Reading audio, then
+  Transcribing with a percentage, and is listed under Today when done.
+- [ ] Remove `Application Support/BetterWispr/Tools/yt-dlp` and have no
+  Homebrew copy. The page shows Install yt-dlp and Transcribe stays off for a
+  pasted link. Nothing downloads until Install yt-dlp is clicked. After it
+  installs, Transcribe a YouTube link.
+- [ ] Click Update with yt-dlp installed. The version only changes when a newer
+  release exists.
+- [ ] Press Cancel while a link downloads and again while a file transcribes.
+  Nothing is saved, and no `betterwispr-media-` folder or `.caf` file stays in
+  the temporary directory.
+- [ ] Pick another installed model in the menu and transcribe. With a
+  dictation model that is not installed and nothing picked, drop a file. The
+  app opens Models and downloads nothing.
+- [ ] Pick an API connection in the menu and transcribe a short file. Models
+  disables connection edits while the job runs.
+- [ ] Open a transcript. Copy all puts timestamped lines on the clipboard.
+  Export as Plain Text and as Markdown writes both files. Delete asks first,
+  then removes the transcript.
+- [ ] With Speaker detection installed, transcribe a two-person interview. The
+  lines show Speaker 1 and Speaker 2, and never Them.
+- [ ] Quit BetterWispr while a link downloads and again while a file
+  transcribes. No yt-dlp process keeps running after the quit, and after a
+  relaunch no chunk audio is left.
+
 ## Speaker detection check, 2026-10-14, version 0.1.6
 
 Apple M4 Pro, macOS 27.0.1, debug builds. `swift build`, all 168 tests in
