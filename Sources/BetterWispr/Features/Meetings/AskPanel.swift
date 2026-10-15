@@ -1,7 +1,6 @@
 import BetterWisprCore
 import SwiftUI
 
-/// A question waiting for its answer, or the reason it got none; never saved.
 struct AskQuestion: Identifiable {
     let id = UUID()
     let text: String
@@ -197,7 +196,6 @@ struct AskPanel: View {
 }
 
 extension View {
-    /// Asks `question` with the Ask model and saves the answer to `thread`; dropping the question or the view cancels it.
     func answering(_ question: Binding<AskQuestion?>, in thread: AskThread, model: AppModel) -> some View {
         task(id: question.wrappedValue?.id) {
             guard let asked = question.wrappedValue, asked.failure == nil else { return }

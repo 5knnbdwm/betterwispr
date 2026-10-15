@@ -1,10 +1,8 @@
 import Foundation
 
-/// Narrows the meetings Ask reads when asking across meetings.
 public struct MeetingFilter: Equatable, Sendable {
     /// Days back from today, counting today as the first; nil for any date.
     public var days: Int?
-    /// A Calendar invitee the meeting must list; nil for anyone.
     public var attendee: String?
 
     public init(days: Int? = nil, attendee: String? = nil) {

@@ -18,7 +18,6 @@ public struct MeetingAnswer: Codable, Equatable, Sendable {
     public var modelName: String
 }
 
-/// A question asked in Ask and the answer it got; questions that failed or were cancelled are never saved.
 public struct AskExchange: Codable, Identifiable, Equatable, Sendable {
     public var id: UUID
     public var question: String
@@ -64,15 +63,17 @@ public enum MeetingQuestion {
         return answer(reply, sources: sources, modelName: modelName)
     }
 
-    /// How far back "What did I miss?" reads; at about 150 spoken words a minute the whole window fits the source budget.
     public static let catchUpWindow: TimeInterval = 5 * 60
     public static let catchUpQuestion = "What did I miss in the last \(Int(catchUpWindow / 60)) minutes? Give the main points, decisions, and anything I was asked."
 
-    /// `meeting` with only the lines still being spoken in the `catchUpWindow` before `elapsed`, and without Me's thoughts.
+    /// `meeting` without Me's thoughts, keeping the newest lines spoken in the `catchUpWindow` before `elapsed` that fit the budget.
     public static func catchUp(_ meeting: Meeting, at elapsed: TimeInterval) -> Meeting {
         var recent = meeting
         recent.notes = ""
         recent.segments = meeting.segments.filter { $0.start + $0.duration > elapsed - catchUpWindow }
+        while sources(for: "", in: [recent], budget: MeetingNotesGenerator.budget).count < lines(of: recent).count {
+            recent.segments.removeFirst()
+        }
         return recent
     }
 

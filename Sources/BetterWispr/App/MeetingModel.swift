@@ -8,7 +8,6 @@ enum MeetingPhase: Equatable {
     var isCapturing: Bool { self == .starting || self == .recording }
 }
 
-/// Where an Ask question and its answer are kept.
 enum AskThread: Hashable {
     case meeting(UUID), allMeetings
 }
@@ -49,7 +48,6 @@ final class MeetingModel {
     var levels: (me: Float, them: Float) = (0, 0)
     var elapsed: TimeInterval = 0
     var message: String?
-    /// Questions asked about all meetings and their answers, oldest first.
     var allMeetingsThread: [AskExchange] = []
     var systemAudioIssue: String?
     var microphone: AudioInputDevice?
@@ -63,8 +61,7 @@ final class MeetingModel {
     }
 
     @ObservationIgnored private let store: MeetingStore
-    /// Nil when the saved questions about all meetings couldn’t be read, so that file is never overwritten.
-    @ObservationIgnored private var askStore: AskThreadStore?
+    @ObservationIgnored private var writableAskStore: AllMeetingsAskStore?
     @ObservationIgnored private let recorder = MeetingRecorder()
     /// The run that receives the recorder's chunks, including the last ones a stopped meeting hands off.
     @ObservationIgnored private var recorderOwner: MeetingRun?
@@ -84,10 +81,10 @@ final class MeetingModel {
             let count = loaded.unreadable.count
             message = "\(count) meeting \(count == 1 ? "file" : "files") in \(self.store.directory.path) couldn’t be read and \(count == 1 ? "was" : "were") left untouched."
         }
-        let askStore = AskThreadStore(url: self.store.directory.deletingLastPathComponent().appendingPathComponent("ask.json"))
+        let askStore = AllMeetingsAskStore(url: self.store.directory.deletingLastPathComponent().appendingPathComponent("ask.json"))
         do {
             allMeetingsThread = try askStore.load()
-            self.askStore = askStore
+            writableAskStore = askStore
         } catch {
             let unreadable = "\(askStore.url.path) couldn’t be read and was left untouched, so new questions about all meetings won’t be saved."
             message = [message, unreadable].compactMap { $0 }.joined(separator: " ")
@@ -474,8 +471,8 @@ final class MeetingModel {
     }
 
     private func saveAllMeetingsThread() {
-        guard let askStore else { return }
-        do { try askStore.save(allMeetingsThread) } catch { message = "Questions about all meetings couldn’t be saved. \(error.localizedDescription)" }
+        guard let writableAskStore else { return }
+        do { try writableAskStore.save(allMeetingsThread) } catch { message = "Questions about all meetings couldn’t be saved. \(error.localizedDescription)" }
     }
 
     private func discardIfEmpty(_ run: MeetingRun) {

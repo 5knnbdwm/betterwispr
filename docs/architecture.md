@@ -267,7 +267,7 @@ model name. Failed and cancelled questions are never saved. `MeetingModel` keeps
 each meeting's thread in the optional `Meeting.askThread`, saved with the
 meeting, so meeting files from earlier versions decode with no thread. The
 thread about all meetings is `ask.json` beside the `Meetings` folder, written by
-`AskThreadStore` as version 1, atomically, with mode 0600. Keeping it out of
+`AllMeetingsAskStore` as version 1, atomically, with mode 0600. Keeping it out of
 `Meetings` means older versions never report it as an unreadable meeting. An
 unreadable or newer `ask.json` is reported and left untouched, and answers about
 all meetings then last only until quit. Deleting a meeting removes the answers
@@ -275,9 +275,9 @@ about all meetings that cite it. Clear empties one thread after a confirmation.
 
 While a meeting records, its Ask tab offers What did I miss?. It asks a fixed
 question about the transcript rows still being spoken in the last
-`MeetingQuestion.catchUpWindow`, five minutes, without My thoughts. At about 150
-spoken words a minute that window fits the budget. Denser speech is scored like
-any question, so some of its lines can be left out.
+`MeetingQuestion.catchUpWindow`, five minutes, without My thoughts. When those
+rows exceed `MeetingNotesGenerator.budget`, the oldest are dropped until the rest
+fit, so a busy five minutes is answered from its newest lines.
 
 On the Notetaker page, `MeetingFilter` narrows the meetings Ask reads to those
 created today or in the past 7 or 30 days, counted from local midnight, and to

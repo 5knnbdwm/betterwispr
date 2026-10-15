@@ -44,10 +44,10 @@ private func temporaryFolder() -> URL {
     #expect(loaded.meetings.first?.askThread == nil)
 }
 
-@Test func askThreadStoreRoundTripsAndStartsEmpty() throws {
+@Test func allMeetingsAskStoreRoundTripsAndStartsEmpty() throws {
     let folder = temporaryFolder()
     defer { try? FileManager.default.removeItem(at: folder) }
-    let store = AskThreadStore(url: folder.appendingPathComponent("ask.json"))
+    let store = AllMeetingsAskStore(url: folder.appendingPathComponent("ask.json"))
     #expect(try store.load().isEmpty)
     let saved = [exchange(citing: UUID()), exchange(citing: UUID(), question: "Who sends it?")]
 
@@ -58,12 +58,12 @@ private func temporaryFolder() -> URL {
     #expect(permissions == 0o600)
 }
 
-@Test func askThreadStoreRefusesCorruptAndNewerFiles() throws {
+@Test func allMeetingsAskStoreRefusesCorruptAndNewerFiles() throws {
     let folder = temporaryFolder()
     defer { try? FileManager.default.removeItem(at: folder) }
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-    let corrupt = AskThreadStore(url: folder.appendingPathComponent("corrupt.json"))
-    let newer = AskThreadStore(url: folder.appendingPathComponent("newer.json"))
+    let corrupt = AllMeetingsAskStore(url: folder.appendingPathComponent("corrupt.json"))
+    let newer = AllMeetingsAskStore(url: folder.appendingPathComponent("newer.json"))
     try Data("{not json".utf8).write(to: corrupt.url)
     try Data(#"{"version": 2, "exchanges": []}"#.utf8).write(to: newer.url)
 

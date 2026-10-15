@@ -1,6 +1,5 @@
 import Foundation
 
-/// A provider's OpenAI-compatible chat completions URL and a fast model, to fill in a new notes connection.
 public struct NotesAPIPreset: Identifiable, Sendable {
     public var name: String
     public var endpoint: String

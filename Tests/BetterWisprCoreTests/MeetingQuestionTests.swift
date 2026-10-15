@@ -151,6 +151,25 @@ import Testing
     #expect(!MeetingQuestion.catchUp(meeting, at: 900).hasContent)
 }
 
+@Test func catchUpOverBudgetDropsTheOldestLinesAndSendsTheRest() async throws {
+    var meeting = Meeting(modelName: "Parakeet", language: "en")
+    for second in stride(from: 300, to: 600, by: 2) {
+        meeting.insert(MeetingSegment(speaker: .them, start: TimeInterval(second), duration: 2,
+                                      text: "Update number \(second) with enough words to fill the budget.", rawText: ""))
+    }
+    let model = FakeAskModel(reply: "Updates [1].")
+
+    let recent = MeetingQuestion.catchUp(meeting, at: 600)
+    _ = try await MeetingQuestion.ask(MeetingQuestion.catchUpQuestion, about: [recent], model: model, modelName: "Fake")
+
+    #expect(recent.segments.count < meeting.segments.count)
+    #expect(recent.segments.count > 1)
+    #expect(recent.segments.map(\.id) == Array(meeting.segments.suffix(recent.segments.count).map(\.id)))
+    let prompt = try #require(await model.prompts.first)
+    #expect(prompt.contains("[\(recent.segments.count)] 09:58 Them: Update number 598"))
+    #expect(!prompt.contains("[\(recent.segments.count + 1)]"))
+}
+
 @Test func meetingFilterKeepsMeetingsFromTheChosenDaysWithTheChosenInvitee() throws {
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = try #require(TimeZone(identifier: "America/Los_Angeles"))

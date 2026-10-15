@@ -1,7 +1,6 @@
 import Foundation
 
-/// Saves the questions asked about all meetings, which belong to no single meeting file.
-public struct AskThreadStore: Sendable {
+public struct AllMeetingsAskStore: Sendable {
     public let url: URL
 
     public init(url: URL) {
