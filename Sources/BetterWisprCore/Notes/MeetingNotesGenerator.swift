@@ -261,7 +261,6 @@ enum NotesWriter {
     static let maximumRounds = 8
     static let charactersPerWord = 6
     static let roundTarget = 0.6
-    static let smallestShare = 0.25
     static let minimumWords = 20
 
     static let inviteNote = """
@@ -281,7 +280,7 @@ enum NotesWriter {
             var pending = parts
             var overshoot = 1.0
             for round in 0..<maximumRounds {
-                let share = max(roundTarget * Double(budget) / Double(material.count), smallestShare) / overshoot
+                let share = roundTarget * Double(budget) / Double(material.count) / overshoot
                 var condensed: [String] = []
                 for part in pending {
                     step += 1
@@ -295,7 +294,7 @@ enum NotesWriter {
                 let before = material.count
                 material = condensed.joined(separator: "\n")
                 guard material.count > budget, material.count < before, round + 1 < maximumRounds else { break }
-                overshoot = max(1, Double(material.count) / (share * Double(before)))
+                overshoot = Double(material.count) / (share * Double(before))
                 pending = TranscriptChunker.chunks(of: material, budget: budget)
                 total += pending.count
             }
