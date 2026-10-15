@@ -335,7 +335,6 @@ final class AppModel {
         saveSettings()
     }
 
-    /// Replaces the text selected in the frontmost app with a Medium edit by the cleanup provider.
     func cleanUpSelectedText() {
         guard selectedTextCleanup == nil else { showSelectedTextProgress(); return }
         selectedTextCleanup = Task { [weak self] in
@@ -345,20 +344,20 @@ final class AppModel {
         }
     }
 
-    private func selectedTextOutcome() async -> SelectedTextCleanup? {
+    private func selectedTextOutcome() async -> SelectedTextCleanupOutcome? {
         guard !isBusy else { return .busy }
         guard AXIsProcessTrusted() else { return .needsAccessibility }
         guard let app = NSWorkspace.shared.frontmostApplication, app.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return .noOtherApp }
         guard !IsSecureEventInputEnabled() else { return .secureInput }
         let selected = await DictationContext.selectedText(in: app) ?? ""
         let settings = settings.cleanupSettings
-        if let refusal = SelectedTextCleanup.refusal(of: selected, settings: settings) { return refusal }
+        if let refusal = SelectedTextCleanupOutcome.refusal(of: selected, settings: settings) { return refusal }
         showSelectedTextProgress()
         let edited = await TranscriptPolisher.polish(selected.trimmingCharacters(in: .whitespacesAndNewlines), settings: settings,
                                                      vocabulary: VocabularyProcessor.hints(vocabulary), context: nil)
         guard !Task.isCancelled else { return nil }
         guard let edited else { return .leftAsIs(model: settings.notesModelName) }
-        guard let replacement = SelectedTextCleanup.replacement(of: selected, with: edited) else { return .alreadyClean }
+        guard let replacement = SelectedTextCleanupOutcome.replacement(keepingWhitespaceOf: selected, ifChangedTo: edited) else { return .alreadyClean }
         let stillSelected = await DictationContext.selectedText(in: app) == selected
         guard !Task.isCancelled else { return nil }
         do {

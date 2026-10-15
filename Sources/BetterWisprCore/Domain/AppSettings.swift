@@ -54,7 +54,6 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var shortcut: DictationShortcut = .optionSpace
     /// Optional extra shortcut that cancels a dictation without pasting it; Escape always cancels.
     public var cancelShortcut: DictationShortcut?
-    /// Optional shortcut that edits the text selected in any app with the cleanup provider.
     public var selectedTextShortcut: DictationShortcut?
     public var learnCorrections: Bool = true
     public var cleanup: CleanupLevel = .light
@@ -73,7 +72,6 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var notesModel: String?
     /// Nil asks questions with the notes model.
     public var askSelection: NotesModelSelection?
-    /// Nil edits Medium dictation with the notes model.
     public var cleanupSelection: NotesModelSelection?
     public var notesBuiltIn: Bool = false
     /// The newest onboarding the user finished or skipped; 0 shows it again.

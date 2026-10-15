@@ -1,8 +1,7 @@
 import BetterWisprCore
 import Foundation
 
-/// How a press of the selected-text shortcut ended; each ending shows one toast.
-enum SelectedTextCleanup: Equatable {
+enum SelectedTextCleanupOutcome: Equatable {
     case busy, needsAccessibility, noOtherApp, secureInput, noSelection, tooShort, notEnglish
     case unavailable(String)
     case leftAsIs(model: String)
@@ -11,8 +10,7 @@ enum SelectedTextCleanup: Equatable {
     case replaced(in: String)
     case failed(String)
 
-    /// Why `selected` can't be edited with `settings`, or nil when it can.
-    static func refusal(of selected: String, settings: AppSettings) -> SelectedTextCleanup? {
+    static func refusal(of selected: String, settings: AppSettings) -> SelectedTextCleanupOutcome? {
         let text = selected.trimmingCharacters(in: .whitespacesAndNewlines)
         if text.isEmpty { return .noSelection }
         if text.split(whereSeparator: \.isWhitespace).count < TranscriptPolisher.minimumWords { return .tooShort }
@@ -21,10 +19,11 @@ enum SelectedTextCleanup: Equatable {
         return nil
     }
 
-    /// `edited` inside the whitespace that surrounded the selected text, or nil when it changes nothing.
-    static func replacement(of selected: String, with edited: String) -> String? {
-        guard edited != selected.trimmingCharacters(in: .whitespacesAndNewlines) else { return nil }
-        return String(selected.prefix(while: \.isWhitespace)) + edited + String(selected.reversed().prefix(while: \.isWhitespace).reversed())
+    static func replacement(keepingWhitespaceOf selected: String, ifChangedTo edited: String) -> String? {
+        guard let start = selected.firstIndex(where: { !$0.isWhitespace }),
+              let end = selected.lastIndex(where: { !$0.isWhitespace }),
+              selected[start...end] != edited else { return nil }
+        return selected.replacingCharacters(in: start...end, with: edited)
     }
 
     func toast(allowingAccessibility allow: @escaping @MainActor () -> Void) -> Toast {

@@ -140,8 +140,8 @@ vocabulary hints, without screen context or mode instructions. Before pasting,
 the selection is read again. An unchanged selection is replaced through
 `FocusedAppIntegration`, which still requires the same frontmost app and
 restores the clipboard. Any other case copies the edit for manual paste. Each
-outcome is one `SelectedTextCleanup` toast, Cancel on the progress toast drops
-the result, and nothing is saved to history.
+ending is one `SelectedTextCleanupOutcome` toast. Cancel on the progress toast
+drops the result, and nothing is saved to history.
 
 Swift UI-facing state and speech-provider methods are isolated to `@MainActor`.
 Audio callbacks must not mutate view state unsafely. Cancelled operations must

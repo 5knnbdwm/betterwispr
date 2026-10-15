@@ -105,7 +105,7 @@ struct StyleView: View {
                     if model.settings.cleanup == .medium {
                         RowDivider()
                         VStack(alignment: .leading, spacing: 8) {
-                            NotesModelPicker(model: model, title: "Cleanup provider", choice: \.cleanupSelection)
+                            NotesModelPicker(model: model, title: "Cleanup provider", overrideSelection: \.cleanupSelection)
                             if case .unavailable(let reason) = MeetingNotesGenerator.availability(settings: model.settings.cleanupSettings) {
                                 Label("\(reason) Until then, Medium dictations get Light cleanup.", systemImage: "exclamationmark.triangle")
                                     .font(.callout)

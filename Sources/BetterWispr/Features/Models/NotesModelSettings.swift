@@ -4,12 +4,11 @@ import SwiftUI
 struct NotesModelPicker: View {
     @Bindable var model: AppModel
     var title = "Notes provider"
-    /// A use with its own provider, which offers Same as notes; nil picks the notes provider itself.
-    var choice: WritableKeyPath<AppSettings, NotesModelSelection?>?
+    var overrideSelection: WritableKeyPath<AppSettings, NotesModelSelection?>?
 
     var body: some View {
         Picker(title, selection: Binding(get: { selection }, set: { select($0) })) {
-            if choice != nil { Text("Same as notes · \(model.settings.notesModelName)").tag(NotesModelSelection?.none) }
+            if overrideSelection != nil { Text("Same as notes · \(model.settings.notesModelName)").tag(NotesModelSelection?.none) }
             Text("Apple Intelligence · On this Mac").tag(NotesModelSelection?.some(.apple))
             if model.meetings.builtInModelInstalled || selection == .builtIn {
                 Text(model.meetings.builtInModelInstalled ? "Built-in · \(BuiltInModel.displayName) · On this Mac" : "Built-in · Not downloaded")
@@ -28,7 +27,7 @@ struct NotesModelPicker: View {
                 Text("Missing notes connection").tag(NotesModelSelection?.some(.connection(id)))
             }
         }
-        if case .cli(let cli) = selection, choice == nil || model.settings.notesSelection != .cli(cli) {
+        if case .cli(let cli) = selection, overrideSelection == nil || model.settings.notesSelection != .cli(cli) {
             let models = model.notesCLICatalogs[cli]?.models ?? []
             Picker("\(cli.name) model", selection: Binding(
                 get: { model.settings.cliModel(cli) },
@@ -47,11 +46,14 @@ struct NotesModelPicker: View {
         }
     }
 
-    private var selection: NotesModelSelection? { choice.map { model.settings[keyPath: $0] } ?? model.settings.notesSelection }
+    private var selection: NotesModelSelection? {
+        guard let overrideSelection else { return model.settings.notesSelection }
+        return model.settings[keyPath: overrideSelection]
+    }
 
     private func select(_ selection: NotesModelSelection?) {
-        if let choice {
-            model.selectNotesModel(selection, for: choice)
+        if let overrideSelection {
+            model.selectNotesModel(selection, for: overrideSelection)
         } else if let selection {
             model.selectNotesModel(selection)
         }
@@ -109,7 +111,7 @@ struct NotesModelSettings: View {
         if case .unavailable(let reason) = model.meetings.notesAvailability {
             Text(reason).font(.callout).foregroundStyle(.secondary)
         }
-        NotesModelPicker(model: model, title: "Ask provider", choice: \.askSelection)
+        NotesModelPicker(model: model, title: "Ask provider", overrideSelection: \.askSelection)
             .disabled(testing)
         Text("Ask sends the most relevant transcript lines and thoughts from the meetings you ask about to this model.")
             .font(.caption).foregroundStyle(.secondary)

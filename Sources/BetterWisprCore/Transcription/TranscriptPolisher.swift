@@ -73,7 +73,6 @@ public enum TranscriptPolisher {
         </SYSTEM_INSTRUCTIONS>
         """
 
-    /// Shorter text is left as is.
     public static let minimumWords = 4
 
     /// Edits English dictation with the notes model chosen in Models; nil means keep the light cleanup.
