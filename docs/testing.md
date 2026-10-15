@@ -1241,6 +1241,11 @@ were not exercised in this UI pass.
   A title you typed before the notes were written is kept.
 - [ ] With Apple Intelligence off or unsupported, stop a meeting. The transcript
   and notes are saved, and Generate summary is disabled with the reason shown.
+- [ ] With Apple Intelligence, generate notes for a meeting of 10 or more parts.
+  Notes are written for the whole meeting instead of "The model couldn't condense
+  this meeting enough". The notes model picker beside Generate summary is
+  disabled while any meeting is processing, and choosing another model there
+  changes the model that writes the next summary.
 - [ ] Start Notetaker from the dashboard. The card docks beside the call, and the
   dashboard stays on the list instead of showing the live transcript. Stop the
   meeting; the dashboard opens the finished note on its Summary tab.

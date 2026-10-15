@@ -146,6 +146,12 @@ struct NotesDraft: Decodable, Sendable {
         }
         return draft
     }
+
+    static func merged(_ drafts: [NotesDraft]) -> NotesDraft {
+        NotesDraft(title: drafts[0].title, overview: drafts.map(\.overview).filter { !$0.isEmpty }.joined(separator: " "),
+                   keyPoints: drafts.flatMap(\.keyPoints), decisions: drafts.flatMap(\.decisions),
+                   actionItems: drafts.flatMap(\.actionItems), generatedWith: drafts[0].generatedWith)
+    }
 }
 
 protocol NotesLanguageModel: Sendable {
@@ -302,12 +308,16 @@ enum NotesWriter {
                 total += pending.count
             }
         }
-        await onStep(total, total)
-        try Task.checkCancellation()
-        guard material.count <= budget else {
-            throw MeetingNotesError.unavailable("The model couldn’t condense this meeting enough. Choose another notes model and try again; the full transcript and your thoughts are saved.")
+        let sources = material.count <= budget ? [material] : TranscriptChunker.chunks(of: material, budget: budget)
+        total += sources.count - 1
+        var drafts: [NotesDraft] = []
+        for source in sources {
+            step += 1
+            await onStep(step, total)
+            try Task.checkCancellation()
+            drafts.append(try await model.draft("\(invite.isEmpty ? "" : "\(inviteNote)\n\(invite)\n\n")Write the meeting notes from this \(notes.isEmpty ? "transcript" : "transcript and Me's own notes"):\n\n\(source)"))
         }
-        let generated = try await model.draft("\(invite.isEmpty ? "" : "\(inviteNote)\n\(invite)\n\n")Write the meeting notes from this \(notes.isEmpty ? "transcript" : "transcript and Me's own notes"):\n\n\(material)")
+        let generated = NotesDraft.merged(drafts)
         try Task.checkCancellation()
         var result = GeneratedMeetingNotes(
             title: clean(generated.title),
