@@ -1102,7 +1102,7 @@ final class AppModel {
     private func applyAppearance() {
         NSApplication.shared.appearance = switch settings.theme {
         case .system: nil
-        case .light: NSAppearance(named: .aqua)
+        case .light, .cream: NSAppearance(named: .aqua)
         case .dark: NSAppearance(named: .darkAqua)
         }
     }

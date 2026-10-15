@@ -224,6 +224,10 @@ import Testing
     model.settings.theme = .dark
     model.saveSettings()
     #expect(NSApplication.shared.appearance?.name == .darkAqua)
+    model.settings.theme = .cream
+    model.saveSettings()
+    #expect(NSApplication.shared.appearance?.name == .aqua)
+    #expect(try LocalStore(directory: folder).load().settings.theme == .cream)
     model.settings.theme = .system
     model.saveSettings()
     #expect(NSApplication.shared.appearance == nil)

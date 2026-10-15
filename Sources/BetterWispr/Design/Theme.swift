@@ -17,11 +17,43 @@ struct SymbolTile: View {
     }
 }
 
+extension EnvironmentValues {
+    @Entry var appTheme: AppTheme = .system
+}
+
 extension Color {
-    static let cardFill = Color(nsColor: NSColor(name: nil) { appearance in
+    fileprivate static let systemCardFill = Color(nsColor: NSColor(name: nil) { appearance in
         appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? NSColor(white: 1, alpha: 0.045) : .white
     })
     static let cardStroke = Color.primary.opacity(0.08)
+    static let creamPage = Color(red: 248 / 255, green: 245 / 255, blue: 238 / 255)
+    static let creamCard = Color(red: 255 / 255, green: 253 / 255, blue: 248 / 255)
+}
+
+/// A surface color that turns warm under the cream theme and keeps the system color otherwise.
+struct ThemedFill: ShapeStyle {
+    let standard: Color
+    let cream: Color
+
+    func resolve(in environment: EnvironmentValues) -> Color {
+        environment.appTheme == .cream ? cream : standard
+    }
+}
+
+extension ShapeStyle where Self == ThemedFill {
+    static var cardFill: ThemedFill { ThemedFill(standard: .systemCardFill, cream: .creamCard) }
+    static var pageFill: ThemedFill { ThemedFill(standard: Color(nsColor: .textBackgroundColor), cream: .creamPage) }
+}
+
+/// Paints the cream page behind a window's content; the other themes keep the system background.
+struct ThemedPage: ViewModifier {
+    @Environment(\.appTheme) private var theme
+
+    func body(content: Content) -> some View {
+        content
+            .scrollContentBackground(theme == .cream ? .hidden : .automatic)
+            .background(theme == .cream ? Color.creamPage : .clear)
+    }
 }
 
 extension Animation {
@@ -36,7 +68,7 @@ struct Card<Content: View>: View {
         content
             .padding(padding)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(Color.cardFill, in: .rect(cornerRadius: 12, style: .continuous))
+            .background(.cardFill, in: .rect(cornerRadius: 12, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.cardStroke))
     }
 }

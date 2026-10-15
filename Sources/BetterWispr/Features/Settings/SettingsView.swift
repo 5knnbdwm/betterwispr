@@ -23,6 +23,7 @@ struct SettingsView: View {
                         Picker("Theme", selection: setting(\.theme)) {
                             Text("System").tag(AppTheme.system)
                             Text("Light").tag(AppTheme.light)
+                            Text("Cream").tag(AppTheme.cream)
                             Text("Dark").tag(AppTheme.dark)
                         }
                         .pickerStyle(.segmented)

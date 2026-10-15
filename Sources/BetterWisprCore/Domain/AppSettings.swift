@@ -5,7 +5,7 @@ public enum DictationMode: String, Codable, CaseIterable, Sendable {
 }
 
 public enum AppTheme: String, Codable, CaseIterable, Sendable {
-    case system, light, dark
+    case system, light, cream, dark
 }
 
 /// A moment in a dictation that can play a sound.
