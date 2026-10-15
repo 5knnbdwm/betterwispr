@@ -60,7 +60,7 @@ private func turn(_ voice: Int, _ start: Float, _ end: Float) -> SpeakerSegment 
     }) { _, start, duration in
         if start >= 17 { throw CocoaError(.fileReadCorruptFile) }
         return MeetingSegment(speaker: .them, start: start, duration: duration, text: start == 7 ? "I can take it." : "No, let me.", rawText: "")
-    }
+    }.segments
 
     #expect(labelled.map(\.text) == ["Shall we start?", "Sure.", "I can take it.", "No, let me.", "Fine by me, thanks.", "Hmm."])
     #expect(labelled.map(\.start) == [0, 3, 7, 13, 17, 23])
@@ -88,7 +88,9 @@ private func turn(_ voice: Int, _ start: Float, _ end: Float) -> SpeakerSegment 
         myVoiceOnTheCall.id: [VoiceTurn(voice: "A", start: 0, end: 2)],
     ]
 
-    let labelled = try await SpeakerDetection.label([mine, remote, room, mixed, echo, echoed, myVoiceOnTheCall], turns: turns, audio: { _, _ in
+    let embeddings: [String: [Float]] = ["A": [1, 0, 0], "B": [0, 1, 0], "C": [0, 0, 1], "D": [1, 1, 0], "E": [0, 1, 1]]
+
+    let (labelled, voices) = try await SpeakerDetection.label([mine, remote, room, mixed, echo, echoed, myVoiceOnTheCall], turns: turns, embeddings: embeddings, audio: { _, _ in
         let url = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         try Data().write(to: url)
         return url
@@ -99,6 +101,7 @@ private func turn(_ voice: Int, _ start: Float, _ end: Float) -> SpeakerSegment 
     #expect(labelled.map(\.speaker) == [.me, .them, .me, .me, .me, .me, .them, .them])
     #expect(labelled.map(\.participant) == [nil, 1, 2, nil, 2, nil, 3, 4])
     #expect(labelled.map { $0.label() } == ["Me", "Speaker 1", "Speaker 2", "Me", "Speaker 2", "Me", "Speaker 3", "Speaker 4"])
+    #expect(voices == [1: [0, 0, 1], 2: [0, 1, 0], 3: [1, 1, 0], 4: [1, 0, 0]])
 }
 
 @Test func speakerLabelsUseGivenNamesAndFallBackToNumbers() {

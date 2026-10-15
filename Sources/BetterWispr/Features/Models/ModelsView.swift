@@ -6,6 +6,8 @@ struct ModelsView: View {
     @State private var editing: SpeechConnection?
     @State private var error: String?
     @State private var editingNotes = false
+    @State private var forgettingVoices = false
+    @State private var forgetFailure: String?
 
     var body: some View {
         Form {
@@ -83,6 +85,27 @@ struct ModelsView: View {
                     Toggle(isOn: setting(\.separateRoomVoices)) {
                         Text("Tell apart people in the room")
                         Text("Also separates the voices on your microphone. The voice heard most stays Me, and the others get their own speaker numbers. Your microphone audio is kept on this Mac until the speakers are found, then deleted.")
+                    }
+                    Toggle(isOn: setting(\.rememberVoices)) {
+                        Text("Remember named voices")
+                        Text("When you name a speaker, a profile of that voice is saved on this Mac and used to name the same voice in later meetings. A voice profile can identify a person, so ask people before you name them. Profiles are never uploaded, but Time Machine backs them up. Matching uses SpeakerKit’s own cutoff for grouping voices within one meeting, which wasn’t tuned for matching across meetings, so check the names it fills in.")
+                    }
+                    LabeledContent {
+                        Button("Forget Voices…", role: .destructive) { forgettingVoices = true }
+                    } label: {
+                        Text("Remembered voices")
+                        Text(forgetFailure ?? "Deletes every saved voice profile. Names already in your meetings stay.")
+                            .foregroundStyle(forgetFailure == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.red))
+                    }
+                    .confirmationDialog("Forget every remembered voice?", isPresented: $forgettingVoices) {
+                        Button("Forget Voices", role: .destructive) {
+                            do {
+                                try model.meetings.forgetVoices()
+                                forgetFailure = nil
+                            } catch {
+                                forgetFailure = "Couldn’t forget voices. \(error.localizedDescription)"
+                            }
+                        }
                     }
                 } else {
                     let installation = model.installation?.id == AppModel.speakerDetectionID ? model.installation : nil

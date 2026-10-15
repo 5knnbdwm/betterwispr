@@ -135,6 +135,7 @@ private func labels(_ meeting: Meeting) -> [String] {
     var settings = try JSONDecoder().decode(AppSettings.self, from: Data(legacy.utf8))
     #expect(!settings.dismissedSpeakerDetectionOffer)
     #expect(!settings.separateRoomVoices)
+    #expect(!settings.rememberVoices)
 
     settings.dismissedSpeakerDetectionOffer = true
     let saved = try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(settings))

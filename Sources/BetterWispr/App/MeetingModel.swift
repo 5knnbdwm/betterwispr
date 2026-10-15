@@ -30,7 +30,7 @@ final class MeetingRun {
     @ObservationIgnored var voices: SpeakerRecording?
     /// Microphone audio also goes to speaker detection, to tell apart people in the room.
     @ObservationIgnored var hearsRoom = false
-    @ObservationIgnored var detection: Task<[MeetingSegment], Error>?
+    @ObservationIgnored var detection: Task<(segments: [MeetingSegment], voices: [Int: [Float]]), Error>?
 
     init(meetingID: UUID, phase: MeetingPhase, language: String? = nil, vocabulary: [VocabularyEntry] = []) {
         self.meetingID = meetingID
@@ -57,6 +57,10 @@ final class MeetingModel {
     var notesSettings = AppSettings()
     var ollamaModels: [String] = []
     var builtInModelInstalled = false
+    /// Mirrors the Remember named voices setting; turning it off drops the voices held for naming.
+    var remembersVoices = false {
+        didSet { if !remembersVoices { heardVoices = [:] } }
+    }
     var notesAvailability: NotesAvailability {
         _ = builtInModelInstalled
         return MeetingNotesGenerator.availability(settings: notesSettings)
@@ -64,6 +68,9 @@ final class MeetingModel {
 
     @ObservationIgnored private let store: MeetingStore
     @ObservationIgnored private var writableAskStore: AllMeetingsAskStore?
+    @ObservationIgnored private let voiceStore: VoiceStore
+    /// Voice embeddings of this session's detected meetings, kept in memory until the user names them, with the names they were recognised as.
+    @ObservationIgnored private var heardVoices: [UUID: (voices: [Int: [Float]], recognised: [Int: String])] = [:]
     @ObservationIgnored private let recorder = MeetingRecorder()
     /// The run that receives the recorder's chunks, including the last ones a stopped meeting hands off.
     @ObservationIgnored private var recorderOwner: MeetingRun?
@@ -76,6 +83,7 @@ final class MeetingModel {
 
     init(store: MeetingStore? = nil) {
         self.store = store ?? MeetingStore()
+        voiceStore = VoiceStore(url: self.store.directory.deletingLastPathComponent().appendingPathComponent("Voices.json"))
         if store == nil { Self.removeLeftoverAudio() }
         let loaded = self.store.load()
         meetings = loaded.meetings
@@ -271,6 +279,7 @@ final class MeetingModel {
             message = "Couldn’t delete the meeting. \(error.localizedDescription)"
             return
         }
+        heardVoices[id] = nil
         meetings.removeAll { $0.id == id }
         if selectedID == id { selectedID = nil }
         let kept = allMeetingsThread.filter { !$0.answer.citations.contains { $0.line.meetingID == id } }
@@ -348,7 +357,15 @@ final class MeetingModel {
         do {
             let labelled = try await detection.value
             guard owns(run) else { return }
-            edit(id, save: false) { $0.segments = labelled }
+            var recognised: [Int: String] = [:]
+            if remembersVoices {
+                do { recognised = SpeakerDetection.recognise(labelled.voices, among: try voiceStore.load()) } catch { message = voicesError(error) }
+            }
+            edit(id, save: false) { meeting in
+                meeting.segments = labelled.segments
+                if !recognised.isEmpty { meeting.participantNames = (meeting.participantNames ?? [:]).merging(recognised) { current, _ in current } }
+            }
+            if remembersVoices { heardVoices[id] = (labelled.voices, recognised) }
             saveNow(id)
         } catch {
             guard owns(run) else { return }
@@ -471,6 +488,28 @@ final class MeetingModel {
         saves.removeValue(forKey: id)?.cancel()
         guard let meeting = meeting(id) else { return }
         do { try store.save(meeting) } catch { message = "This meeting couldn’t be saved. \(error.localizedDescription)" }
+        rememberNamedVoices(in: meeting)
+    }
+
+    /// Deletes every remembered voice and the voices held for naming.
+    func forgetVoices() throws {
+        heardVoices = [:]
+        try voiceStore.forget()
+    }
+
+    /// Keeps the voices the user named in this meeting, replacing what it stored before.
+    private func rememberNamedVoices(in meeting: Meeting) {
+        guard remembersVoices, let heard = heardVoices[meeting.id] else { return }
+        do {
+            try voiceStore.replaceVoices(from: meeting.id, with: SpeakerDetection.namedVoices(
+                heard.voices, names: meeting.participantNames, recognised: heard.recognised, in: meeting.id))
+        } catch {
+            message = voicesError(error)
+        }
+    }
+
+    private func voicesError(_ error: any Error) -> String {
+        "Remembered voices in \(voiceStore.url.path) couldn’t be used and were left as they were. \(error.localizedDescription)"
     }
 
     private func saveAllMeetingsThread() {

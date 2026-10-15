@@ -70,6 +70,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var dismissedSpeakerDetectionOffer: Bool = false
     /// Speaker detection also tells apart people in the room who share the user's microphone.
     public var separateRoomVoices: Bool = false
+    /// Speaker detection keeps the voices the user names on this Mac and names them again in later meetings.
+    public var rememberVoices: Bool = false
     public var notesModel: String?
     /// Nil asks questions with the notes model.
     public var askSelection: NotesModelSelection?
@@ -165,6 +167,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         microphone = try container.decodeIfPresent(AudioInputDevice.self, forKey: .microphone)
         dismissedSpeakerDetectionOffer = try container.decodeIfPresent(Bool.self, forKey: .dismissedSpeakerDetectionOffer) ?? false
         separateRoomVoices = try container.decodeIfPresent(Bool.self, forKey: .separateRoomVoices) ?? false
+        rememberVoices = try container.decodeIfPresent(Bool.self, forKey: .rememberVoices) ?? false
         learnCorrections = try container.decodeIfPresent(Bool.self, forKey: .learnCorrections) ?? true
         cleanup = try container.decodeIfPresent(CleanupLevel.self, forKey: .cleanup) ?? .light
         useScreenContext = try container.decodeIfPresent(Bool.self, forKey: .useScreenContext) ?? false

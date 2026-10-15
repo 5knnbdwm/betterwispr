@@ -15,6 +15,9 @@ public enum SpeakerDetection {
         (info: ModelInfo.plda(), files: ["PldaProjector"])
     ]
 
+    /// SpeakerKit's default clustering distance between length-normalised voice embeddings, also the bar for recognising a remembered voice.
+    public static let sameVoiceDistance: Float = 0.6
+
     public static var directory: URL {
         WhisperKitProvider.defaultModelsDirectory.appending(path: "models/\(repo)", directoryHint: .isDirectory)
     }
@@ -103,16 +106,18 @@ public enum SpeakerDetection {
         return result
     }
 
-    /// Numbers each segment's voice by first appearance, splitting segments several voices share; the microphone's most heard voice stays Me.
+    /// Numbers each segment's voice by first appearance, splitting segments several voices share, with each number's voice embedding; the microphone's most heard voice stays Me.
     @MainActor
     public static func label(_ segments: [MeetingSegment], voices: SpeakerRecording,
-                             transcribe: (_ audio: URL, _ start: TimeInterval, _ duration: TimeInterval) async throws -> MeetingSegment?) async throws -> [MeetingSegment] {
-        try await label(segments, turns: voices.voiceTurns(), audio: { try await voices.audio(of: $0, from: $1.start, to: $1.end) }, transcribe: transcribe)
+                             transcribe: (_ audio: URL, _ start: TimeInterval, _ duration: TimeInterval) async throws -> MeetingSegment?) async throws -> (segments: [MeetingSegment], voices: [Int: [Float]]) {
+        let found = try await voices.voiceTurns()
+        return try await label(segments, turns: found.turns, embeddings: found.embeddings,
+                               audio: { try await voices.audio(of: $0, from: $1.start, to: $1.end) }, transcribe: transcribe)
     }
 
     @MainActor
-    static func label(_ segments: [MeetingSegment], turns: [UUID: [VoiceTurn]], audio: (UUID, VoiceTurn) async throws -> URL,
-                      transcribe: (_ audio: URL, _ start: TimeInterval, _ duration: TimeInterval) async throws -> MeetingSegment?) async throws -> [MeetingSegment] {
+    static func label(_ segments: [MeetingSegment], turns: [UUID: [VoiceTurn]], embeddings: [String: [Float]] = [:], audio: (UUID, VoiceTurn) async throws -> URL,
+                      transcribe: (_ audio: URL, _ start: TimeInterval, _ duration: TimeInterval) async throws -> MeetingSegment?) async throws -> (segments: [MeetingSegment], voices: [Int: [Float]]) {
         let microphone = Set(MeetingTranscript.removingEchoes(from: segments).filter { $0.speaker == .me }.map(\.id))
         let heard = microphone.compactMap { turns[$0] }.joined().reduce(into: [String: TimeInterval]()) { $0[$1.voice, default: 0] += $1.length }
         let me = heard.max { ($0.value, $1.key) < ($1.value, $0.key) }?.key
@@ -142,7 +147,7 @@ public enum SpeakerDetection {
             labelled += split.isEmpty ? [(segment, longest.voice)] : split
         }
         var numbers: [String: Int] = [:]
-        return labelled.map { segment, voice in
+        let numbered = labelled.map { segment, voice in
             var segment = segment
             if let voice, segment.speaker == .them || voice != me {
                 segment.participant = numbers[voice] ?? numbers.count + 1
@@ -150,6 +155,42 @@ public enum SpeakerDetection {
             }
             return segment
         }
+        return (numbered, Dictionary(uniqueKeysWithValues: numbers.compactMap { voice, number in embeddings[voice].map { (number, $0) } }))
+    }
+
+    /// Names each voice after the nearest remembered voice within `sameVoiceDistance`, giving each name to one voice at most.
+    public static func recognise(_ voices: [Int: [Float]], among known: [KnownVoice]) -> [Int: String] {
+        let matches = voices.flatMap { number, embedding in
+            known.compactMap { voice in distance(embedding, voice.embedding).map { (number: number, name: voice.name, distance: $0) } }
+        }
+        .filter { $0.distance <= sameVoiceDistance }
+        .sorted { ($0.distance, $0.number, $0.name) < ($1.distance, $1.number, $1.name) }
+        var names: [Int: String] = [:]
+        var taken: Set<String> = []
+        for match in matches where names[match.number] == nil && taken.insert(Meeting.nameKey(match.name)).inserted {
+            names[match.number] = match.name
+        }
+        return names
+    }
+
+    /// The voices to remember from one meeting: each one the user named, unless it keeps the name it was recognised as.
+    public static func namedVoices(_ voices: [Int: [Float]], names: [Int: String]?, recognised: [Int: String], in meeting: UUID) -> [KnownVoice] {
+        voices.keys.sorted().compactMap { number in
+            let name = names?[number]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !name.isEmpty, Meeting.nameKey(name) != recognised[number].map(Meeting.nameKey), let embedding = voices[number] else { return nil }
+            return KnownVoice(name: name, meetingID: meeting, participant: number, embedding: embedding)
+        }
+    }
+
+    /// Euclidean distance between two embeddings scaled to unit length, as SpeakerKit clusters them; nil when they can't be compared.
+    static func distance(_ a: [Float], _ b: [Float]) -> Float? {
+        guard a.count == b.count, let a = unit(a), let b = unit(b) else { return nil }
+        return zip(a, b).reduce(0) { $0 + ($1.0 - $1.1) * ($1.0 - $1.1) }.squareRoot()
+    }
+
+    private static func unit(_ vector: [Float]) -> [Float]? {
+        let length = vector.reduce(0) { $0 + $1 * $1 }.squareRoot()
+        return length > 0 && length.isFinite ? vector.map { $0 / length } : nil
     }
 }
 
@@ -191,16 +232,18 @@ public actor SpeakerRecording {
         placements.append(Placement(segment: segment, start: start, end: Double(file.length) / Self.format.sampleRate))
     }
 
-    /// Finds the voices behind each collected segment; empty when no audio was collected.
-    func voiceTurns() async throws -> [UUID: [VoiceTurn]] {
+    /// Finds the voices behind each collected segment and each voice's embedding; empty when no audio was collected.
+    func voiceTurns() async throws -> (turns: [UUID: [VoiceTurn]], embeddings: [String: [Float]]) {
         file = nil
-        guard !placements.isEmpty else { return [:] }
+        guard !placements.isEmpty else { return ([:], [:]) }
         let audio = try ParakeetProvider.samples(of: url)
+        let options = PyannoteDiarizationOptions(clusterDistanceThreshold: SpeakerDetection.sameVoiceDistance)
         let result = try await SpeakerDetection.abandoningOnCancel {
-            try await SpeakerDetection.installedDiarizer(from: SpeakerDetection.directory).diarize(audioArray: audio, options: nil, progressCallback: nil)
+            try await SpeakerDetection.installedDiarizer(from: SpeakerDetection.directory).diarize(audioArray: audio, options: options, progressCallback: nil)
         }
         try Task.checkCancellation()
-        return SpeakerDetection.voiceTurns(turns: result.segments, placements: placements)
+        let embeddings = Dictionary(uniqueKeysWithValues: result.speakerCentroidEmbeddings.map { (String($0.key), $0.value) })
+        return (SpeakerDetection.voiceTurns(turns: result.segments, placements: placements), embeddings)
     }
 
     /// Writes one stretch of a segment's audio to its own file, in seconds from the segment's start.

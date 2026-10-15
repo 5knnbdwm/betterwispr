@@ -162,7 +162,7 @@ public struct Meeting: Codable, Identifiable, Equatable, Sendable {
         return (attendees ?? []).filter { taken.insert(Self.nameKey($0)).inserted }
     }
 
-    private static func nameKey(_ name: String) -> String { name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+    static func nameKey(_ name: String) -> String { name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
 
     /// Moves a line to another voice, or back to plain "Me" or "Them" with nil.
     public mutating func assign(segment id: UUID, toParticipant participant: Int?) {
