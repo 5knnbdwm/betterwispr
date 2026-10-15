@@ -1242,9 +1242,9 @@ final class AppModel {
         playFeedback(.attention)
     }
 
-    private func playFeedback(_ cue: DictationSound) {
+    func playFeedback(_ cue: DictationSound) {
         feedbackSound?.stop()
-        guard settings.soundEffects, meetings.capturingID == nil, let sound = cue.sound else { return }
+        guard settings.soundEffects, meetings.capturingID == nil, let sound = cue.sound(named: settings.soundName(for: cue)) else { return }
         sound.volume = 0.6
         sound.play()
         feedbackSound = sound

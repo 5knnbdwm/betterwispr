@@ -4,14 +4,16 @@ import Testing
 @testable import BetterWisprCore
 @testable import BetterWispr
 
-@Test(arguments: DictationSound.allCases) @MainActor func everyCueFallsBackToAStockSystemSoundWithoutAnOverride(cue: DictationSound) throws {
+@Test(arguments: DictationSound.allCases) @MainActor func everyCuePlaysItsPickedSystemSoundOrFallsBackToItsDefault(cue: DictationSound) throws {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     #expect(cue.url(in: directory) == nil)
-    let sound = try #require(cue.sound(in: directory))
-    #expect(sound.name == cue.systemSoundName)
+    #expect(DictationSound.systemSoundNames.contains(cue.defaultSoundName))
+    #expect(try #require(cue.sound(named: AppSettings().soundName(for: cue), in: directory)).name == cue.defaultSoundName)
+    #expect(try #require(cue.sound(named: "Glass", in: directory)).name == "Glass")
+    #expect(try #require(cue.sound(named: "No Such Sound", in: directory)).name == cue.defaultSoundName)
 }
 
-@Test @MainActor func overrideFileWinsOverTheSystemSoundAndABrokenOverrideStaysSilent() throws {
+@Test @MainActor func overrideFileWinsOverThePickedSoundAndABrokenOverrideStaysSilent() throws {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory) }
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -19,11 +21,11 @@ import Testing
     let custom = directory.appendingPathComponent("finished.wav")
     try Data(contentsOf: URL(fileURLWithPath: "/System/Library/Sounds/Glass.aiff")).write(to: custom)
     #expect(DictationSound.finished.url(in: directory) == custom)
-    let override = try #require(DictationSound.finished.sound(in: directory))
+    let override = try #require(DictationSound.finished.sound(named: "Ping", in: directory))
     #expect(override.name == nil)
-    #expect(DictationSound.attention.sound(in: directory)?.name == DictationSound.attention.systemSoundName)
+    #expect(DictationSound.attention.sound(named: "Ping", in: directory)?.name == "Ping")
     try Data().write(to: custom)
-    #expect(DictationSound.finished.sound(in: directory) == nil)
+    #expect(DictationSound.finished.sound(named: "Ping", in: directory) == nil)
 }
 
 @Test @MainActor func hiddenCapsuleStaysAwayWhileDictatingButReturnsForTheLimitWarningAndCards() {

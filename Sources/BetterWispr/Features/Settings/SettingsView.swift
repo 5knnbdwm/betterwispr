@@ -136,6 +136,20 @@ struct SettingsView: View {
                     SettingToggle("Show in Dock", caption: "When off, use the menu bar to open BetterWispr. Your dictation shortcut still works.", isOn: setting(\.showInDock))
                     RowDivider()
                     SettingToggle("Dictation sounds", caption: "Soft cues when dictation starts listening, finishes, cancels or needs attention. Quiet during meeting capture.", isOn: setting(\.soundEffects))
+                    if model.settings.soundEffects {
+                        ForEach(DictationSound.allCases, id: \.self) { cue in
+                            let overridden = cue.url(in: DictationSound.overrideDirectory) != nil
+                            RowDivider()
+                            SettingRow("\(cue.title) sound", caption: overridden ? "Plays \(cue.rawValue).wav from your SoundOverrides folder instead." : nil) {
+                                Picker("\(cue.title) sound", selection: sound(cue)) {
+                                    ForEach(DictationSound.systemSoundNames, id: \.self) { Text($0).tag($0) }
+                                }
+                                .labelsHidden()
+                                .fixedSize()
+                                .disabled(overridden)
+                            }
+                        }
+                    }
                     RowDivider()
                     SettingToggle("Pause music while dictating", caption: "Pauses Music and Spotify while you speak, then resumes them. Browsers and other players keep playing. macOS asks for permission for each of these apps that is open when you turn this on.", isOn: pauseMediaWhileDictating)
                     RowDivider()
@@ -294,6 +308,13 @@ struct SettingsView: View {
         Binding(
             get: { model.settings[keyPath: keyPath] },
             set: { model.settings[keyPath: keyPath] = $0; model.saveSettings() }
+        )
+    }
+
+    private func sound(_ cue: DictationSound) -> Binding<String> {
+        Binding(
+            get: { model.settings.soundName(for: cue) },
+            set: { model.settings.sounds[cue] = $0; model.saveSettings(); model.playFeedback(cue) }
         )
     }
 }
