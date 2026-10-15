@@ -44,11 +44,13 @@ the app bundle. `scripts/build-app.sh` removes Sparkle's XPC services because
 they exist only for sandboxed apps and BetterWispr is not sandboxed.
 
 Local sound files can be installed in
-`~/Library/Application Support/BetterWispr/SoundOverrides/` as `finished.wav`,
-`cancelled.wav` and `attention.wav`. Missing cues are silent;
-there is no bundled or system-sound fallback. These user-local files are not
-copied into app bundles or distributed by this project. The previous generated
-and Kenney sound packs have been removed.
+`~/Library/Application Support/BetterWispr/SoundOverrides/` as `started.wav`,
+`finished.wav`, `cancelled.wav` and `attention.wav`. A cue without an override
+plays a macOS system sound loaded by name from `/System/Library/Sounds`
+(`Tink`, `Purr`, `Bottle` and `Basso`); nothing is copied into the repository
+or the app bundle. These user-local override files are not copied into app
+bundles or distributed by this project. The previous generated and Kenney
+sound packs have been removed.
 
 `scripts/release.sh` follows the separate-architecture signing and notarization
 workflow in the sibling BetterShot project's `scripts/release.sh`

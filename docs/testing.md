@@ -725,8 +725,10 @@ retries. They do not access Keychain, mount disk images or submit to Apple.
   model/settings/destination. Switching apps still prevents automatic paste.
   Expiry, dismissal, quitting or a new session discard the cancelled audio.
   Cancel before capture starts or after delivery begins: no Undo is offered.
-- [ ] With Dictation sounds enabled, finishing, completion, cancellation and
-  errors play quiet cues after microphone capture stops. Turning it off silences
+- [ ] With Dictation sounds enabled, a start cue plays once when the capsule
+  switches to Listening, and finishing, cancellation and errors play quiet cues
+  after microphone capture stops. No start cue plays when starting fails
+  (microphone denied, no input, model missing). Turning the setting off silences
   them; recording meeting audio also suppresses them. Start a new dictation during
   a cue: playback stops before capture. Check reduced motion and increased contrast.
 - [ ] Meeting recording uses a 100 × 26 point pill, thirteen waveform
@@ -805,10 +807,13 @@ player; real playback and the Automation prompt need these steps.
   to idle without another sound, message or announcement. Copy-only still shows
   "Copied to clipboard"; with both output options off it shows "Transcript ready".
 - [ ] Notetaker starts, stops, finishes its notes and displays errors silently.
-- [ ] The locally installed cues (finish, cancellation and attention)
-  play from an app moved outside the build directory. Check quality and volume
-  on speakers and headphones. Removing a cue leaves that event silent; no
-  bundled or macOS sound replaces it.
+- [ ] On a Mac without `SoundOverrides`, start, finish, cancellation and
+  attention play the macOS sounds Tink, Purr, Bottle and Basso. Locally
+  installed override cues (`started.wav`, `finished.wav`, `cancelled.wav`,
+  `attention.wav`) replace them one by one and play from an app moved outside
+  the build directory. Check quality and volume on speakers and headphones.
+  Listen for the start cue in the transcript of a dictation that begins right
+  after the cue on speakers.
 - [ ] Repeat with a clipboard image or rich text; the app must preserve supported
   pasteboard representations, not just plain text.
 - [ ] Change clipboard contents while recognition/paste is pending. New user
