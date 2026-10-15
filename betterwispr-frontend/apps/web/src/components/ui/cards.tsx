@@ -101,7 +101,7 @@ export default function Testimonials({
           <p className="mt-4 text-base text-zinc-600">
             {preview
               ? "A preview with sample quotes and stock photos, not real endorsements."
-              : "Replies from the BetterWispr launch threads on Hacker News and X."}
+              : "Posts and replies about BetterWispr on Hacker News and X."}
           </p>
         </div>
 

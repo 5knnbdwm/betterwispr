@@ -64,8 +64,34 @@ const FAQS = [
 const TESTIMONIALS: Testimonial[] = [
   {
     name: "GodelNumbering",
-    quote: "Just tried it out as I was looking for something that does this exact thing well (macbook). So far I dictated about 5 different things in different contexts, it worked without a single error! Good choice to use parakeet v3.\nNice work, thanks for building it!",
+    quote: "Just tried it out as I was looking for something that does this exact thing well (macbook). So far I dictated about 5 different things in different contexts, it worked without a single error! Good choice to pick parakeet v3.\nNice work, thanks for building it!",
     postUrl: "https://news.ycombinator.com/item?id=50046250",
+  },
+  {
+    name: "Ed | supersetapp.com",
+    handle: "@edsonboldrini",
+    quote: "I'm using this one and it's amazing",
+    postUrl: "https://x.com/edsonboldrini/status/2110483450759127044",
+    image: "https://pbs.twimg.com/profile_images/1950971738004520960/x6P9r8Bk_200x200.jpg",
+  },
+  {
+    name: "Adetola Solesi",
+    handle: "@adetola_solesi",
+    quote: "ok so someone made a free, open source dictation app for Mac. Hold Option and Space, talk, let go, and it types into whatever app you're in. The speech models run on your Mac, unless you plug in an API yourself. No account needed.",
+    postUrl: "https://x.com/adetola_solesi/status/2109431458519548036",
+    image: "https://pbs.twimg.com/profile_images/1980046673611988992/1Y-CcolV_200x200.jpg",
+  },
+  {
+    name: "apparent",
+    quote: "Interested to give this a try. I've tried Wispr Flow and found it to be quite good, but a bit pricey for my taste. I guess I assumed there were equally good models that were cheaper, and I suppose this is one of them.",
+    postUrl: "https://news.ycombinator.com/item?id=50051742",
+  },
+  {
+    name: "予知言 Lucian",
+    handle: "@YuzhiyanLucian",
+    quote: "语音输入也要按月订阅，我有点受不了。\n\nBetterWispr 是个免费的 Mac 语音输入工具。按住快捷键说话，松开，文字就填进当前输入框。\n\n选内置模型，下载好以后可以离线转写，录音不用上传。",
+    postUrl: "https://x.com/YuzhiyanLucian/status/2109842025994506677",
+    image: "https://pbs.twimg.com/profile_images/2109250064698753024/5fYTY_yO_200x200.jpg",
   },
   {
     name: "Sameer Vanjari",
@@ -75,9 +101,23 @@ const TESTIMONIALS: Testimonial[] = [
     image: "https://pbs.twimg.com/profile_images/1595780430233743362/2e1GDWhj_200x200.jpg",
   },
   {
+    name: "小弟调调",
+    handle: "@jaywcjlove",
+    quote: "BetterWispr - 免费开源、本地优先的 Wispr Flow 替代品：用 Whisper、Parakeet 和 Apple 语音在设备端听写",
+    postUrl: "https://x.com/jaywcjlove/status/2109855640743280671",
+    image: "https://pbs.twimg.com/profile_images/764536725750165504/DFOYV1w3_200x200.jpg",
+  },
+  {
     name: "frenchie4111",
-    quote: "This is awesome.",
+    quote: "This is awesome. I really want to get something like this integrated directly into my agent IDE.",
     postUrl: "https://news.ycombinator.com/item?id=50044781",
+  },
+  {
+    name: "AI 极客新闻",
+    handle: "@aigeeknews",
+    quote: "开源的 macOS 离线听写\n\nBetterWispr 按住 ⌥ Space 说话，松开后文字落进当前应用，转写在本机用 Whisper、Parakeet 或 Apple 的语音识别跑。",
+    postUrl: "https://x.com/aigeeknews/status/2109847316614217748",
+    image: "https://pbs.twimg.com/profile_images/2101566279299809280/ETiRfmNX_200x200.jpg",
   },
   {
     name: "Nikhil Bhima",
