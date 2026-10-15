@@ -39,10 +39,10 @@ struct SettingsView: View {
                     ShortcutRecorder(model: model, kind: .selectedText)
                     RowDivider()
                     SettingRow("Behavior", caption: model.settings.dictationMode == .hold
-                        ? "Hold to speak and release to finish. A quick tap starts hands-free dictation."
+                        ? "Hold to speak and release to finish. Or tap once to dictate hands-free, then press again or click ✓ to finish."
                         : "Press once to speak. Press again or click ✓ to finish.") {
                         Picker("Behavior", selection: setting(\.dictationMode)) {
-                            Text("Hold to talk").tag(DictationMode.hold)
+                            Text("Hold or tap").tag(DictationMode.hold)
                             Text("Press to toggle").tag(DictationMode.toggle)
                         }
                         .pickerStyle(.segmented)

@@ -784,7 +784,8 @@ retries. They do not access Keychain, mount disk images or submit to Apple.
   Escape reaches TextEdit again. Escape never stops a running notetaker. With a
   ⌘ ⌥ dictation shortcut, ⌘ ⌥ Escape still opens Force Quit while dictating.
   With an Fn shortcut, pressing Esc while holding Fn cancels.
-- [ ] Hold mode: hold ⌥ Space, speak, release. The 96 × 28 point glass capsule
+- [ ] Hold mode: Settings > Shortcut names it "Hold or tap" and its caption
+  explains both. Hold ⌥ Space, speak, release. The 96 × 28 point glass capsule
   shows only the wider waveform, with no cancel or finish buttons. Text is
   inserted once. Tap ⌥ Space briefly; recording stays active hands-free and
   expands to the 108 × 28 point pill with separate × and ✓ controls.
