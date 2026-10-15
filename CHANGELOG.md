@@ -4,7 +4,7 @@ All notable changes to BetterWispr are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/). The current version lives in `VERSION`.
 
-## [0.1.6] - 2026-10-14
+## [0.1.6] - 2026-10-15
 
 ### Added
 - Press Escape to cancel a dictation from any app while it is starting, recording or transcribing. Escape also works with your shortcut's Option, Control or Shift still held, but never with Command, so Command-Option-Escape stays Force Quit. Undo still appears when audio was captured. Escape goes back to the app you're in as soon as the dictation ends.
@@ -21,6 +21,7 @@ All notable changes to BetterWispr are listed here. The format follows
 
 ### Fixed
 - Claude Code and Codex are now found when installed through nix or anywhere your login shell can run them, so Meeting notes and Medium cleanup no longer report them as missing.
+- Long meetings are more likely to get notes instead of "The model couldn't condense this meeting enough", especially with Apple Intelligence. BetterWispr now shrinks a long transcript in up to 8 rounds instead of 3, and asks for fewer words when the notes model writes more than it was asked for. A meeting whose notes model keeps copying its own bullets back can still end in that error.
 
 ## [0.1.5] - 2026-10-12
 
