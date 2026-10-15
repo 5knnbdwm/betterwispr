@@ -151,6 +151,33 @@ import Testing
     #expect(!MeetingQuestion.catchUp(meeting, at: 900).hasContent)
 }
 
+@Test func meetingFilterKeepsMeetingsFromTheChosenDaysWithTheChosenInvitee() throws {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = try #require(TimeZone(identifier: "America/Los_Angeles"))
+    let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 3, day: 20, hour: 9)))
+    func meeting(_ title: String, day: Int, hour: Int, with attendees: [String]? = nil) throws -> Meeting {
+        var meeting = Meeting(title: title, createdAt: try #require(calendar.date(from: DateComponents(year: 2026, month: 3, day: day, hour: hour))),
+                              modelName: "Parakeet", language: "en")
+        meeting.attendees = attendees
+        return meeting
+    }
+    let meetings = [
+        try meeting("This morning", day: 20, hour: 0, with: ["Debra", "ana@example.com"]),
+        try meeting("Last night", day: 19, hour: 23, with: ["Ana"]),
+        try meeting("Week start", day: 14, hour: 0),
+        try meeting("Too old", day: 13, hour: 23, with: ["Debra"]),
+    ]
+    func titles(_ filter: MeetingFilter) -> [String] { filter.apply(to: meetings, calendar: calendar, now: now).map(\.title) }
+
+    #expect(titles(MeetingFilter()) == ["This morning", "Last night", "Week start", "Too old"])
+    #expect(titles(MeetingFilter(days: 1)) == ["This morning"])
+    #expect(titles(MeetingFilter(days: 7)) == ["This morning", "Last night", "Week start"])
+    #expect(titles(MeetingFilter(attendee: "Debra")) == ["This morning", "Too old"])
+    #expect(titles(MeetingFilter(days: 7, attendee: "Debra")) == ["This morning"])
+    #expect(titles(MeetingFilter(attendee: "Nobody")).isEmpty)
+    #expect(MeetingFilter.attendees(in: meetings) == ["Ana", "ana@example.com", "Debra"])
+}
+
 private actor FakeAskModel: NotesLanguageModel {
     let reply: String
     private(set) var prompts: [String] = []

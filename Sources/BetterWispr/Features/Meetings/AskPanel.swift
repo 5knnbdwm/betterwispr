@@ -17,6 +17,7 @@ struct AskPanel: View {
     let onCite: (MeetingLine) -> Void
     @State private var draft = ""
     @State private var confirmsClear = false
+    @State private var filter = MeetingFilter()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
@@ -40,6 +41,9 @@ struct AskPanel: View {
                 if let unavailable {
                     Text(unavailable).font(.callout).foregroundStyle(.secondary)
                 }
+                if thread == .allMeetings {
+                    filters
+                }
                 if let recording {
                     Button("What did I miss?", systemImage: "clock.arrow.circlepath") { catchUp(on: recording) }
                         .disabled(unavailable != nil || isWaiting)
@@ -59,6 +63,31 @@ struct AskPanel: View {
         }
     }
 
+    private var filters: some View {
+        let attendees = MeetingFilter.attendees(in: model.meetings.meetings)
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 16) {
+                Picker("When", selection: $filter.days) {
+                    Text("Any time").tag(Int?.none)
+                    Text("Today").tag(Int?.some(1))
+                    Text("Past 7 days").tag(Int?.some(7))
+                    Text("Past 30 days").tag(Int?.some(30))
+                }
+                if !attendees.isEmpty {
+                    Picker("With", selection: $filter.attendee) {
+                        Text("Anyone").tag(String?.none)
+                        ForEach(attendees, id: \.self) { Text($0).tag(String?.some($0)) }
+                    }
+                }
+            }
+            .pickerStyle(.menu)
+            .fixedSize()
+            if noMatch {
+                Text("No meetings match these filters.").font(.callout).foregroundStyle(.secondary)
+            }
+        }
+    }
+
     private var exchanges: [AskExchange] { model.meetings.thread(thread) }
 
     private var showsMeetingTitles: Bool { thread == .allMeetings }
@@ -66,9 +95,11 @@ struct AskPanel: View {
     private var meetings: [Meeting] {
         switch thread {
         case .meeting(let id): model.meetings.meeting(id).map { [$0] } ?? []
-        case .allMeetings: model.meetings.meetings
+        case .allMeetings: filter.apply(to: model.meetings.meetings)
         }
     }
+
+    private var noMatch: Bool { thread == .allMeetings && !model.meetings.meetings.isEmpty && meetings.isEmpty }
 
     private var recording: Meeting? {
         guard case .meeting(let id) = thread, model.meetings.runs[id]?.phase == .recording else { return nil }
@@ -87,7 +118,7 @@ struct AskPanel: View {
 
     private var question: String { draft.trimmingCharacters(in: .whitespacesAndNewlines) }
 
-    private var canAsk: Bool { unavailable == nil && !isWaiting && !question.isEmpty }
+    private var canAsk: Bool { unavailable == nil && !isWaiting && !noMatch && !question.isEmpty }
 
     private func ask() {
         guard canAsk else { return }
