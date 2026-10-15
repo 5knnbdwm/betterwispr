@@ -9,9 +9,10 @@ general recognition accuracy.
 ## File and link transcription check, 2026-10-15
 
 Apple M4 Pro, macOS 27.0.1, Parakeet Ultra, English. Speaker detection was not
-installed. The CLI checks used a release build of `BetterWisprCLI --media`,
-which runs the same `MediaAudio`, `MediaTranscriber` and `YTDLP` code as the
-Transcribe page. [Accuracy](accuracy.md) has the numbers.
+installed for the checks below until the last one. The CLI checks used a
+release build of `BetterWisprCLI --media`, which runs the same `MediaAudio`,
+`MediaTranscriber` and `YTDLP` code as the Transcribe page.
+[Accuracy](accuracy.md) has the numbers.
 
 - `--media` on the 20-minute TED talk as m4a, mp3 and an mp4 with H.264 video,
   and on two more TED videos as m4a. Every run exited 0 and was scored against
@@ -31,6 +32,10 @@ Transcribe page. [Accuracy](accuracy.md) has the numbers.
   failed chunk leaving no audio, the link rule, the checksum check, yt-dlp's
   arguments, progress and error lines, its private folder after success, error
   and cancel, and the app's job saving, cancelling and connection lock.
+- After rebasing onto main with the SpeakerKit speaker detection from #34, its
+  models installed, `--media` ran on the TED m4a and the interview. Both
+  exited 0 and ended with Finding speakers. [Accuracy](accuracy.md) has the
+  labels.
 - `swift build`, `swift test` and `./scripts/build-app.sh` passed. The
   Transcribe page was rendered offscreen with two saved transcripts, a running
   job and an open transcript, and the renders were checked by eye.

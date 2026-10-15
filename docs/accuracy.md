@@ -731,6 +731,24 @@ The Swift `--media` command, which the app shares, on 2026-10-15:
 - Whisper, Apple speech and API connections were not measured. No Whisper model
   is installed on this Mac.
 
+Speaker detection, after the rebase onto the SpeakerKit detection from #34, on
+2026-10-15. The interview captions name the speaker of each turn, so each
+second of a labelled segment was compared with the captioned speaker under that
+second. A turn change inside a cue was placed by its character position.
+
+| Input | Captioned seconds | Agree with the captions | Voices |
+| --- | ---: | ---: | --- |
+| Interview, m4a | 2,259 | 94.3% | 1 and 3 for the host, 2 for the guest |
+| TED talk, m4a, one speaker | none | | 1 for 96.2% of the audio, 2 for 0.7%, 3 for 3.0% |
+
+- The agreement uses the voice to speaker mapping that agrees best. Segments
+  are 30 to 59.5 s chunks, or the pieces a chunk is split into when several
+  voices speak in it, so a segment that still holds both people counts against
+  the score.
+- The TED talk scored 237 word errors with detection, against 235 without it.
+  Detection transcribes a split chunk again in pieces, so the text changes a
+  little. This was one run, not a measurement of either way.
+
 ## Reproducible evaluation
 
 Create a consented local corpus of natural 3–30 second dictation clips, with a
