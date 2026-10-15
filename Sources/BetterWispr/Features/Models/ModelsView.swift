@@ -43,6 +43,7 @@ struct ModelsView: View {
             }
 
             Section {
+                builtInModelRow
                 NotesModelSettings(model: model)
                 ForEach(model.settings.notesConnections) { connection in
                     HStack {
@@ -72,7 +73,7 @@ struct ModelsView: View {
             } header: {
                 Text("Meeting notes · Bring your own LLM")
             } footer: {
-                Text("The selected notes model processes the transcript and your thoughts after recording, and whenever you generate a summary. Claude Code and Codex use their signed-in subscriptions. API connections use your key and provider billing. Cloud choices send meeting text to that provider; speech recognition is selected separately. When Auto cleanup in Style is Medium, this model also edits your English dictation.")
+                Text("The selected notes model processes the transcript and your thoughts after recording, and whenever you generate a summary. The built-in model runs on this Mac and needs an internet connection only to download. Claude Code and Codex use their signed-in subscriptions. API connections use your key and provider billing. Cloud choices send meeting text to that provider; speech recognition is selected separately. When Auto cleanup in Style is Medium, this model also edits your English dictation.")
             }
 
             Section {
@@ -124,6 +125,31 @@ struct ModelsView: View {
         } message: { Text(error ?? "") }
     }
 
+    @ViewBuilder private var builtInModelRow: some View {
+        let installation = model.installation?.id == AppModel.builtInModelID ? model.installation : nil
+        let installing = installation != nil && installation?.failure == nil
+        LabeledContent {
+            if installing {
+                Button("Cancel", action: model.cancelInstallation)
+            } else if model.meetings.builtInModelInstalled {
+                Button("Remove", role: .destructive, action: model.removeBuiltInModel)
+                    .disabled(model.isInstalling || !model.canEditConnections)
+            } else {
+                Button(installation == nil ? "Download" : "Retry", action: model.installBuiltInModel)
+                    .disabled(model.isInstalling)
+            }
+        } label: {
+            Text("Built-in model · \(BuiltInModel.displayName)")
+            Text("Writes meeting notes and edits Medium dictation on this Mac, with no app or account to set up. \(BuiltInModel.sizeLabel) download. Uses about 1.5 GB of memory while it works and frees it after five idle minutes.")
+        }
+        if let installation {
+            if installing { ProgressView(value: installation.progress) }
+            Text(installation.failure.map { "Download stopped: \($0)" } ?? installation.progressLabel)
+                .font(.caption)
+                .foregroundStyle(installing ? AnyShapeStyle(.secondary) : AnyShapeStyle(.red))
+        }
+    }
+
     private func modelRow(_ speechModel: SpeechModel) -> some View {
         let selected = speechModel.id == model.selectedModel.id
         let installation = model.installation?.id == speechModel.id ? model.installation : nil
@@ -152,6 +178,21 @@ struct ModelsView: View {
                 Text("\(speechModel.sizeLabel) · \(engineLabel(speechModel.engine))")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
+                if let names = speechModel.languageNames {
+                    if names.count == 1 {
+                        Text(names[0])
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        DisclosureGroup("\(names.count) languages") {
+                            Text(names.formatted(.list(type: .and)))
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .font(.caption)
+                    }
+                }
                 if let installation {
                     if installing { ProgressView(value: installation.progress).padding(.top, 4) }
                     Text(installation.failure.map { "Download stopped: \($0)" } ?? installation.progressLabel)

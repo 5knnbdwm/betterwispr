@@ -1,6 +1,8 @@
 import { cn } from "@betterwispr-frontend/ui/lib/utils";
 import { ArrowUpRight } from "lucide-react";
 
+import DownloadCount from "@/components/download-count";
+
 export type Testimonial = {
   name: string;
   handle?: string;
@@ -99,9 +101,14 @@ export default function Testimonials({
             Your voice. In your words.
           </h2>
           <p className="mt-4 text-base text-zinc-600">
-            {preview
-              ? "A preview with sample quotes and stock photos, not real endorsements."
-              : "Replies from the BetterWispr launch threads on Hacker News and X."}
+            {preview ? (
+              "A preview with sample quotes and stock photos, not real endorsements."
+            ) : (
+              <>
+                <DownloadCount className="font-semibold text-zinc-900" />
+                Posts and replies about BetterWispr on Hacker News and X.
+              </>
+            )}
           </p>
         </div>
 

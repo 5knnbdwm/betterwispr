@@ -8,6 +8,13 @@ public enum AppTheme: String, Codable, CaseIterable, Sendable {
     case system, light, dark
 }
 
+/// Minutes a loaded speech model may sit unused before the app releases it.
+public enum ModelIdleUnload: Int, Codable, CaseIterable, Sendable {
+    case never = 0, fiveMinutes = 5, fifteenMinutes = 15, oneHour = 60
+
+    public var delay: Duration? { self == .never ? nil : .seconds(rawValue * 60) }
+}
+
 public struct AppSettings: Codable, Equatable, Sendable {
     public var selectedModelID: String = "apple"
     public var speechConnections: [SpeechConnection] = []
@@ -37,6 +44,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var showInDock: Bool = false
     public var silenceThreshold: Float = 0.002
     public var dictationMode: DictationMode = .hold
+    public var unloadModelWhenIdle: ModelIdleUnload = .never
     public var shortcut: DictationShortcut = .optionSpace
     public var learnCorrections: Bool = true
     public var cleanup: CleanupLevel = .light
@@ -52,10 +60,10 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var microphone: AudioInputDevice?
     /// The user closed the meeting card that offers the speaker detection download.
     public var dismissedSpeakerDetectionOffer: Bool = false
-    /// The Ollama model that writes meeting notes; nil uses Apple Intelligence.
     public var notesModel: String?
     /// Nil asks questions with the notes model.
     public var askSelection: NotesModelSelection?
+    public var notesBuiltIn: Bool = false
     /// The newest onboarding the user finished or skipped; 0 shows it again.
     public var completedOnboardingVersion: Int = 0
     /// The onboarding page to resume after quitting midway.
@@ -65,14 +73,16 @@ public struct AppSettings: Codable, Equatable, Sendable {
         get {
             if let notesCLI { return .cli(notesCLI) }
             if let notesConnectionID { return .connection(notesConnectionID) }
-            return notesModel.map(NotesModelSelection.ollama) ?? .apple
+            return notesModel.map(NotesModelSelection.ollama) ?? (notesBuiltIn ? .builtIn : .apple)
         }
         set {
             notesConnectionID = nil
             notesModel = nil
             notesCLI = nil
+            notesBuiltIn = false
             switch newValue {
             case .apple: break
+            case .builtIn: notesBuiltIn = true
             case .ollama(let name): notesModel = name
             case .connection(let id): notesConnectionID = id
             case .cli(let cli): notesCLI = cli
@@ -104,6 +114,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var notesModelName: String {
         switch notesSelection {
         case .apple: "Apple Intelligence"
+        case .builtIn: "Built-in · \(BuiltInModel.displayName)"
         case .ollama(let name): "Ollama · \(name)"
         case .connection(let id): notesConnections.first { $0.id == id }.map { "\($0.name) · \($0.modelID)" } ?? "Missing notes connection"
         case .cli(let cli): "\(cli.name) · \(cliModel(cli).isEmpty ? "Choose a model" : cliModel(cli))"
@@ -135,6 +146,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         showInDock = try container.decodeIfPresent(Bool.self, forKey: .showInDock) ?? false
         silenceThreshold = try container.decode(Float.self, forKey: .silenceThreshold)
         dictationMode = try container.decodeIfPresent(DictationMode.self, forKey: .dictationMode) ?? .hold
+        unloadModelWhenIdle = try container.decodeIfPresent(ModelIdleUnload.self, forKey: .unloadModelWhenIdle) ?? .never
         shortcut = try container.decodeIfPresent(DictationShortcut.self, forKey: .shortcut) ?? .optionSpace
         microphone = try container.decodeIfPresent(AudioInputDevice.self, forKey: .microphone)
         dismissedSpeakerDetectionOffer = try container.decodeIfPresent(Bool.self, forKey: .dismissedSpeakerDetectionOffer) ?? false
@@ -146,6 +158,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         modes = try container.decodeIfPresent([WritingMode].self, forKey: .modes) ?? []
         notesModel = try container.decodeIfPresent(String.self, forKey: .notesModel)
         askSelection = try? container.decodeIfPresent(NotesModelSelection.self, forKey: .askSelection)
+        notesBuiltIn = try container.decodeIfPresent(Bool.self, forKey: .notesBuiltIn) ?? false
         completedOnboardingVersion = try container.decodeIfPresent(Int.self, forKey: .completedOnboardingVersion) ?? 0
         onboardingStep = try container.decodeIfPresent(Int.self, forKey: .onboardingStep) ?? 0
     }

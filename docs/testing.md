@@ -6,9 +6,150 @@ version, Mac model, input device, engine/model and date for future runs. A
 successful build does not verify microphone capture, clipboard behavior or
 general recognition accuracy.
 
+## Built-in notes model check, 2026-10-15, version 0.1.6
+
+Apple M4 Pro with 48 GB, macOS 27.0.1, debug builds. `swift build`, all 242
+tests in `swift test` and `./scripts/build-app.sh` passed. The new tests use
+fake weights and small files, so none needs the download. They cover settings
+round trips, the install marker, prompt injection through control tokens,
+prompts and replies that overflow the window, timeouts, lane pauses, idle
+unload, a request that arrives while the weights close, shutdown during a load
+and shutdown waiting for an unload to finish.
+
+Memory figures below come from `/usr/bin/time -l`. Resident size counts the
+1.28 GB weights file, which is mapped rather than copied; the peak footprint is
+the process's own memory.
+
+- `BetterWisprCLI --download-builtin-model` downloaded 1,280,835,840 bytes in
+  116.55 s and passed the size, SHA-256 and load checks, exit 0. Its peak
+  footprint was 1,346,930,488 bytes because every 8 MB hash read stayed alive
+  until the loop ended. Reading each chunk in its own autorelease pool cut a
+  standalone hash of the file from 1,286 MB to 11 MB. Rerunning the checks on
+  the downloaded file then took 2.29 s, with 1,495,678,976 bytes resident and a
+  268,339,216-byte footprint.
+- `--meeting` with `--notes-model builtin` on the JSONL transcript of a scripted
+  four-person launch meeting exited 0 in 10.00 s, with 1,522,106,368 bytes
+  resident and a 293,799,928-byte footprint. After rebasing onto main it took
+  52.74 s, of which 42.35 s was Parakeet preparation (0.24 s in the earlier
+  runs). A CLI built from main at `aa1f9c2` also took 22 s and 23 s to prepare,
+  so the slowdown is not from this change. The run had
+  1,551,171,584 bytes resident and a 275,974,208-byte footprint. The notes
+  repeated items and gave Priya's slides to Marco.
+- `--bench` with `--cleanup medium --notes-model builtin` on two `say` clips
+  exited 0. The edits took 2.37 s, including loading the weights, and 1.63 s,
+  with 1,602,142,208 bytes resident and a 292,407,360-byte footprint. The first
+  clip's edit changed "Friday" to "Thursday" but kept "Actually, no, by
+  Thursday."
+- A temporary probe, since removed, used the same engine code. Loading took
+  0.24 s, and a 31,500-character prompt prefilled in 3.82 and 3.81 s.
+  Cancelling 150, 400, 700 and 1,000 ms into that prefill stopped it after 0.19,
+  0.28, 0.30 and 0.32 s, about one 256-token batch. A Medium-lane request sent
+  during the prefill finished in 0.58 s, with 1,586,462,720 bytes resident and
+  a 364,742,696-byte footprint. With `shutdown()` removed, the CLI exited 134
+  at `GGML_ASSERT([rsets->data count] == 0)` in `ggml-metal-device.m`; every
+  run above calls it and exited 0.
+- The app bundle passed `codesign --verify --deep --strict`, carries
+  `Contents/Frameworks/llama.framework` and links
+  `@rpath/llama.framework/Versions/Current/llama` with the
+  `@executable_path/../Frameworks` run path. Launched with a separate home
+  folder (`CFFIXED_USER_HOME`) so the installed BetterWispr kept running, it
+  loaded the embedded framework in two launches. Each quit through
+  `NSRunningApplication.terminate()`, after 94 s and 129 s, exited 0 and left
+  no crash report.
+
+The Download, Cancel, Remove and Test buttons, Medium dictation, meeting notes
+and Ask in the app, quitting during a load, offline loading in the app, macOS
+14, an Intel Mac, a Mac with 8 GB and a notarized build have not been exercised.
+
+- [ ] In Models, download the built-in model. Progress moves, and Cancel leaves
+  no `Models/models/unsloth/Qwen3.5-2B-GGUF` folder and no Remove button.
+  Download again; it finishes, becomes the notes provider and Test notes model
+  returns a summary.
+- [ ] Choose Medium with Use screen context, dictate an English sentence with a
+  self-correction into a text field and check the edit is pasted. Repeat with a
+  long selected text.
+- [ ] Record a real meeting with the built-in model selected. Notes are written,
+  and Activity Monitor shows BetterWispr's memory falling back after five idle
+  minutes.
+- [ ] Ask a question about a saved meeting with Ask set to the built-in model.
+- [ ] Start a Medium dictation and quit from the menu bar within a second, while
+  the weights load. BetterWispr quits and leaves no crash report.
+- [ ] Quit, turn off networking, relaunch and run a Medium dictation and meeting
+  notes. Both work without network access.
+- [ ] Remove the model while it is selected. Notes, Medium and Ask say it isn't
+  downloaded and never use another model.
+- [ ] Repeat the download, Test and a meeting on macOS 14 and on an Intel Mac.
+
+## File and link transcription check, 2026-10-15
+
+Apple M4 Pro, macOS 27.0.1, Parakeet Ultra, English. Speaker detection was not
+installed for the checks below until the last one. The CLI checks used a
+release build of `BetterWisprCLI --media`, which runs the same `MediaAudio`,
+`MediaTranscriber` and `YTDLP` code as the Transcribe page.
+[Accuracy](accuracy.md) has the numbers.
+
+- `--media` on the 20-minute TED talk as m4a, mp3 and an mp4 with H.264 video,
+  and on two more TED videos as m4a. Every run exited 0 and was scored against
+  the captions. Rerunning the TED m4a gave the same text and timings.
+- `--download-yt-dlp` installed yt-dlp 2026.08.19 into
+  `Application Support/BetterWispr/Tools` after the checksum matched.
+- `--media` on an 81-second YouTube link downloaded and transcribed it in 6.3
+  seconds. `javascript:alert(1)` and `not a link` were refused before any
+  download. A link that returns 404 and a YouTube video that doesn't exist
+  failed with yt-dlp's last error line. No `betterwispr-media-` folder or file
+  was left in the temporary directory after any of these runs.
+- Stopping `--media` with SIGTERM while it transcribed left one
+  `betterwispr-media-*.caf` chunk. Launching the debug app bundle with
+  `CFFIXED_USER_HOME` pointed at an empty folder removed it.
+- `swift test` covers the cut rule, chunk coverage of a file with silent gaps,
+  unreadable files, cleanup and deletion of every chunk, cancellation and a
+  failed chunk leaving no audio, the link rule, the checksum check, yt-dlp's
+  arguments, progress and error lines, its private folder after success, error
+  and cancel, and the app's job saving, cancelling and connection lock.
+- After rebasing onto main with the SpeakerKit speaker detection from #34, its
+  models installed, `--media` ran on the TED m4a and the interview. Both
+  exited 0 and ended with Finding speakers. [Accuracy](accuracy.md) has the
+  labels.
+- `swift build`, `swift test` and `./scripts/build-app.sh` passed. The
+  Transcribe page was rendered offscreen with two saved transcripts, a running
+  job and an open transcript, and the renders were checked by eye.
+
+Not exercised in the app: the sidebar entry, dropping or choosing a file,
+pasting a link, the Install and Update buttons, Cancel, the model menu, an API
+connection, Copy all, Export, Delete, Speaker detection labels, and quitting
+during a job. The dashboard did not open during the launch check. AIFF, CAF,
+FLAC, MOV and M4V files were not tried, and a WAV file was tried only in
+`swift test`. Pressing Control-C on a running `--media` was not tried.
+
+- [ ] Open Transcribe from the sidebar. Drop an m4a and a mov onto the drop
+  area, and choose a WAV with Choose File. Each shows Reading audio, then
+  Transcribing with a percentage, and is listed under Today when done.
+- [ ] Remove `Application Support/BetterWispr/Tools/yt-dlp` and have no
+  Homebrew copy. The page shows Install yt-dlp and Transcribe stays off for a
+  pasted link. Nothing downloads until Install yt-dlp is clicked. After it
+  installs, Transcribe a YouTube link.
+- [ ] Click Update with yt-dlp installed. The version only changes when a newer
+  release exists.
+- [ ] Press Cancel while a link downloads and again while a file transcribes.
+  Nothing is saved, and no `betterwispr-media-` folder or `.caf` file stays in
+  the temporary directory.
+- [ ] Pick another installed model in the menu and transcribe. With a
+  dictation model that is not installed and nothing picked, drop a file. The
+  app opens Models and downloads nothing.
+- [ ] Pick an API connection in the menu and transcribe a short file. Models
+  disables connection edits while the job runs.
+- [ ] Open a transcript. Copy all puts timestamped lines on the clipboard.
+  Export as Plain Text and as Markdown writes both files. Delete asks first,
+  then removes the transcript.
+- [ ] With Speaker detection installed, transcribe a two-person interview. The
+  lines show Speaker 1 and Speaker 2, and never Them.
+- [ ] Quit BetterWispr while a link downloads and again while a file
+  transcribes. No yt-dlp process keeps running after the quit, and after a
+  relaunch no chunk audio is left.
+
 ## Speaker detection check, 2026-10-14, version 0.1.6
 
-Apple M4 Pro, macOS 27.0.1, debug builds. `swift build`, all 168 tests in
+Apple M4 Pro, macOS 27.0.1, debug builds. `swift build`, all 180 tests in
 `swift test` and `./scripts/build-app.sh` passed. Tests cover the install check
 (the marker and every pinned model folder must exist) and a cancelled wait
 returning within 5 seconds while the work behind it keeps running.
@@ -658,10 +799,16 @@ retries. They do not access Keychain, mount disk images or submit to Apple.
   model/settings/destination. Switching apps still prevents automatic paste.
   Expiry, dismissal, quitting or a new session discard the cancelled audio.
   Cancel before capture starts or after delivery begins: no Undo is offered.
-- [ ] With Dictation sounds enabled, finishing, completion, cancellation and
-  errors play quiet cues after microphone capture stops. Turning it off silences
+- [ ] With Dictation sounds enabled, a start cue plays once when the capsule
+  switches to Listening, and finishing, cancellation and errors play quiet cues
+  after microphone capture stops. No start cue plays when starting fails
+  (microphone denied, no input, model missing). Turning the setting off silences
   them; recording meeting audio also suppresses them. Start a new dictation during
   a cue: playback stops before capture. Check reduced motion and increased contrast.
+- [ ] Dictate past 9:30 in toggle mode with Parakeet, Whisper, Apple and an API
+  connection. At 9:30 the capsule shows "Stops in 0:30" and counts down, and
+  VoiceOver says "Dictation stops in 30 seconds." At 10:00 dictation finishes on
+  its own and pastes the whole transcript. Hold mode behaves the same while held.
 - [ ] Meeting recording uses a 100 × 26 point pill, thirteen waveform
   bars, green border and stop square. Clicking it still stops the notetaker.
 - [ ] Keep another app focused and hover the microphone, notetaker icon and chevron.
@@ -739,10 +886,13 @@ player; real playback and the Automation prompt need these steps.
   to idle without another sound, message or announcement. Copy-only still shows
   "Copied to clipboard"; with both output options off it shows "Transcript ready".
 - [ ] Notetaker starts, stops, finishes its notes and displays errors silently.
-- [ ] The locally installed cues (finish, cancellation and attention)
-  play from an app moved outside the build directory. Check quality and volume
-  on speakers and headphones. Removing a cue leaves that event silent; no
-  bundled or macOS sound replaces it.
+- [ ] On a Mac without `SoundOverrides`, start, finish, cancellation and
+  attention play the macOS sounds Tink, Purr, Bottle and Basso. Locally
+  installed override cues (`started.wav`, `finished.wav`, `cancelled.wav`,
+  `attention.wav`) replace them one by one and play from an app moved outside
+  the build directory. Check quality and volume on speakers and headphones.
+  Listen for the start cue in the transcript of a dictation that begins right
+  after the cue on speakers.
 - [ ] Repeat with a clipboard image or rich text; the app must preserve supported
   pasteboard representations, not just plain text.
 - [ ] Change clipboard contents while recognition/paste is pending. New user
@@ -858,6 +1008,11 @@ player; real playback and the Automation prompt need these steps.
   download and confirm it is not reported as installed.
 - [ ] Compare Small, Turbo and Large v3 on the same clips; record peak memory,
   first load, warm inference and stop-to-final time. Test cancellation under load.
+- [ ] Set Unload speech model when idle to 5 minutes with Turbo loaded. After
+  five idle minutes, Activity Monitor shows BetterWispr's memory drop; the next
+  dictation loads the model again, offline, and transcribes. A dictation or
+  transcription in progress at the five-minute mark keeps the model until it
+  finishes. Waking the Mac or unlocking the screen does not load it again.
 
 ## Local history and privacy
 

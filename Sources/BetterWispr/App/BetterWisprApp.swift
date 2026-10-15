@@ -1,4 +1,5 @@
 import AppKit
+import BetterWisprCore
 import SwiftUI
 
 @main
@@ -179,8 +180,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         model.discardRecording()
         model.meetings.endForQuit()
+        model.transcriptions.endForQuit()
         capsule?.close()
         notetaker?.close()
+        LlamaEngine.shared.shutdown()
     }
 }
 

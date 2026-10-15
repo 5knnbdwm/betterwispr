@@ -643,9 +643,10 @@ private func voiceColor(_ participant: Int?) -> Color {
     return palette[max(0, participant - 1) % palette.count]
 }
 
-private struct SegmentRow<SpeakerChoices: View>: View {
+/// A timestamped transcript line; a nil label leaves the voice unnamed.
+struct SegmentRow<SpeakerChoices: View>: View {
     let segment: MeetingSegment
-    let label: String
+    let label: String?
     let isCited: Bool
     let canChangeSpeaker: Bool
     @ViewBuilder let speakerChoices: () -> SpeakerChoices
@@ -661,17 +662,19 @@ private struct SegmentRow<SpeakerChoices: View>: View {
     private var row: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                Circle().fill(segment.speaker == .me ? Color.green : voiceColor(segment.participant)).frame(width: 6, height: 6)
-                    .accessibilityHidden(true)
-                if canChangeSpeaker {
-                    Menu(content: speakerChoices) { Text(label).fontWeight(.semibold) }
-                        .menuStyle(.borderlessButton)
-                        .fixedSize()
-                        .help("Change who said this")
-                        .accessibilityLabel("Speaker")
-                        .accessibilityValue(label)
-                } else {
-                    Text(label).fontWeight(.semibold)
+                if let label {
+                    Circle().fill(segment.speaker == .me ? Color.green : voiceColor(segment.participant)).frame(width: 6, height: 6)
+                        .accessibilityHidden(true)
+                    if canChangeSpeaker {
+                        Menu(content: speakerChoices) { Text(label).fontWeight(.semibold) }
+                            .menuStyle(.borderlessButton)
+                            .fixedSize()
+                            .help("Change who said this")
+                            .accessibilityLabel("Speaker")
+                            .accessibilityValue(label)
+                    } else {
+                        Text(label).fontWeight(.semibold)
+                    }
                 }
                 Text(segment.timestamp).foregroundStyle(.secondary).monospacedDigit()
             }

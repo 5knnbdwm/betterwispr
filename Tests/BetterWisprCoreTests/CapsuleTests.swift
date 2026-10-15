@@ -4,18 +4,26 @@ import Testing
 @testable import BetterWisprCore
 @testable import BetterWispr
 
-@Test func localSoundsNeverFallBackToAnotherPack() throws {
+@Test(arguments: DictationSound.allCases) @MainActor func everyCueFallsBackToAStockSystemSoundWithoutAnOverride(cue: DictationSound) throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    #expect(cue.url(in: directory) == nil)
+    let sound = try #require(cue.sound(in: directory))
+    #expect(sound.name == cue.systemSoundName)
+}
+
+@Test @MainActor func overrideFileWinsOverTheSystemSoundAndABrokenOverrideStaysSilent() throws {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory) }
-    #expect(DictationSound.finished.url(in: directory) == nil)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     #expect(DictationSound.finished.url(in: directory) == nil)
     let custom = directory.appendingPathComponent("finished.wav")
-    try Data().write(to: custom)
+    try Data(contentsOf: URL(fileURLWithPath: "/System/Library/Sounds/Glass.aiff")).write(to: custom)
     #expect(DictationSound.finished.url(in: directory) == custom)
-    #expect(DictationSound.attention.url(in: directory) == nil)
-    try FileManager.default.removeItem(at: directory)
-    #expect(DictationSound.finished.url(in: directory) == nil)
+    let override = try #require(DictationSound.finished.sound(in: directory))
+    #expect(override.name == nil)
+    #expect(DictationSound.attention.sound(in: directory)?.name == DictationSound.attention.systemSoundName)
+    try Data().write(to: custom)
+    #expect(DictationSound.finished.sound(in: directory) == nil)
 }
 
 @Test @MainActor func capsuleHoverTracksEachControlAcrossExpansionAndExit() {
@@ -189,6 +197,36 @@ import Testing
     model.saveSettings()
     #expect(NSApplication.shared.appearance == nil)
     #expect(try LocalStore(directory: folder).load().settings.theme == .system)
+}
+
+@Test @MainActor func idleUnloadReleasesTheModelOnlyWhenChosenAndNeverDuringADictation() async throws {
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let model = AppModel(store: LocalStore(directory: folder), startsServices: false)
+    model.settings.soundEffects = false
+    let apple = try #require(SpeechModel.catalog.first { $0.engine == .apple })
+    model.selectModel(apple, prepared: AppleSpeechProvider())
+
+    model.scheduleIdleUnload(after: .milliseconds(20))
+    try await Task.sleep(for: .milliseconds(150))
+    #expect(model.isSpeechModelLoaded)
+
+    model.settings.unloadModelWhenIdle = .fiveMinutes
+    model.scheduleIdleUnload(after: .milliseconds(50))
+    model.phase = .recording
+    model.scheduleIdleUnload(after: .milliseconds(20))
+    try await Task.sleep(for: .milliseconds(150))
+    #expect(model.isSpeechModelLoaded)
+
+    model.phase = .idle
+    model.scheduleIdleUnload(after: .milliseconds(20))
+    try await Task.sleep(for: .milliseconds(150))
+    #expect(!model.isSpeechModelLoaded)
+
+    model.scheduleIdleUnload(after: .milliseconds(20))
+    model.selectModel(apple, prepared: AppleSpeechProvider())
+    try await Task.sleep(for: .milliseconds(150))
+    #expect(model.isSpeechModelLoaded)
 }
 
 @Test @MainActor func meetingPromptAppearsOncePerCallAndNeverAlongsideTheNotetaker() {

@@ -100,7 +100,7 @@ public final class WhisperKitProvider: SpeechProvider {
         try Task.checkCancellation()
         let prompt = vocabulary.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.prefix(64).map { String($0.prefix(100)) }.joined(separator: ", ")
         let promptTokens = prompt.isEmpty ? nil : runtime.tokenizer.map { Array($0.encode(text: " " + prompt).prefix(160)) }
-        let languageCode = language.flatMap { Locale(identifier: $0).language.languageCode?.identifier }
+        let languageCode = SpeechModel.engineLanguage(language)
         let options = DecodingOptions(
             language: languageCode, temperature: 0, temperatureFallbackCount: 2,
             detectLanguage: languageCode == nil, skipSpecialTokens: true, withoutTimestamps: true,

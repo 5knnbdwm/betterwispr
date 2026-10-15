@@ -107,6 +107,32 @@ try {
   assert.equal(png.readUInt32BE(16), 1730);
   assert.equal(png.readUInt32BE(20), 909);
 
+  const { countInstallerDownloads } = await vite.ssrLoadModule(
+    "/src/components/download-count.tsx",
+  );
+  assert.equal(
+    countInstallerDownloads([
+      {
+        assets: [
+          { name: "appcast.xml", download_count: 500 },
+          { name: "BetterWispr-arm64.dmg", download_count: 700 },
+          { name: "BetterWispr-x86_64.dmg", download_count: 60 },
+        ],
+      },
+      { assets: [{ name: "BetterWispr-arm64.dmg", download_count: 5 }] },
+      { assets: [] },
+    ]),
+    765,
+    "Download count sums DMGs across releases and skips update checks",
+  );
+  assert.throws(
+    () =>
+      countInstallerDownloads([
+        { assets: [{ name: "BetterWispr-arm64.dmg", download_count: "9" }] },
+      ]),
+    "Download count rejects a malformed count",
+  );
+
   const { GitHubStars } = await vite.ssrLoadModule(
     "/src/components/github-stars.tsx",
   );
@@ -234,7 +260,7 @@ try {
     "The hero offers separate Apple Silicon and Intel downloads",
   );
   console.log(
-    `Passed: ${paths.length} static pages, metadata, internal links, CTAs, ${articles.length + comparisons.length} blog posts, redirects, 404, OG image, GitHub stars and testimonials.`,
+    `Passed: ${paths.length} static pages, metadata, internal links, CTAs, ${articles.length + comparisons.length} blog posts, redirects, 404, OG image, GitHub stars, download count and testimonials.`,
   );
 } finally {
   await vite.close();

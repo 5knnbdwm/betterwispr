@@ -69,6 +69,20 @@ struct SettingsView: View {
                         Button("Open Vocabulary") { model.selectedPage = .vocabulary }
                     }
                     RowDivider()
+                    SettingRow("Unload speech model when idle", caption: "Frees memory between dictations. The next dictation loads the model again, so it can take a moment longer to finish.") {
+                        Picker("Unload speech model when idle", selection: Binding(
+                            get: { model.settings.unloadModelWhenIdle },
+                            set: { model.settings.unloadModelWhenIdle = $0; model.saveSettings(); model.scheduleIdleUnload() }
+                        )) {
+                            Text("Never").tag(ModelIdleUnload.never)
+                            Text("After 5 minutes").tag(ModelIdleUnload.fiveMinutes)
+                            Text("After 15 minutes").tag(ModelIdleUnload.fifteenMinutes)
+                            Text("After 1 hour").tag(ModelIdleUnload.oneHour)
+                        }
+                        .labelsHidden()
+                        .fixedSize()
+                    }
+                    RowDivider()
                     SettingRow("Input sensitivity", caption: "Lower filters help quiet voices but let more background noise through.") {
                         Picker("Input sensitivity", selection: setting(\.silenceThreshold)) {
                             Text("Standard").tag(Float(0.002))
@@ -93,7 +107,7 @@ struct SettingsView: View {
                 SettingsSection("App") {
                     SettingToggle("Show in Dock", caption: "When off, use the menu bar to open BetterWispr. Your dictation shortcut still works.", isOn: setting(\.showInDock))
                     RowDivider()
-                    SettingToggle("Dictation sounds", caption: "Soft cues when you finish, cancel or need attention. Quiet during meeting capture.", isOn: setting(\.soundEffects))
+                    SettingToggle("Dictation sounds", caption: "Soft cues when dictation starts listening, finishes, cancels or needs attention. Quiet during meeting capture.", isOn: setting(\.soundEffects))
                     RowDivider()
                     SettingToggle("Pause music while dictating", caption: "Pauses Music and Spotify while you speak, then resumes them. Browsers and other players keep playing. macOS asks for permission for each of these apps that is open when you turn this on.", isOn: pauseMediaWhileDictating)
                     RowDivider()
