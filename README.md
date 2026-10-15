@@ -79,7 +79,7 @@ Build instructions, project layout and guidelines are in [CONTRIBUTING.md](CONTR
 ## Star history
 
 <p align="center">
-  <a href="https://github.com/opennookorg/betterwispr/stargazers"><picture><source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/chart/github/stars/opennookorg/betterwispr.svg?mode=dark" /><img alt="Star history of opennookorg/betterwispr" src="https://shieldcn.dev/chart/github/stars/opennookorg/betterwispr.svg?mode=light" /></picture></a>
+  <a href="https://www.star-history.com/#opennookorg/betterwispr&Date"><picture><source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=opennookorg/betterwispr&type=Date&theme=dark" /><img alt="Star history of opennookorg/betterwispr" src="https://api.star-history.com/svg?repos=opennookorg/betterwispr&type=Date" /></picture></a>
 </p>
 
 ## License
