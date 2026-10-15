@@ -37,6 +37,7 @@ struct CapsuleView: View {
             if !showsCard, let target = hover.target {
                 tooltip(for: target)
             }
+            RecordingLimitLabel(model: model)
             if model.isBusy, !model.liveTranscript.isEmpty {
                 livePreview
             }
@@ -540,6 +541,36 @@ private struct CapsuleCardButtonStyle: ButtonStyle {
 }
 
 /// Reads the live audio level in its own body so each level update redraws only the bars, not the whole capsule.
+/// Counts down the last 30 seconds before dictation finishes at the recording limit.
+private struct RecordingLimitLabel: View {
+    let model: AppModel
+
+    private var secondsLeft: Int? {
+        guard model.phase == .recording else { return nil }
+        let left = Int((AudioRecorder.maximumDuration - model.recordingDuration).rounded(.up))
+        return left <= 30 ? max(0, left) : nil
+    }
+
+    var body: some View {
+        Group {
+            if let secondsLeft {
+                Text("Stops in \(Duration.seconds(secondsLeft).formatted(.time(pattern: .minuteSecond)))")
+                    .font(.system(size: 11, weight: .medium))
+                    .monospacedDigit()
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background { CapsuleGlass(cornerRadius: 14) }
+                    .allowsHitTesting(false)
+            }
+        }
+        .onChange(of: secondsLeft != nil) { _, warning in
+            guard warning else { return }
+            AccessibilityNotification.Announcement("Dictation stops in 30 seconds.").post()
+        }
+    }
+}
+
 private struct CapsuleWaveform: View {
     let model: AppModel
     let isNotetaking: Bool

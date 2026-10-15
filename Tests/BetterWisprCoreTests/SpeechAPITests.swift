@@ -94,6 +94,22 @@ import Testing
     #expect(chunks[0][34] == 16)
 }
 
+@Test func speechAPIAcceptsDictationsLongerThanTwoMinutes() async throws {
+    let url = FileManager.default.temporaryDirectory.appending(path: "betterwispr-api-test-\(UUID()).caf")
+    defer { try? FileManager.default.removeItem(at: url) }
+    let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 16_000, channels: 1))
+    let frames: AVAudioFrameCount = 16_000 * 180
+    let buffer = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames))
+    buffer.frameLength = frames
+    do {
+        let file = try AVAudioFile(forWriting: url, settings: format.settings)
+        try file.write(from: buffer)
+    }
+    let chunks = try await APISpeechProvider.audioChunks(url, seconds: 125)
+    #expect(chunks.count == 2)
+    #expect(chunks.reduce(0) { $0 + ($1.count - 44) / 2 } == 180 * 16_000)
+}
+
 @MainActor
 @Test func speechAPIUsesThePreparedConnectionAndSurfacesHTTPFailures() async throws {
     let audio = FileManager.default.temporaryDirectory.appending(path: "betterwispr-api-test-\(UUID()).wav")

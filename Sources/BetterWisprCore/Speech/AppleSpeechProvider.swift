@@ -1,3 +1,4 @@
+@preconcurrency import AVFoundation
 import Foundation
 @preconcurrency import Speech
 
@@ -48,6 +49,7 @@ public final class AppleSpeechProvider: SpeechProvider {
         request.addsPunctuation = true
         request.taskHint = .dictation
         request.contextualStrings = vocabulary.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.prefix(100).map { String($0.prefix(100)) }
+        let audioSeconds = (try? AVAudioFile(forReading: audioURL)).map { Double($0.length) / $0.processingFormat.sampleRate } ?? 0
         let id = UUID()
         requestID = id
         return try await withTaskCancellationHandler {
@@ -67,7 +69,7 @@ public final class AppleSpeechProvider: SpeechProvider {
                     }
                 }
                 timeout = Task { [weak self] in
-                    do { try await Task.sleep(for: .seconds(120)) } catch { return }
+                    do { try await Task.sleep(for: .seconds(120 + audioSeconds)) } catch { return }
                     self?.finish(.failure(SpeechError.timedOut), id: id)
                 }
             }

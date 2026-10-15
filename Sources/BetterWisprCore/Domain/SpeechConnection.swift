@@ -119,7 +119,7 @@ public enum SpeechAPIError: LocalizedError, Sendable {
         case .http(300..<400): "The endpoint redirected the request. Enter its final URL in Models; audio and keys are never forwarded to redirects."
         case .http(let code): "The speech endpoint returned HTTP \(code). Check the endpoint, model and selected language."
         case .invalidResponse: "The endpoint did not return a supported transcription response. Check its API format and model."
-        case .audioTooLong: "Use an audio clip of at most two minutes for this connection."
+        case .audioTooLong: "Use an audio clip of at most \(Int(AudioRecorder.maximumDuration / 60)) minutes for this connection."
         }
     }
 }

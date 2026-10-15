@@ -350,7 +350,7 @@ final class AppModel {
                         guard !Task.isCancelled, let self, self.generation == token else { return }
                         self.recordingDuration = Date().timeIntervalSince(started)
                         // Keep dictation bounded; a new recording can start immediately afterwards.
-                        if self.recordingDuration >= 120 { self.finishRecording(); return }
+                        if self.recordingDuration >= AudioRecorder.maximumDuration { self.finishRecording(); return }
                     }
                 }
             } catch {
