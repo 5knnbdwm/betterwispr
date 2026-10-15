@@ -69,6 +69,20 @@ struct SettingsView: View {
                         Button("Open Vocabulary") { model.selectedPage = .vocabulary }
                     }
                     RowDivider()
+                    SettingRow("Unload model when idle", caption: "Frees memory between dictations. The next dictation loads the model again, so it can take a moment longer to finish.") {
+                        Picker("Unload model when idle", selection: Binding(
+                            get: { model.settings.unloadModelWhenIdle },
+                            set: { model.settings.unloadModelWhenIdle = $0; model.saveSettings(); model.scheduleIdleUnload() }
+                        )) {
+                            Text("Never").tag(ModelIdleUnload.never)
+                            Text("After 5 minutes").tag(ModelIdleUnload.fiveMinutes)
+                            Text("After 15 minutes").tag(ModelIdleUnload.fifteenMinutes)
+                            Text("After 1 hour").tag(ModelIdleUnload.oneHour)
+                        }
+                        .labelsHidden()
+                        .fixedSize()
+                    }
+                    RowDivider()
                     SettingRow("Input sensitivity", caption: "Lower filters help quiet voices but let more background noise through.") {
                         Picker("Input sensitivity", selection: setting(\.silenceThreshold)) {
                             Text("Standard").tag(Float(0.002))

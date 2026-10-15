@@ -1003,6 +1003,10 @@ player; real playback and the Automation prompt need these steps.
   download and confirm it is not reported as installed.
 - [ ] Compare Small, Turbo and Large v3 on the same clips; record peak memory,
   first load, warm inference and stop-to-final time. Test cancellation under load.
+- [ ] Set Unload model when idle to 5 minutes with Turbo loaded. After five idle
+  minutes, Activity Monitor shows BetterWispr's memory drop; the next dictation
+  loads the model again, offline, and transcribes. A dictation or transcription
+  in progress at the five-minute mark keeps the model until it finishes.
 
 ## Local history and privacy
 

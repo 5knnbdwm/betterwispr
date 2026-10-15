@@ -199,6 +199,31 @@ import Testing
     #expect(try LocalStore(directory: folder).load().settings.theme == .system)
 }
 
+@Test @MainActor func idleUnloadReleasesTheModelOnlyWhenChosenAndNeverDuringADictation() async throws {
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let model = AppModel(store: LocalStore(directory: folder), startsServices: false)
+    model.settings.soundEffects = false
+    let apple = try #require(SpeechModel.catalog.first { $0.engine == .apple })
+    model.selectModel(apple, prepared: AppleSpeechProvider())
+
+    model.scheduleIdleUnload(after: .milliseconds(20))
+    try await Task.sleep(for: .milliseconds(150))
+    #expect(model.isSpeechModelLoaded)
+
+    model.settings.unloadModelWhenIdle = .fiveMinutes
+    model.scheduleIdleUnload(after: .milliseconds(50))
+    model.phase = .recording
+    model.scheduleIdleUnload(after: .milliseconds(20))
+    try await Task.sleep(for: .milliseconds(150))
+    #expect(model.isSpeechModelLoaded)
+
+    model.phase = .idle
+    model.scheduleIdleUnload(after: .milliseconds(20))
+    try await Task.sleep(for: .milliseconds(150))
+    #expect(!model.isSpeechModelLoaded)
+}
+
 @Test @MainActor func meetingPromptAppearsOncePerCallAndNeverAlongsideTheNotetaker() {
     let model = AppModel(store: LocalStore(directory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)),
                          startsServices: false)

@@ -88,7 +88,10 @@ final class AppModel {
         didSet {
             cardDismissal?.cancel()
             cardDeadline = nil
-            if phase.isBusy != oldValue.isBusy { onBusyChange?(phase.isBusy) }
+            if phase.isBusy != oldValue.isBusy {
+                onBusyChange?(phase.isBusy)
+                scheduleIdleUnload()
+            }
             switch (oldValue.holdsMicrophone, phase.holdsMicrophone) {
             case (false, true) where settings.pauseMediaWhileDictating: mediaPauser.pause()
             case (true, false): mediaPauser.resume()
@@ -146,6 +149,7 @@ final class AppModel {
     @ObservationIgnored private var provider: (any SpeechProvider)?
     @ObservationIgnored private var preparedModelID: String?
     @ObservationIgnored private var loading: (id: String, task: Task<Void, any Error>)?
+    @ObservationIgnored private var idleUnload: Task<Void, Never>?
     @ObservationIgnored private var operation: Task<Void, Never>?
     @ObservationIgnored private var warmUp: Task<Void, Never>?
     @ObservationIgnored private var installTask: Task<Void, Never>?
@@ -601,9 +605,26 @@ final class AppModel {
             try await next.prepare(model: model, download: false)
             guard let self, self.provider === next else { throw CancellationError() }
             self.preparedModelID = model.id
+            self.scheduleIdleUnload()
         }
         loading = (model.id, task)
         return task
+    }
+
+    var isSpeechModelLoaded: Bool { provider != nil }
+
+    /// Releases the speech model once it sits unused for the idle period chosen in Settings; the next dictation loads it again.
+    func scheduleIdleUnload(after delay: Duration? = nil) {
+        idleUnload?.cancel()
+        guard let idle = settings.unloadModelWhenIdle.delay, !isBusy else { return }
+        idleUnload = Task { [weak self] in
+            try? await Task.sleep(for: delay ?? idle)
+            guard let self, !Task.isCancelled, !self.isBusy, self.loading == nil else { return }
+            self.warmUp?.cancel()
+            self.provider?.cancel()
+            self.provider = nil
+            self.preparedModelID = nil
+        }
     }
 
     /// Loads the selected local model and, when idle, transcribes a second of quiet noise and discards the text.
