@@ -83,6 +83,30 @@ download have not been exercised.
 - [ ] On macOS 14, Models shows Speaker detection as needing macOS 15 and offers no
   download.
 
+## Speaker correction check, 2026-10-14, version 0.1.6
+
+`swift test` covers `Meeting.assign`, `Meeting.mergeParticipant`,
+`Meeting.nextParticipant`, the labels and summary fingerprint after a change, and
+loading settings saved before `dismissedSpeakerDetectionOffer`. The menus and the
+download card have not been exercised in the app, and no download was run.
+
+- [ ] Open a finished meeting with Them lines and no speaker detection. Click a
+  Them line's speaker name, choose New speaker, and check it reads Speaker 1 and a
+  name field appears. Right-click the line's bubble and check the same menu opens
+  rather than only the text menu.
+- [ ] Move a line to another speaker and back to Them. Me lines show no speaker
+  menu, and right-clicking a Me line's selected text still offers Copy.
+- [ ] With two or more speakers, use Merge into on one. Its lines take the other
+  speaker's label, a typed name moves across when the target has none, and the
+  summary shows as out of date.
+- [ ] While a meeting records, transcribes or finds speakers, no speaker menu or
+  Merge into menu shows.
+- [ ] On macOS 15 without speaker detection, a finished meeting with Them lines
+  shows the download card. Download shows progress, Cancel stops it, a failure
+  shows Retry, and success hides the card. Don’t show again hides it in every
+  meeting after relaunch. Nothing downloads until Download is clicked.
+- [ ] On macOS 14, or with speaker detection installed, the card never shows.
+
 ## Live meeting capture recheck, 2026-10-10, version 0.1.4
 
 Same Mac, model and kind of script as the check below, after the start, idle

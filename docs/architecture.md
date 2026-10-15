@@ -166,6 +166,23 @@ tabs backed by the existing meeting fields.
    speaker detection file is deleted after detection, on cancel and at quit, and
    shares the chunk prefix, so launch cleanup removes it too.
 
+Speaker labels can be fixed after a meeting. A remote line's speaker name in the
+transcript opens a menu, also on right-click, that calls
+`Meeting.assign(segment:toParticipant:)` to move that line to another speaker, to
+plain "Them" while some remote lines have no speaker, or to a new speaker
+numbered by `Meeting.nextParticipant`, the lowest number no line or non-blank
+saved name uses. The Merge into menu beside each name
+calls `Meeting.mergeParticipant(_:into:)`, which relabels every line of one
+speaker as another, moves the name across when the target has none and drops the
+old number's name. Me lines never move, because echo removal and the notes prompt
+treat Me as the person recording. Both menus are hidden while the meeting is
+active, because detection replaces the segments when it finishes. A relabel
+changes `summarySourceFingerprint`, so an existing summary shows as out of date.
+When the Mac supports speaker detection but it is not installed, a meeting with
+remote lines shows a card that downloads it only when tapped. It applies from the
+next meeting, because chunk audio is already deleted. "Don’t show again" sets
+`AppSettings.dismissedSpeakerDetectionOffer`.
+
 Each meeting being captured or processed is a `MeetingRun` in
 `MeetingModel.runs`. One run records at a time and any number process. Every
 continuation checks that its run is still the one registered for its meeting,
