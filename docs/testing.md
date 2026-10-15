@@ -1062,6 +1062,31 @@ were not exercised in this UI pass.
 - [ ] Back-to-back meetings: quit mid-overlap. Both meetings are kept with their
   durations and no `betterwispr-meeting-*.caf` files remain in the temporary
   folder.
+- [ ] Open a meeting with a transcript and thoughts, choose Ask and ask about
+  something said in it. The answer names the lines it used, "Answered with"
+  shows the Ask model, and a question the meeting does not cover says so
+  instead of inventing an answer.
+- [ ] Click a transcript citation: the Transcript tab opens with that line
+  tinted and scrolled into view, even with transcript search text entered.
+  Click a My thoughts citation: My thoughts opens. Repeat in the docked card.
+- [ ] On the Notetaker page, ask a question answered in an older meeting. The
+  citation shows that meeting's title, and clicking it opens the meeting on the
+  cited line. Go back; the question and answer are still there.
+- [ ] Choose a different Ask provider in Models and in the Notetaker settings
+  menu. Ask uses it while summaries keep the notes model; "Same as notes"
+  follows the notes model again. Select a notes API connection for Ask, then
+  remove it or change its URL; Ask returns to "Same as notes".
+- [ ] Choose an unavailable Ask provider (Apple Intelligence off, or a CLI with
+  no model). The Ask field is disabled with the reason, and no other provider
+  is asked.
+- [ ] Ask with a slow model, then press Cancel, go back to the list, or open
+  another meeting before it answers. The request stops (no CLI process left, no
+  late answer appears) and a new question can be asked.
+- [ ] Back-to-back meetings: while the first meeting still shows Transcribing,
+  Finding speakers or Writing summary, open it and choose Ask. The field reads
+  "Ask about the transcript so far", the answer cites lines already shown, and
+  the Ask tab stays open when the summary finishes. Ask on the Notetaker page
+  during the overlap; lines from both meetings can be cited.
 
 ### Calendar events
 

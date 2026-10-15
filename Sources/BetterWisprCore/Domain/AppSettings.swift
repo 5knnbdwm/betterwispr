@@ -52,6 +52,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var dismissedSpeakerDetectionOffer: Bool = false
     /// The Ollama model that writes meeting notes; nil uses Apple Intelligence.
     public var notesModel: String?
+    /// Nil asks questions with the notes model.
+    public var askSelection: NotesModelSelection?
     /// The newest onboarding the user finished or skipped; 0 shows it again.
     public var completedOnboardingVersion: Int = 0
     /// The onboarding page to resume after quitting midway.
@@ -74,6 +76,17 @@ public struct AppSettings: Codable, Equatable, Sendable {
             case .cli(let cli): notesCLI = cli
             }
         }
+    }
+
+    public var askSettings: AppSettings {
+        var settings = self
+        if let askSelection { settings.notesSelection = askSelection }
+        return settings
+    }
+
+    public mutating func deselectNotesConnection(_ id: UUID) {
+        if notesConnectionID == id { notesSelection = .apple }
+        if askSelection == .connection(id) { askSelection = nil }
     }
 
     public init() {}
@@ -129,6 +142,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         styles = try container.decodeIfPresent([StyleContext: StyleTone].self, forKey: .styles) ?? [:]
         modes = try container.decodeIfPresent([WritingMode].self, forKey: .modes) ?? []
         notesModel = try container.decodeIfPresent(String.self, forKey: .notesModel)
+        askSelection = try? container.decodeIfPresent(NotesModelSelection.self, forKey: .askSelection)
         completedOnboardingVersion = try container.decodeIfPresent(Int.self, forKey: .completedOnboardingVersion) ?? 0
         onboardingStep = try container.decodeIfPresent(Int.self, forKey: .onboardingStep) ?? 0
     }

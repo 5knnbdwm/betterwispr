@@ -5,7 +5,10 @@ import SwiftUI
 struct MeetingDetailView: View {
     let model: AppModel
     let id: UUID
+    var citation: Binding<MeetingLine?> = .constant(nil)
     @State private var tab = Tab.transcript
+    @State private var askExchanges: [AskExchange] = []
+    @State private var citedID: UUID?
     @State private var transcriptQuery = ""
     @State private var showsSearch = false
     @State private var showsEchoes = false
@@ -13,7 +16,7 @@ struct MeetingDetailView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private enum Tab: String, CaseIterable {
-        case thoughts = "My thoughts", transcript = "Transcript", summary = "Summary"
+        case thoughts = "My thoughts", transcript = "Transcript", summary = "Summary", ask = "Ask"
     }
 
     var body: some View {
@@ -35,6 +38,9 @@ struct MeetingDetailView: View {
                             case .thoughts: thoughts(meeting)
                             case .transcript: transcript(meeting)
                             case .summary: summary(meeting)
+                            case .ask:
+                                AskPanel(model: model, placeholder: isTranscribing ? "Ask about the transcript so far" : "Ask about this meeting",
+                                         exchanges: $askExchanges, showsMeetingTitles: false, onCite: show)
                             }
                         }
                         .padding(.horizontal, 32)
@@ -49,14 +55,28 @@ struct MeetingDetailView: View {
                         }
                     }
                     .onChange(of: meeting.segments.count) {
-                        guard tab == .transcript, isRecording, transcriptQuery.isEmpty else { return }
+                        guard tab == .transcript, isRecording, transcriptQuery.isEmpty, citedID == nil else { return }
                         withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) { proxy.scrollTo(Self.listeningAnchor, anchor: .bottom) }
+                    }
+                    .task(id: citedID) {
+                        guard let citedID else { return }
+                        try? await Task.sleep(for: .milliseconds(50))
+                        guard !Task.isCancelled else { return }
+                        withAnimation(reduceMotion ? nil : .ui) { proxy.scrollTo(citedID, anchor: .center) }
                     }
                 }
                 footer(meeting)
             }
-            .onAppear { tab = meetings.isActive(id) || meeting.summary == nil ? .transcript : .summary }
-            .onChange(of: meeting.summary?.generatedAt) { if meeting.summary != nil { tab = .summary } }
+            .onAppear {
+                if let line = citation.wrappedValue, line.meetingID == id {
+                    show(line)
+                    citation.wrappedValue = nil
+                } else {
+                    tab = meetings.isActive(id) || meeting.summary == nil ? .transcript : .summary
+                }
+            }
+            .onChange(of: meeting.summary?.generatedAt) { if meeting.summary != nil, tab != .ask { tab = .summary } }
+            .answering($askExchanges, model: model) { meetings.meeting(id).map { [$0] } ?? [] }
         }
     }
 
@@ -64,6 +84,7 @@ struct MeetingDetailView: View {
     private var run: MeetingRun? { meetings.runs[id] }
     private var isRecording: Bool { run?.phase.isCapturing == true }
     private var isActive: Bool { run != nil }
+    private var isTranscribing: Bool { isActive && run?.phase != .generating }
     private var pendingChunks: Int { run?.pendingChunks ?? 0 }
 
     private func header(_ meeting: Meeting) -> some View {
@@ -90,7 +111,7 @@ struct MeetingDetailView: View {
     private var tabs: some View {
         HStack(spacing: 24) {
             ForEach(Tab.allCases, id: \.self) { item in
-                Button { tab = item } label: {
+                Button { tab = item; citedID = nil } label: {
                     Text(item.rawValue)
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(tab == item ? .primary : .secondary)
@@ -414,7 +435,7 @@ struct MeetingDetailView: View {
             }
             LazyVStack(alignment: .leading, spacing: 18) {
                 ForEach(segments) { segment in
-                    SegmentRow(segment: segment, label: segment.label(names: meeting.participantNames),
+                    SegmentRow(segment: segment, label: segment.label(names: meeting.participantNames), isCited: segment.id == citedID,
                                canChangeSpeaker: segment.speaker == .them && !isActive) {
                         speakerChoices(meeting, segment)
                     }
@@ -560,6 +581,16 @@ struct MeetingDetailView: View {
         )
     }
 
+    private func show(_ line: MeetingLine) {
+        guard let segmentID = line.segmentID else {
+            tab = .thoughts
+            return
+        }
+        tab = .transcript
+        transcriptQuery = ""
+        citedID = segmentID
+    }
+
     private static let listeningAnchor = "listening"
     private static let callAudioHint = "BetterWispr hasn’t heard the other side of the call yet. Allow it under Screen & System Audio Recording, and make sure call audio plays on this Mac."
     private static let audioSettings = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!
@@ -615,6 +646,7 @@ private func voiceColor(_ participant: Int?) -> Color {
 private struct SegmentRow<SpeakerChoices: View>: View {
     let segment: MeetingSegment
     let label: String
+    let isCited: Bool
     let canChangeSpeaker: Bool
     @ViewBuilder let speakerChoices: () -> SpeakerChoices
 
@@ -649,6 +681,7 @@ private struct SegmentRow<SpeakerChoices: View>: View {
                 .lineSpacing(4)
                 .textSelection(.enabled)
                 .bubble()
+                .background(Color.accentColor.opacity(isCited ? 0.2 : 0), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

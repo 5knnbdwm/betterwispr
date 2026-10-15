@@ -4,6 +4,8 @@ import SwiftUI
 struct MeetingsView: View {
     @Bindable var model: AppModel
     @State private var meetingToDelete: UUID?
+    @State private var askExchanges: [AskExchange] = []
+    @State private var citation: MeetingLine?
 
     private var meetings: MeetingModel { model.meetings }
 
@@ -24,19 +26,20 @@ struct MeetingsView: View {
             }
             if let meeting = meetings.selectedID.flatMap(meetings.meeting) {
                 noteBar(meeting)
-                MeetingDetailView(model: model, id: meeting.id).id(meeting.id)
+                MeetingDetailView(model: model, id: meeting.id, citation: $citation).id(meeting.id)
             } else {
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 0) {
-                        NotesHome(model: model, onDelete: { meetingToDelete = $0 }).frame(minWidth: 460)
+                        NotesHome(model: model, onDelete: { meetingToDelete = $0 }, askExchanges: $askExchanges, onCite: cite).frame(minWidth: 460)
                         Divider()
                         CurrentNote(model: model).frame(width: 300)
                     }
-                    NotesHome(model: model, onDelete: { meetingToDelete = $0 })
+                    NotesHome(model: model, onDelete: { meetingToDelete = $0 }, askExchanges: $askExchanges, onCite: cite)
                 }
             }
         }
         .background(Color(nsColor: .textBackgroundColor))
+        .answering($askExchanges, model: model) { meetings.meetings }
         .alert("Delete this meeting?", isPresented: Binding(
             get: { meetingToDelete != nil },
             set: { if !$0 { meetingToDelete = nil } }
@@ -49,6 +52,11 @@ struct MeetingsView: View {
         } message: {
             Text("This removes the meeting, its notes and transcript from this Mac. It cannot be undone.")
         }
+    }
+
+    private func cite(_ line: MeetingLine) {
+        citation = line
+        meetings.selectedID = line.meetingID
     }
 
     private func noteBar(_ meeting: Meeting) -> some View {
@@ -112,6 +120,8 @@ struct MeetingsView: View {
 private struct NotesHome: View {
     @Bindable var model: AppModel
     let onDelete: (UUID) -> Void
+    @Binding var askExchanges: [AskExchange]
+    let onCite: (MeetingLine) -> Void
     @State private var query = ""
     @State private var searching = false
 
@@ -128,6 +138,10 @@ private struct NotesHome: View {
                     TextField("Search notes", text: $query)
                         .textFieldStyle(.roundedBorder)
                         .accessibilityLabel("Search meeting notes")
+                }
+                if !meetings.meetings.isEmpty {
+                    AskPanel(model: model, placeholder: "Ask about all your meetings", exchanges: $askExchanges,
+                             showsMeetingTitles: true, onCite: onCite)
                 }
                 if filtered.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
@@ -215,6 +229,8 @@ private struct NotetakerSettings: View {
             NotesModelPicker(model: model)
                 .pickerStyle(.inline)
                 .disabled(!model.meetings.runs.isEmpty)
+            NotesModelPicker(model: model, forAsk: true)
+                .pickerStyle(.inline)
             Button("Configure and test notes models…") { model.selectedPage = .models }
 
         } label: {

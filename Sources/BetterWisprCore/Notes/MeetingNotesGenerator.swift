@@ -8,7 +8,7 @@ public enum NotesAvailability: Equatable, Sendable {
     case unavailable(String)
 }
 
-public enum NotesModelSelection: Hashable, Sendable {
+public enum NotesModelSelection: Hashable, Sendable, Codable {
     case apple, ollama(String), connection(UUID), cli(NotesCLI)
 }
 

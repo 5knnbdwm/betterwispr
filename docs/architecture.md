@@ -212,6 +212,38 @@ meeting's last chunks never land in the next one. Cancelling a meeting that is
 still starting stops the recorder only if that meeting holds it. While two
 meetings overlap, each holds its own loaded speech model.
 
+### Ask
+
+A meeting's Ask tab and the Ask field on the Notetaker page answer questions
+from saved meetings. `MeetingQuestion` reads each meeting as `MeetingLine`s:
+the transcript rows shown by default, labelled with their timestamp and speaker,
+then each nonempty line of My thoughts. When every line fits
+`MeetingNotesGenerator.budget`, all of them are sent. Otherwise lines are scored
+by the question words they share, rarer words weighing more, and the best lines
+are added with their neighbours in the same meeting until the budget is spent.
+The chosen lines keep meeting order, are numbered from 1 under a header for each
+meeting, and the model is told to cite them as `[n]`. Markers that name a sent
+line become `MeetingAnswer.Citation`s; numbers outside the sources are removed
+from the answer, so every citation points at a real line. A transcript citation
+opens its meeting on the Transcript tab and scrolls to that segment; a thought
+citation opens My thoughts.
+
+A meeting that still has a `MeetingRun` can be asked about too. Ask reads the
+lines saved when the question is sent, so a meeting that is recording,
+transcribing or finding speakers is answered from its transcript so far, and its
+Ask field says so. A summary that finishes while the Ask tab is open does not
+switch tabs. Speaker detection can later split a cited "Them" row into new rows;
+that citation then opens the Transcript tab without a highlighted line.
+
+Ask uses `AppSettings.askSelection`. Nil, the default, follows the notes model.
+Another choice reuses the notes providers, their Keychain keys and their
+availability checks, and it is never a fallback: an unavailable provider shows
+its reason instead of asking another one. Removing the notes connection it
+names, or changing that connection's endpoint, resets it to the notes model.
+Questions and answers live in view state and are not saved. The request runs in
+a view task, so Cancel, leaving the meeting or leaving the Notetaker page
+cancels it, and an answer for a removed question is dropped.
+
 ### Calendar events
 
 `CalendarEvents` in `Integrations/` reads, through EventKit, the events that the
