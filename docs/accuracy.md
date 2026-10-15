@@ -702,8 +702,8 @@ in one call, and the meeting chunker row played it through `--meeting`.
   74 and 26 for the 60 to 119.5 s cut. Its 3 s minimum, forced 20 s cuts and
   speech gate suit live calls, not files.
 - Files and links are cut at the quietest point 30 to 59.5 s after the previous
-  cut, and every chunk is transcribed. 59.5 s stays inside the 125 s limit of
-  API connections and the 120 s timeout of Apple speech.
+  cut, and every chunk is transcribed. 59.5 s fits in one 125 s request of an
+  API connection and stays under the 120 s base timeout of Apple speech.
 - No interval was computed. The 30 and 60 second rows differ by 8 errors in
   12,592 words, which does not establish that either is better. The shorter
   chunks were kept for the engine limits.

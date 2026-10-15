@@ -55,6 +55,19 @@ struct DashboardView: View {
                     }
                 }
             }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                HStack(spacing: 6) {
+                    Text("Version \(AboutView.version)")
+                        .textSelection(.enabled)
+                    Text("·").accessibilityHidden(true)
+                    Link("What’s new", destination: AboutView.changelog)
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+            }
             .navigationSplitViewColumnWidth(min: 180, ideal: 210, max: 280)
         } detail: {
             ZStack {

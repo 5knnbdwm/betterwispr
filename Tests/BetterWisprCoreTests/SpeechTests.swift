@@ -362,6 +362,27 @@ func everyListedParakeetV3LanguageReachesTheDecoderAsAHint(_ id: String) throws 
     #expect(ParakeetProvider.hint(for: nil) == nil)
 }
 
+@Test func everyListedWhisperLanguageReachesTheEngineAsItsOwnToken() throws {
+    let languages = try #require(SpeechModel.catalog.first { $0.id == "whisper-turbo" }?.languages)
+    for code in languages { #expect(SpeechModel.engineLanguage(code) == code, "\(code)") }
+    #expect(SpeechModel.engineLanguage("en-US") == "en")
+    #expect(SpeechModel.engineLanguage("zh_Hans") == "zh")
+    #expect(SpeechModel.engineLanguage("auto") == nil)
+    #expect(SpeechModel.engineLanguage(nil) == nil)
+}
+
+@Test func everyDownloadableModelListsItsLanguagesByName() throws {
+    for model in SpeechModel.catalog where model.engine != .apple {
+        let names = try #require(model.languageNames, "\(model.id)")
+        #expect(!names.isEmpty, "\(model.id)")
+    }
+    let turbo = try #require(SpeechModel.catalog.first { $0.id == "whisper-turbo" }?.languages)
+    #expect(turbo.count == 100)
+    #expect(turbo.contains("es") && turbo.contains("yue"))
+    let small = try #require(SpeechModel.catalog.first { $0.id == "whisper-small" }?.languages)
+    #expect(small.contains("es") && !small.contains("yue"))
+}
+
 @Test func phraseBoosterCountsAsInstalledOnlyAfterACompletedInstall() throws {
     let directory = FileManager.default.temporaryDirectory.appending(path: "betterwispr-booster-test-\(UUID().uuidString)")
     defer { try? FileManager.default.removeItem(at: directory) }

@@ -32,6 +32,7 @@ import Testing
     let settings = try JSONDecoder().decode(AppSettings.self, from: Data(saved.utf8))
     #expect(settings.selectedModelID == "parakeet-v3")
     #expect(settings.dictationMode == .hold)
+    #expect(settings.unloadModelWhenIdle == .never)
     #expect(!settings.copyToClipboard)
     #expect(settings.soundEffects)
     #expect(!settings.pauseMediaWhileDictating)
@@ -43,6 +44,7 @@ import Testing
     #expect(settings.onboardingStep == 0)
     var toggled = settings
     toggled.dictationMode = .toggle
+    toggled.unloadModelWhenIdle = .fifteenMinutes
     toggled.completedOnboardingVersion = 1
     toggled.onboardingStep = 2
     toggled.copyToClipboard = true

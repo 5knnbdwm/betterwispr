@@ -41,7 +41,7 @@ BetterWispr is a private, offline speech-to-text app and an open-source alternat
 
 If paste can't safely reach the previous app, the text is copied to your
 clipboard instead, so you never lose a dictation. Recordings stop automatically
-after two minutes.
+after ten minutes, with a countdown in the last 30 seconds.
 
 ## Bring your own model
 

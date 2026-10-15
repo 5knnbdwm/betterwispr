@@ -8,6 +8,13 @@ public enum AppTheme: String, Codable, CaseIterable, Sendable {
     case system, light, dark
 }
 
+/// Minutes a loaded speech model may sit unused before the app releases it.
+public enum ModelIdleUnload: Int, Codable, CaseIterable, Sendable {
+    case never = 0, fiveMinutes = 5, fifteenMinutes = 15, oneHour = 60
+
+    public var delay: Duration? { self == .never ? nil : .seconds(rawValue * 60) }
+}
+
 public struct AppSettings: Codable, Equatable, Sendable {
     public var selectedModelID: String = "apple"
     public var speechConnections: [SpeechConnection] = []
@@ -37,6 +44,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var showInDock: Bool = false
     public var silenceThreshold: Float = 0.002
     public var dictationMode: DictationMode = .hold
+    public var unloadModelWhenIdle: ModelIdleUnload = .never
     public var shortcut: DictationShortcut = .optionSpace
     public var learnCorrections: Bool = true
     public var cleanup: CleanupLevel = .light
@@ -138,6 +146,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         showInDock = try container.decodeIfPresent(Bool.self, forKey: .showInDock) ?? false
         silenceThreshold = try container.decode(Float.self, forKey: .silenceThreshold)
         dictationMode = try container.decodeIfPresent(DictationMode.self, forKey: .dictationMode) ?? .hold
+        unloadModelWhenIdle = try container.decodeIfPresent(ModelIdleUnload.self, forKey: .unloadModelWhenIdle) ?? .never
         shortcut = try container.decodeIfPresent(DictationShortcut.self, forKey: .shortcut) ?? .optionSpace
         microphone = try container.decodeIfPresent(AudioInputDevice.self, forKey: .microphone)
         dismissedSpeakerDetectionOffer = try container.decodeIfPresent(Bool.self, forKey: .dismissedSpeakerDetectionOffer) ?? false
