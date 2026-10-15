@@ -247,20 +247,38 @@ import Testing
     #expect(prompts[1] == "Write the meeting notes from this transcript:\n\nMe: Ship it.")
 }
 
-@Test(arguments: [(3, 2), (9, 2), (20, 2), (20, 1), (20, 3), (3, 3)])
-func notesWriterCondensesLongMeetingsWhenTheModelOvershootsItsWordLimit(parts: Int, overshoot: Int) async throws {
-    let model = CondensingNotesModel { limit, available in min(limit * overshoot, available) }
+@Test(arguments: [3, 9, 20])
+func notesWriterMakesOneCondenseCallPerPartWhenTheModelObeysItsWordLimit(parts: Int) async throws {
+    let model = CondensingNotesModel { limit, _ in limit }
     let notes = try await NotesWriter.write(parts: longTranscript(parts: parts), notes: "", model: model) { _, _ in }
+    let calls = await model.condenseCalls
     #expect(notes.title == "Long meeting")
-    #expect(await model.condenseCalls <= 2 * parts + 4)
+    #expect(calls == parts)
 }
 
-@Test(arguments: [4, 9, 20])
-func notesWriterCondensesLongMeetingsWhenTheModelIgnoresTheWordLimitAndCopiesHalfOfEachPart(parts: Int) async throws {
+@Test(arguments: [(3, 2, 5), (3, 3, 5), (9, 2, 11), (20, 2, 22), (20, 3, 22)])
+func notesWriterCondensesLongMeetingsWhenTheModelOvershootsItsWordLimit(parts: Int, overshoot: Int, calls: Int) async throws {
+    let model = CondensingNotesModel { limit, available in min(limit * overshoot, available) }
+    let notes = try await NotesWriter.write(parts: longTranscript(parts: parts), notes: "", model: model) { _, _ in }
+    let made = await model.condenseCalls
+    #expect(notes.title == "Long meeting")
+    #expect(made == calls)
+}
+
+@Test(arguments: [(4, 9), (9, 19), (20, 43)])
+func notesWriterCondensesLongMeetingsWhenTheModelIgnoresTheWordLimitAndCopiesHalfOfEachPart(parts: Int, calls: Int) async throws {
     let model = CondensingNotesModel { _, available in available / 2 }
     let notes = try await NotesWriter.write(parts: longTranscript(parts: parts), notes: "", model: model) { _, _ in }
+    let made = await model.condenseCalls
     #expect(notes.title == "Long meeting")
-    #expect(await model.condenseCalls <= 2 * parts + 4)
+    #expect(made == calls)
+}
+
+@Test func notesWriterAsksForAtLeastTwentyWordsHoweverFarTheModelOvershoots() async throws {
+    let model = CondensingNotesModel { _, available in available / 2 }
+    _ = try await NotesWriter.write(parts: longTranscript(parts: 20), notes: "", model: model) { _, _ in }
+    let smallest = await model.limits.min()
+    #expect(smallest == 20)
 }
 
 private func longTranscript(parts: Int) -> [String] {
@@ -270,12 +288,14 @@ private func longTranscript(parts: Int) -> [String] {
 private actor CondensingNotesModel: NotesLanguageModel {
     let words: @Sendable (_ limit: Int, _ available: Int) -> Int
     private(set) var condenseCalls = 0
+    private(set) var limits: [Int] = []
 
     init(words: @escaping @Sendable (Int, Int) -> Int) { self.words = words }
 
     func respond(to prompt: String) throws -> String {
         condenseCalls += 1
         let limit = try #require(prompt.firstMatch(of: /at most (\d+) words/).flatMap { Int($0.1) })
+        limits.append(limit)
         let available = prompt.components(separatedBy: "\n\n").dropFirst().joined(separator: "\n\n").split(whereSeparator: \.isWhitespace).count
         let count = words(limit, available)
         return stride(from: 0, to: count, by: 10)
