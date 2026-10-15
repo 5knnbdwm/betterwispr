@@ -1,4 +1,5 @@
 import Foundation
+import os
 import Testing
 @testable import BetterWisprCore
 
@@ -69,4 +70,28 @@ func shutdownWaitsUntilAnIdleOrExplicitUnloadFinishes(idle: Bool) async throws {
     #expect(await didSignal(stopped, within: 0.2) == false)
     weights.finishClosing.signal()
     #expect(await didSignal(stopped))
+}
+
+@Test func aRequestDuringAnIdleUnloadWaitsForTheCloseAndLoadsAgain() async throws {
+    let weights = ClosingWeights()
+    let loads = OSAllocatedUnfairLock(initialState: 0)
+    let engine = LlamaEngine(idleDelay: .zero) {
+        loads.withLock { $0 += 1 }
+        return weights
+    }
+    defer {
+        weights.finishClosing.signal()
+        weights.finishClosing.signal()
+    }
+    await engine.warmUp()
+    try #require(await didSignal(weights.closing))
+    let answered = DispatchSemaphore(value: 0)
+    let warmup = Task {
+        await engine.warmUp()
+        answered.signal()
+    }
+    #expect(await didSignal(answered, within: 0.2) == false)
+    weights.finishClosing.signal()
+    await warmup.value
+    #expect(loads.withLock { $0 } == 2)
 }
