@@ -695,6 +695,36 @@ retries. They do not access Keychain, mount disk images or submit to Apple.
 - [ ] Move between Spaces, fullscreen windows and monitors. Confirm capsule
   positioning, keyboard controls, VoiceOver labels and reduced-motion behavior.
 
+## Pausing music while dictating
+
+Manual checks. Unit tests cover the pause and resume bookkeeping with a fake
+player; real playback and the Automation prompt need these steps.
+
+- [ ] Music playing: open Music, turn on Settings → App → Pause music while
+  dictating and allow the Automation prompt. Play a track and dictate. Music
+  pauses when the capsule appears and resumes as soon as the recording stops.
+  Repeat with a dictation cancelled with Escape and with "No speech heard."
+- [ ] Spotify playing: repeat the check with Spotify.
+- [ ] Nothing playing: with Music and Spotify paused or stopped, dictate. Neither
+  starts playing afterwards. With Music paused and Spotify playing, only Spotify
+  resumes.
+- [ ] Play Music again yourself during a dictation. It keeps playing when the
+  dictation ends. Known limit: a track you pause yourself during a dictation
+  looks the same as one BetterWispr paused, so it resumes.
+- [ ] Automation permission denied: deny the prompt, or turn the app off under
+  Privacy & Security → Automation. Dictation works normally, the music keeps
+  playing and no prompt or error appears during dictation.
+- [ ] App not open when the toggle was turned on: turn the setting on with
+  Spotify closed, then open Spotify, play and dictate. No prompt appears during
+  dictation and Spotify keeps playing. Turning the setting off and on with
+  Spotify open asks for permission. A closed app is never launched.
+- [ ] Quit mid-dictation: start dictating while Music plays and quit from the
+  menu bar. Music resumes and BetterWispr quits.
+- [ ] Quick tap: tap the shortcut, cancel at once and start again. Music is
+  paused during the new recording and resumes after it; it never plays while
+  the microphone is open.
+- [ ] Start meeting notes while Music plays. Music keeps playing.
+
 ## Clipboard and insertion
 
 - [ ] Start with a known clipboard string, dictate into TextEdit and verify final

@@ -110,6 +110,14 @@ the policy immediately and persist through the existing workspace store.
    user clipboard changes. Make failed insertion recoverable through copy either way.
 7. Remove temporary audio on completion/error/cancellation and return to idle.
 
+With "Pause music while dictating" on, `MediaPauser` sends Apple Events to pause
+Music and Spotify when the phase enters preparing, only if they report playing.
+When the phase leaves recording for any other phase it resumes only the apps it
+paused that still report paused. Operations run one at a time, address the
+running process so a closed app is never launched, and never prompt during
+dictation; consent is asked once when the setting turns on. Quitting waits for
+the resume through `terminateLater`. Meeting capture does not pause media.
+
 Swift UI-facing state and speech-provider methods are isolated to `@MainActor`.
 Audio callbacks must not mutate view state unsafely. Cancelled operations must
 not publish stale text or paste a result from a prior session. Keep these

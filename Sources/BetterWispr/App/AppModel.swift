@@ -15,6 +15,7 @@ enum RecordingPhase: Equatable {
     case unpasted(String)
 
     var isBusy: Bool { self == .preparing || self == .recording || self == .transcribing }
+    var holdsMicrophone: Bool { self == .preparing || self == .recording }
 }
 
 struct DictationFailure: Equatable {
@@ -87,6 +88,11 @@ final class AppModel {
             cardDismissal?.cancel()
             cardDeadline = nil
             if phase.isBusy != oldValue.isBusy { onBusyChange?(phase.isBusy) }
+            switch (oldValue.holdsMicrophone, phase.holdsMicrophone) {
+            case (false, true) where settings.pauseMediaWhileDictating: mediaPauser.pause()
+            case (true, false): mediaPauser.resume()
+            default: break
+            }
             onPresentationChange?()
         }
     }
@@ -126,6 +132,7 @@ final class AppModel {
     var onShowDashboard: (() -> Void)?
     var onShowNotetaker: ((UUID) -> Void)?
 
+    @ObservationIgnored let mediaPauser: MediaPauser
     @ObservationIgnored private let store: LocalStore
     @ObservationIgnored private let recorder = AudioRecorder()
     @ObservationIgnored private let startsServices: Bool
@@ -169,8 +176,9 @@ final class AppModel {
         return microphones + [saved]
     }
 
-    init(store: LocalStore = LocalStore(), startsServices: Bool = true) {
+    init(store: LocalStore = LocalStore(), startsServices: Bool = true, mediaPauser: MediaPauser = MediaPauser()) {
         self.store = store
+        self.mediaPauser = mediaPauser
         self.startsServices = startsServices
         meetings = MeetingModel(store: startsServices ? nil : MeetingStore(directory: store.directory.appendingPathComponent("Meetings")))
         meetingDetector = MeetingDetector(meetings: meetings)
