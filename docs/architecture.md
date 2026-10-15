@@ -56,6 +56,18 @@ the policy immediately and persist through the existing workspace store.
 4. Pass the recording URL, selected language and vocabulary hints to the provider.
    Entries written as a voice command ("question mark", "at the rate") are not
    hints, because boosting command words drops neighbouring words.
+   With "Use screen context" on, Parakeet with the phrase booster installed and
+   English or automatic language, up to 20 names from the selected text and
+   window text also go to the provider as screen terms
+   (`DictationContext.spellingTerms`). These are mixed-case words such as
+   WhisperKit and capitalized words that macOS spell checking rejects, most
+   frequent first. The clipboard is not used. Recognition waits at most
+   300 ms for the capture and leaves it running for Medium. Other providers
+   ignore screen terms, so they never
+   reach a speech API. A screen term only replaces decoded words that macOS
+   spell checking rejects, because a name on screen is no evidence it was said.
+   With no vocabulary hints, the phrase booster pass runs only when the first
+   pass has a misspelled word. Screen-term replacements are not vocabulary fixes.
    Provider partial callbacks are provisional text during recognition, not audio
    streaming while capture is still running. The Parakeet live preview is the
    one exception: `LiveTranscriber` re-recognizes the unconfirmed tail of the
@@ -70,7 +82,10 @@ the policy immediately and persist through the existing workspace store.
    text, **Medium** then asks the notes model the user chose in Models (Apple
    Intelligence, Ollama, a signed-in CLI or an API connection) for a clarity edit
    with `TranscriptPolisher` instructions, plus the selected text, clipboard and
-   window text when "Use screen context" is on. The edit is bounded by a timeout and
+   window text when "Use screen context" is on and the dictation started in
+   Medium. Screen context is captured when it is on and either Parakeet with
+   the phrase booster is selected for English or automatic language, or Medium
+   has an available notes model. Only the Medium case reads the clipboard. The edit is bounded by a timeout and
    rejected when it answers the dictation, adds new words or changes length too
    much; any failure keeps the Light text, and Medium never picks a different
    model than the one selected.
@@ -493,8 +508,9 @@ because FluidAudio reads the booster's tokenizer from that fixed folder. A
 `.betterwispr-installed` marker is written after the files load. `prepare`
 loads an installed booster with `CtcModels.loadDirect` and never downloads it;
 a missing or broken booster leaves plain Parakeet transcription unchanged.
-`transcribe` boosts only English or automatic-language dictation with a
-non-empty vocabulary and keeps the decoder's text when rescoring changes nothing.
+`transcribe` boosts only English or automatic-language dictation with
+vocabulary hints or screen terms and keeps the decoder's text when rescoring
+changes nothing.
 
 ## Add an integration
 

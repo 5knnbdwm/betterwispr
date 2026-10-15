@@ -419,7 +419,9 @@ final class AppModel {
         let model = recording.model
         let language = recording.settings.language == "auto" ? nil : recording.settings.language
         let entries = recording.vocabulary
+        let hints = VocabularyProcessor.hints(entries)
         let context = recording.context
+        let spellsScreenNames = self.spellsScreenNames(with: model, language: recording.settings.language)
         let appBundleID = recording.target?.bundleIdentifier
         phase = .transcribing
         statusMessage = model.engine == .api ? "Transcribing with \(model.name)…" : "Transcribing on your Mac…"
@@ -430,11 +432,12 @@ final class AppModel {
             guard let self else { return }
             do {
                 try Task.checkCancellation()
+                let screenTerms = spellsScreenNames ? await context?.value(within: .milliseconds(300), cancellingOnTimeout: false)?.spellingTerms() ?? [] : []
                 try await self.prepare(model, language: recording.settings.language)
                 try Task.checkCancellation()
                 guard self.generation == token, let provider = self.provider else { return }
                 let recognitionStarted = ContinuousClock.now
-                let raw = try await provider.transcribe(audioURL: audio.url, language: language, vocabulary: VocabularyProcessor.hints(entries))
+                let raw = try await provider.transcribe(audioURL: audio.url, language: language, vocabulary: hints, screenTerms: screenTerms)
                 Logger(subsystem: "org.betterwispr.app", category: "DictationTiming").notice("Recognition completed: elapsed=\(String(describing: recognitionStarted.duration(to: .now)), privacy: .public) empty=\(raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)")
                 try Task.checkCancellation()
                 guard self.generation == token else { return }
@@ -455,7 +458,7 @@ final class AppModel {
                     spoken = email
                 } else if english, cleanup == .medium, MeetingNotesGenerator.availability(settings: writingSettings) == .available {
                     self.statusMessage = "Editing with \(writingSettings.notesModelName)…"
-                    let polished = await TranscriptPolisher.polish(spoken, settings: writingSettings, vocabulary: VocabularyProcessor.hints(entries),
+                    let polished = await TranscriptPolisher.polish(spoken, settings: writingSettings, vocabulary: hints,
                                                                    context: sharesContext ? await context?.value(within: .seconds(1)) : nil,
                                                                    instructions: mode?.instructions ?? "")
                     try Task.checkCancellation()
@@ -624,10 +627,17 @@ final class AppModel {
         }
     }
 
-    /// Starts reading screen context when these settings send it to an available notes model during Medium cleanup.
+    /// Starts reading screen context when Parakeet with the phrase booster can spell names from it or Medium cleanup can show it, with the clipboard, to an available notes model.
     private func captureContext(for settings: AppSettings) -> Task<DictationContext, Never>? {
-        guard settings.useScreenContext, settings.cleanup == .medium, MeetingNotesGenerator.availability(settings: settings) == .available else { return nil }
-        return targetApplication.map { DictationContext.capture(from: $0, recognizingScreen: settings.recognizeScreenText) }
+        guard settings.useScreenContext else { return nil }
+        let showsNotesModel = settings.cleanup == .medium && MeetingNotesGenerator.availability(settings: settings) == .available
+        guard showsNotesModel || spellsScreenNames(with: selectedModel, language: settings.language) else { return nil }
+        return targetApplication.map { DictationContext.capture(from: $0, recognizingScreen: settings.recognizeScreenText, readingClipboard: showsNotesModel) }
+    }
+
+    private func spellsScreenNames(with model: SpeechModel, language: String) -> Bool {
+        phraseBoosterInstalled && model.engine == .parakeet && model.languages?.contains("en") == true
+            && (language == "auto" || language.hasPrefix("en"))
     }
 
     private func observe(_ provider: any SpeechProvider, token: UUID) {

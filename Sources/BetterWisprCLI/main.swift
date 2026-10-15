@@ -19,7 +19,7 @@ func run() async throws {
           --download-model MODEL_ID
           --download-phrase-booster
           --download-speaker-detection
-          --transcribe-file PATH [--model MODEL_ID] [--language en] [--vocabulary "Term,Other term"]
+          --transcribe-file PATH [--model MODEL_ID] [--language en] [--vocabulary "Term,Other term"] [--screen-terms "Term,Other term"]
           --live-file PATH [--model MODEL_ID] [--language en]
             Feeds the file through the Parakeet live preview in real time, printing each confirmed | provisional
             update with its pass latency, then the batch transcription of the same file.
@@ -28,9 +28,10 @@ func run() async throws {
             prints one JSON segment per line. Speaker detection labels voices when it is installed.
             --notes writes the meeting with notes from Apple Intelligence or the named Ollama model. With --notes,
             PATH may instead be a .jsonl file of segments from an earlier run, which skips transcription.
-          --bench MANIFEST.jsonl [--model MODEL_ID] [--language auto|en] [--vocabulary "Term,Other term"] [--cleanup light|medium] [--notes-model OLLAMA_MODEL]
+          --bench MANIFEST.jsonl [--model MODEL_ID] [--language auto|en] [--vocabulary "Term,Other term"] [--screen-terms "Term,Other term"] [--cleanup light|medium] [--notes-model OLLAMA_MODEL]
             Each manifest line is {"id", "language", "audio", "reference"}. Prints one JSON line per clip
             with the hypothesis and recognition seconds. Without --language, each clip uses its own language.
+            --screen-terms passes names as if read from the screen, which Parakeet uses only to respell misspelled words.
             --cleanup adds the app's cleanup of English text; medium edits with Apple's on-device model
             or the named Ollama model.
 
@@ -60,7 +61,7 @@ func run() async throws {
     var index = 0
     while index < arguments.count {
         let option = arguments[index]
-        guard ["--download-model", "--transcribe-file", "--live-file", "--bench", "--meeting", "--notes", "--model", "--language", "--vocabulary", "--cleanup", "--notes-model"].contains(option),
+        guard ["--download-model", "--transcribe-file", "--live-file", "--bench", "--meeting", "--notes", "--model", "--language", "--vocabulary", "--screen-terms", "--cleanup", "--notes-model"].contains(option),
               index + 1 < arguments.count, !arguments[index + 1].hasPrefix("--"), options[option] == nil else {
             throw CLIError.usage("Invalid or repeated argument: \(option). Run --help for usage.")
         }
@@ -92,6 +93,7 @@ func run() async throws {
     try await provider.prepare(model: model, download: options["--download-model"] != nil)
     FileHandle.standardError.write(Data("Prepared \(model.name) in \(started.duration(to: clock.now)).\n".utf8))
     let vocabulary = options["--vocabulary"].map { $0.split(separator: ",").map(String.init) } ?? []
+    let screenTerms = options["--screen-terms"].map { $0.split(separator: ",").map(String.init) } ?? []
     if let path = options["--bench"] {
         guard let cleanup = CleanupLevel(rawValue: options["--cleanup"] ?? "none") else {
             throw CLIError.usage("--cleanup must be light or medium.")
@@ -100,7 +102,7 @@ func run() async throws {
         settings.cleanup = cleanup
         settings.notesModel = options["--notes-model"]
         try await bench(manifest: URL(fileURLWithPath: (path as NSString).expandingTildeInPath), provider: provider,
-                        language: options["--language"], vocabulary: vocabulary, settings: settings)
+                        language: options["--language"], vocabulary: vocabulary, screenTerms: screenTerms, settings: settings)
     } else if let path = options["--meeting"] {
         var settings = AppSettings()
         settings.notesModel = options["--notes-model"]
@@ -114,7 +116,7 @@ func run() async throws {
     } else if let path = options["--transcribe-file"] {
         let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
         let language = options["--language"].flatMap { $0 == "auto" ? nil : $0 }
-        let transcript = try await provider.transcribe(audioURL: url, language: language, vocabulary: vocabulary)
+        let transcript = try await provider.transcribe(audioURL: url, language: language, vocabulary: vocabulary, screenTerms: screenTerms)
         print(transcript)
         FileHandle.standardError.write(Data("Completed in \(started.duration(to: clock.now)).\n".utf8))
     } else {
@@ -188,7 +190,7 @@ func write(notes: URL, for segments: [MeetingSegment], language: String?, settin
 
 /// Transcribes every manifest clip with the prepared provider, one JSON line per clip on stdout.
 @MainActor
-func bench(manifest: URL, provider: any SpeechProvider, language: String?, vocabulary: [String], settings: AppSettings) async throws {
+func bench(manifest: URL, provider: any SpeechProvider, language: String?, vocabulary: [String], screenTerms: [String], settings: AppSettings) async throws {
     let decoder = JSONDecoder()
     let encoder = JSONEncoder()
     encoder.outputFormatting = .withoutEscapingSlashes
@@ -197,7 +199,7 @@ func bench(manifest: URL, provider: any SpeechProvider, language: String?, vocab
         let clip = try decoder.decode(BenchClip.self, from: Data(line.utf8))
         let spoken = (language ?? clip.language) == "auto" ? nil : language ?? clip.language
         let started = clock.now
-        let hypothesis = try await provider.transcribe(audioURL: URL(fileURLWithPath: clip.audio), language: spoken, vocabulary: vocabulary)
+        let hypothesis = try await provider.transcribe(audioURL: URL(fileURLWithPath: clip.audio), language: spoken, vocabulary: vocabulary, screenTerms: screenTerms)
         var result = BenchResult(id: clip.id, language: clip.language, reference: clip.reference, hypothesis: hypothesis,
                                  seconds: seconds(started.duration(to: clock.now)))
         if settings.cleanup != .none {
