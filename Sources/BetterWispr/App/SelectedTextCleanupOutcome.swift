@@ -20,10 +20,11 @@ enum SelectedTextCleanupOutcome: Equatable {
     }
 
     static func replacement(keepingWhitespaceOf selected: String, ifChangedTo edited: String) -> String? {
-        guard let start = selected.firstIndex(where: { !$0.isWhitespace }),
-              let end = selected.lastIndex(where: { !$0.isWhitespace }),
-              selected[start...end] != edited else { return nil }
-        return selected.replacingCharacters(in: start...end, with: edited)
+        let text = CharacterSet.whitespacesAndNewlines.inverted
+        guard let first = selected.rangeOfCharacter(from: text),
+              let last = selected.rangeOfCharacter(from: text, options: .backwards),
+              selected[first.lowerBound..<last.upperBound] != edited else { return nil }
+        return selected.replacingCharacters(in: first.lowerBound..<last.upperBound, with: edited)
     }
 
     func toast(allowingAccessibility allow: @escaping @MainActor () -> Void) -> Toast {

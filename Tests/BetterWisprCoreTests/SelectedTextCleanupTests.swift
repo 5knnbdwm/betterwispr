@@ -24,4 +24,6 @@ import Testing
     #expect(SelectedTextCleanupOutcome.replacement(keepingWhitespaceOf: selected, ifChangedTo: "We ship it Friday.") == "\n  We ship it Friday. \n")
     #expect(SelectedTextCleanupOutcome.replacement(keepingWhitespaceOf: selected, ifChangedTo: "so um we ship it friday") == nil)
     #expect(SelectedTextCleanupOutcome.replacement(keepingWhitespaceOf: "We ship it Friday.", ifChangedTo: "We ship it on Friday.") == "We ship it on Friday.")
+    #expect(SelectedTextCleanupOutcome.replacement(keepingWhitespaceOf: "so um we ship it friday\u{200B}", ifChangedTo: "so um we ship it friday") == nil)
+    #expect(SelectedTextCleanupOutcome.replacement(keepingWhitespaceOf: "so um we ship it friday\u{200B}", ifChangedTo: "We ship it Friday.") == "We ship it Friday.\u{200B}")
 }

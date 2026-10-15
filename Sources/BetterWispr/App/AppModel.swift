@@ -322,9 +322,8 @@ final class AppModel {
         if let shortcut {
             do {
                 if shortcut.isModifierOnly { throw ShortcutError.needsKey }
-                if shortcut.keyCode == UInt32(kVK_Escape) || shortcut == settings.shortcut || shortcut == settings.cancelShortcut {
-                    throw ShortcutError.alreadyAssigned(shortcut)
-                }
+                if shortcut.keyCode == UInt32(kVK_Escape) { throw ShortcutError.cancelsDictation }
+                if shortcut == settings.shortcut || shortcut == settings.cancelShortcut { throw ShortcutError.alreadyAssigned(shortcut) }
                 try selectedTextShortcut.register(shortcut)
             } catch {
                 ToastWindow.shared.show(Toast(failure: "Couldn’t use \(shortcut.displayName)", error))
@@ -352,6 +351,7 @@ final class AppModel {
         guard let app = NSWorkspace.shared.frontmostApplication, app.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return .noOtherApp }
         guard !IsSecureEventInputEnabled() else { return .secureInput }
         let selected = await DictationContext.selectedText(in: app) ?? ""
+        guard !Task.isCancelled else { return nil }
         let settings = settings.cleanupSettings
         if let refusal = SelectedTextCleanupOutcome.refusal(of: selected, settings: settings) { return refusal }
         showSelectedTextProgress()

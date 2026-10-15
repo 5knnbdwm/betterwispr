@@ -206,7 +206,9 @@ struct StyleView: View {
 
     private var cleanupFooter: String {
         let original = "Your original words are never lost. In History, open Original transcription and choose Use Original."
-        guard model.settings.cleanup == .medium else { return original }
+        guard model.settings.cleanup == .medium else {
+            return model.settings.selectedTextShortcut == nil ? original : "Clean up selected text sends your selection to the cleanup provider. \(original)"
+        }
         let provider = model.settings.cleanupSettings
         let destination = switch provider.notesSelection {
         case .apple: "Medium edits with Apple Intelligence on this Mac."

@@ -1015,7 +1015,8 @@ player; real playback and the Automation prompt need these steps.
   the meeting notes model. Remove that API connection; the picker returns to
   "Same as notes".
 - [ ] Choose Light and set the selected text shortcut. The Cleanup provider
-  picker stays visible. Clear the shortcut; the picker hides.
+  picker stays visible, and the footer says the shortcut sends your selection
+  to it. Clear the shortcut; the picker and that sentence hide.
 - [ ] Choose an unavailable cleanup provider (Apple Intelligence off, or a CLI
   with no model). The Style page shows the reason, Medium dictations get Light
   cleanup and no other provider is asked.
@@ -1023,11 +1024,11 @@ player; real playback and the Automation prompt need these steps.
 ### Selected text cleanup
 
 - [ ] On a fresh install, Settings > Shortcut shows "Clean up selected text"
-  with "Set Shortcut…". Record ⌃⌥C. In TextEdit, select "so um we should probably ship it on
-  friday i think" and press ⌃⌥C. A "Cleaning up…" toast names the cleanup
-  provider, then the edit replaces the selection and the toast says "Cleaned
-  up". ⌘Z in TextEdit brings the original back, and the clipboard holds what it
-  held before.
+  with "Set Shortcut…". Record ⌃⌥C. In TextEdit, select "so um we should
+  probably ship it on friday i think" and press ⌃⌥C. A "Cleaning up…" toast
+  names the cleanup provider, then the edit replaces the selection and the
+  toast says "Cleaned up". ⌘Z in TextEdit brings the original back, and the
+  clipboard holds what it held before.
 - [ ] Press ⌃⌥C with nothing selected, with three words, with a French
   sentence and in a password field. Each shows its own toast and changes
   nothing. With an unavailable cleanup provider the toast gives the reason and
@@ -1042,8 +1043,9 @@ player; real playback and the Automation prompt need these steps.
   dictation before the edit arrives. The same toast appears, and nothing is
   pasted or copied. Revoke Accessibility and press it; the toast offers Allow.
 - [ ] Try a modifier alone, Escape with a modifier, the dictation shortcut and
-  the Cancel shortcut as this shortcut, and this shortcut as the other two. Each is refused with a
-  toast. Clear turns it off, ⌃⌥C reaches other apps again, and relaunching
+  the Cancel shortcut as this shortcut, and this shortcut as the other two.
+  Each is refused with a toast, and Escape's toast says Esc cancels a
+  dictation. Clear turns it off, ⌃⌥C reaches other apps again, and relaunching
   keeps the setting you left.
 - [ ] Repeat in Safari or Chrome text areas, Notes, Mail and Slack. Record the
   apps whose selection can't be read; they show "No selected text found".

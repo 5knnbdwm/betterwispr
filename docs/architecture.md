@@ -133,8 +133,9 @@ The optional Clean up selected text shortcut (`AppSettings.selectedTextShortcut`
 `GlobalShortcut` id 4) edits text outside a dictation and is refused while one
 runs. A dictation that starts while an edit runs cancels the edit, so the two
 never paste at once. Escape with any modifier is refused as this shortcut
-because Escape cancels dictation. `AppModel.cleanUpSelectedText` reads the frontmost app's selection through
-Accessibility with `DictationContext.selectedText(in:)`, which returns nothing
+because Escape cancels dictation. `AppModel.cleanUpSelectedText` reads the
+frontmost app's selection through Accessibility with
+`DictationContext.selectedText(in:)`, which returns nothing
 under secure input or from a password field. Empty, short (under
 `TranscriptPolisher.minimumWords`) and non-English selections are refused. The
 trimmed text goes to `TranscriptPolisher` with `AppSettings.cleanupSettings` and
