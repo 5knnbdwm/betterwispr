@@ -40,6 +40,11 @@ struct AskPanel: View {
                 if let unavailable {
                     Text(unavailable).font(.callout).foregroundStyle(.secondary)
                 }
+                if let recording {
+                    Button("What did I miss?", systemImage: "clock.arrow.circlepath") { catchUp(on: recording) }
+                        .disabled(unavailable != nil || isWaiting)
+                        .help("Answer from the last \(Self.catchUpMinutes) minutes of the transcript")
+                }
             }
             if let asking {
                 pending(asking)
@@ -65,6 +70,13 @@ struct AskPanel: View {
         }
     }
 
+    private var recording: Meeting? {
+        guard case .meeting(let id) = thread, model.meetings.runs[id]?.phase == .recording else { return nil }
+        return model.meetings.meeting(id)
+    }
+
+    private static let catchUpMinutes = Int(MeetingQuestion.catchUpWindow / 60)
+
     private var settings: AppSettings { model.meetings.notesSettings.askSettings }
 
     private var unavailable: String? {
@@ -81,6 +93,12 @@ struct AskPanel: View {
         guard canAsk else { return }
         asking = AskQuestion(text: question, about: meetings)
         draft = ""
+    }
+
+    private func catchUp(on meeting: Meeting) {
+        let recent = MeetingQuestion.catchUp(meeting, at: model.meetings.elapsed)
+        asking = AskQuestion(text: MeetingQuestion.catchUpQuestion, about: [recent],
+                             failure: recent.hasContent ? nil : "Nothing was transcribed in the last \(Self.catchUpMinutes) minutes.")
     }
 
     private func pending(_ question: AskQuestion) -> some View {

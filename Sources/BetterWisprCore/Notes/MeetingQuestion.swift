@@ -64,6 +64,18 @@ public enum MeetingQuestion {
         return answer(reply, sources: sources, modelName: modelName)
     }
 
+    /// How far back "What did I miss?" reads; at about 150 spoken words a minute the whole window fits the source budget.
+    public static let catchUpWindow: TimeInterval = 5 * 60
+    public static let catchUpQuestion = "What did I miss in the last \(Int(catchUpWindow / 60)) minutes? Give the main points, decisions, and anything I was asked."
+
+    /// `meeting` with only the lines still being spoken in the `catchUpWindow` before `elapsed`, and without Me's thoughts.
+    public static func catchUp(_ meeting: Meeting, at elapsed: TimeInterval) -> Meeting {
+        var recent = meeting
+        recent.notes = ""
+        recent.segments = meeting.segments.filter { $0.start + $0.duration > elapsed - catchUpWindow }
+        return recent
+    }
+
     /// The transcript rows shown by default, then each line of Me's thoughts.
     static func lines(of meeting: Meeting) -> [MeetingLine] {
         let spoken = meeting.transcriptSegments.map {
