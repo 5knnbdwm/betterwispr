@@ -9,7 +9,7 @@ public enum NotesAvailability: Equatable, Sendable {
 }
 
 public enum NotesModelSelection: Hashable, Sendable, Codable {
-    case apple, ollama(String), connection(UUID), cli(NotesCLI)
+    case apple, builtIn, ollama(String), connection(UUID), cli(NotesCLI)
 }
 
 public struct GeneratedMeetingNotes: Sendable {
@@ -36,6 +36,7 @@ public enum MeetingNotesGenerator {
     public static func availability(settings: AppSettings) -> NotesAvailability {
         switch settings.notesSelection {
         case .apple: return appleAvailability
+        case .builtIn: return BuiltInModel.isInstalled() ? .available : .unavailable("Download the built-in model in Models, or choose another notes model.")
         case .ollama: return .available
         case .cli(let cli):
             guard !settings.cliModel(cli).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -66,20 +67,21 @@ public enum MeetingNotesGenerator {
         if #available(macOS 26.0, *) {
             switch SystemLanguageModel.default.availability {
             case .available: return .available
-            case .unavailable(.deviceNotEligible): return .unavailable("This Mac doesn’t support Apple Intelligence. Choose Claude Code, Codex, Ollama or an API connection in Models.")
+            case .unavailable(.deviceNotEligible): return .unavailable("This Mac doesn’t support Apple Intelligence. Choose the built-in model, Claude Code, Codex, Ollama or an API connection in Models.")
             case .unavailable(.appleIntelligenceNotEnabled): return .unavailable("Turn on Apple Intelligence in System Settings, or choose another notes model in Models.")
             case .unavailable(.modelNotReady): return .unavailable("Apple Intelligence is still downloading its model. Try again soon, or choose another notes model in Models.")
             case .unavailable: return .unavailable("Apple Intelligence isn’t available right now. Choose another notes model in Models, or try again later.")
             }
         }
         #endif
-        return .unavailable("Apple Intelligence needs macOS 26. Choose Claude Code, Codex, Ollama or an API connection in Models.")
+        return .unavailable("Apple Intelligence needs macOS 26. Choose the built-in model, Claude Code, Codex, Ollama or an API connection in Models.")
     }
 
-    /// `lowLatency` asks API and CLI models for minimal reasoning; meeting notes keep the default requests.
+    /// `lowLatency` asks API and CLI models for minimal reasoning and runs the built-in model on its interactive lane; meeting notes keep the defaults.
     static func languageModel(_ settings: AppSettings, instructions: String = NotesWriter.instructions,
                               lowLatency: Bool = false) throws -> any NotesLanguageModel {
         switch settings.notesSelection {
+        case .builtIn: return BuiltInNotesModel(instructions: instructions, lane: lowLatency ? .interactive : .background)
         case .ollama(let name): return OllamaNotesModel(name: name, instructions: instructions)
         case .connection(let id):
             guard let connection = settings.notesConnections.first(where: { $0.id == id }) else {
@@ -96,9 +98,10 @@ public enum MeetingNotesGenerator {
         throw MeetingNotesError.unavailable(appleAvailability.message)
     }
 
-    /// Loads the selected Ollama or Apple model into memory before a dictation edit. Sends no text; API and CLI models need nothing.
+    /// Loads the selected on-device model into memory; sends no text.
     public static func warmUp(settings: AppSettings) async {
         switch settings.notesSelection {
+        case .builtIn: await LlamaEngine.shared.warmUp()
         case .ollama(let name): _ = try? await Ollama.send("chat", ["model": name, "messages": [], "options": ["num_ctx": Ollama.contextLength]], timeout: 60)
         case .apple:
             #if canImport(FoundationModels)

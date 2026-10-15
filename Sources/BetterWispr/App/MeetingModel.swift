@@ -49,7 +49,11 @@ final class MeetingModel {
     var showsCallAudioHint = false
     var notesSettings = AppSettings()
     var ollamaModels: [String] = []
-    var notesAvailability: NotesAvailability { MeetingNotesGenerator.availability(settings: notesSettings) }
+    var builtInModelInstalled = false
+    var notesAvailability: NotesAvailability {
+        _ = builtInModelInstalled
+        return MeetingNotesGenerator.availability(settings: notesSettings)
+    }
 
     @ObservationIgnored private let store: MeetingStore
     @ObservationIgnored private let recorder = MeetingRecorder()

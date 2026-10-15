@@ -9,6 +9,10 @@ struct NotesModelPicker: View {
         Picker(forAsk ? "Ask provider" : "Notes provider", selection: Binding(get: { selection }, set: { select($0) })) {
             if forAsk { Text("Same as notes").tag(NotesModelSelection?.none) }
             Text("Apple Intelligence · On this Mac").tag(NotesModelSelection?.some(.apple))
+            if model.meetings.builtInModelInstalled || selection == .builtIn {
+                Text(model.meetings.builtInModelInstalled ? "Built-in · \(BuiltInModel.displayName) · On this Mac" : "Built-in · Not downloaded")
+                    .tag(NotesModelSelection?.some(.builtIn))
+            }
             ForEach(NotesCLI.allCases, id: \.self) { cli in
                 Text("\(cli.name) · Subscription").tag(NotesModelSelection?.some(.cli(cli)))
             }

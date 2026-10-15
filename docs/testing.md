@@ -6,6 +6,80 @@ version, Mac model, input device, engine/model and date for future runs. A
 successful build does not verify microphone capture, clipboard behavior or
 general recognition accuracy.
 
+## Built-in notes model check, 2026-10-15, version 0.1.6
+
+Apple M4 Pro with 48 GB, macOS 27.0.1, debug builds. `swift build`, all 242
+tests in `swift test` and `./scripts/build-app.sh` passed. The new tests use
+fake weights and small files, so none needs the download. They cover settings
+round trips, the install marker, prompt injection through control tokens,
+prompts and replies that overflow the window, timeouts, lane pauses, idle
+unload, a request that arrives while the weights close, shutdown during a load
+and shutdown waiting for an unload to finish.
+
+Memory figures below come from `/usr/bin/time -l`. Resident size counts the
+1.28 GB weights file, which is mapped rather than copied; the peak footprint is
+the process's own memory.
+
+- `BetterWisprCLI --download-builtin-model` downloaded 1,280,835,840 bytes in
+  116.55 s and passed the size, SHA-256 and load checks, exit 0. Its peak
+  footprint was 1,346,930,488 bytes because every 8 MB hash read stayed alive
+  until the loop ended. Reading each chunk in its own autorelease pool cut a
+  standalone hash of the file from 1,286 MB to 11 MB. Rerunning the checks on
+  the downloaded file then took 2.29 s, with 1,495,678,976 bytes resident and a
+  268,339,216-byte footprint.
+- `--meeting` with `--notes-model builtin` on the JSONL transcript of a scripted
+  four-person launch meeting exited 0 in 10.00 s, with 1,522,106,368 bytes
+  resident and a 293,799,928-byte footprint. After rebasing onto main it took
+  52.74 s, of which 42.35 s was Parakeet preparation (0.24 s in the earlier
+  runs). A CLI built from main at `aa1f9c2` also took 22 s and 23 s to prepare,
+  so the slowdown is not from this change. The run had
+  1,551,171,584 bytes resident and a 275,974,208-byte footprint. The notes
+  repeated items and gave Priya's slides to Marco.
+- `--bench` with `--cleanup medium --notes-model builtin` on two `say` clips
+  exited 0. The edits took 2.37 s, including loading the weights, and 1.63 s,
+  with 1,602,142,208 bytes resident and a 292,407,360-byte footprint. The first
+  clip's edit changed "Friday" to "Thursday" but kept "Actually, no, by
+  Thursday."
+- A temporary probe, since removed, used the same engine code. Loading took
+  0.24 s, and a 31,500-character prompt prefilled in 3.82 and 3.81 s.
+  Cancelling 150, 400, 700 and 1,000 ms into that prefill stopped it after 0.19,
+  0.28, 0.30 and 0.32 s, about one 256-token batch. A Medium-lane request sent
+  during the prefill finished in 0.58 s, with 1,586,462,720 bytes resident and
+  a 364,742,696-byte footprint. With `shutdown()` removed, the CLI exited 134
+  at `GGML_ASSERT([rsets->data count] == 0)` in `ggml-metal-device.m`; every
+  run above calls it and exited 0.
+- The app bundle passed `codesign --verify --deep --strict`, carries
+  `Contents/Frameworks/llama.framework` and links
+  `@rpath/llama.framework/Versions/Current/llama` with the
+  `@executable_path/../Frameworks` run path. Launched with a separate home
+  folder (`CFFIXED_USER_HOME`) so the installed BetterWispr kept running, it
+  loaded the embedded framework in two launches. Each quit through
+  `NSRunningApplication.terminate()`, after 94 s and 129 s, exited 0 and left
+  no crash report.
+
+The Download, Cancel, Remove and Test buttons, Medium dictation, meeting notes
+and Ask in the app, quitting during a load, offline loading in the app, macOS
+14, an Intel Mac, a Mac with 8 GB and a notarized build have not been exercised.
+
+- [ ] In Models, download the built-in model. Progress moves, and Cancel leaves
+  no `Models/models/unsloth/Qwen3.5-2B-GGUF` folder and no Remove button.
+  Download again; it finishes, becomes the notes provider and Test notes model
+  returns a summary.
+- [ ] Choose Medium with Use screen context, dictate an English sentence with a
+  self-correction into a text field and check the edit is pasted. Repeat with a
+  long selected text.
+- [ ] Record a real meeting with the built-in model selected. Notes are written,
+  and Activity Monitor shows BetterWispr's memory falling back after five idle
+  minutes.
+- [ ] Ask a question about a saved meeting with Ask set to the built-in model.
+- [ ] Start a Medium dictation and quit from the menu bar within a second, while
+  the weights load. BetterWispr quits and leaves no crash report.
+- [ ] Quit, turn off networking, relaunch and run a Medium dictation and meeting
+  notes. Both work without network access.
+- [ ] Remove the model while it is selected. Notes, Medium and Ask say it isn't
+  downloaded and never use another model.
+- [ ] Repeat the download, Test and a meeting on macOS 14 and on an Intel Mac.
+
 ## File and link transcription check, 2026-10-15
 
 Apple M4 Pro, macOS 27.0.1, Parakeet Ultra, English. Speaker detection was not
@@ -75,7 +149,7 @@ FLAC, MOV and M4V files were not tried, and a WAV file was tried only in
 
 ## Speaker detection check, 2026-10-14, version 0.1.6
 
-Apple M4 Pro, macOS 27.0.1, debug builds. `swift build`, all 168 tests in
+Apple M4 Pro, macOS 27.0.1, debug builds. `swift build`, all 180 tests in
 `swift test` and `./scripts/build-app.sh` passed. Tests cover the install check
 (the marker and every pinned model folder must exist) and a cancelled wait
 returning within 5 seconds while the work behind it keeps running.

@@ -1,4 +1,5 @@
 import AppKit
+import BetterWisprCore
 import SwiftUI
 
 @main
@@ -182,6 +183,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.transcriptions.endForQuit()
         capsule?.close()
         notetaker?.close()
+        LlamaEngine.shared.shutdown()
     }
 }
 

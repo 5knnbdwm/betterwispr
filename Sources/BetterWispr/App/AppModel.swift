@@ -79,6 +79,7 @@ final class AppModel {
     static let onboardingVersion = 1
     static let phraseBoosterID = "phrase-booster"
     static let speakerDetectionID = "speaker-detection"
+    static let builtInModelID = "built-in-model"
     static let unpastedCardSeconds = 5.0
     static let cancellationSeconds = 5.0
 
@@ -698,6 +699,31 @@ final class AppModel {
         }
     }
 
+    func installBuiltInModel() {
+        guard !isInstalling else { return }
+        let selection = settings.notesSelection
+        install(id: Self.builtInModelID, name: BuiltInModel.displayName) { report in
+            try await BuiltInModel.install { fraction in Task { @MainActor in report(fraction * 0.9) } }
+        } completion: { [weak self] in
+            guard let self else { return }
+            if self.settings.notesSelection == selection, self.meetings.runs.isEmpty {
+                self.selectNotesModel(.builtIn)
+                self.statusMessage = "\(BuiltInModel.displayName) now writes meeting notes on this Mac."
+            } else {
+                self.statusMessage = "\(BuiltInModel.displayName) is installed. Choose it as the notes provider in Models."
+            }
+        }
+    }
+
+    func removeBuiltInModel() {
+        guard !isInstalling, canEditConnections else { return }
+        Task {
+            do { try await BuiltInModel.remove() }
+            catch { statusMessage = "Couldn’t remove \(BuiltInModel.displayName): \(error.localizedDescription)" }
+            refreshModels()
+        }
+    }
+
     func cancelInstallation() {
         installTask?.cancel()
         installation = nil
@@ -834,6 +860,7 @@ final class AppModel {
         installedModelIDs = Set(models.filter { WhisperKitProvider.isInstalled($0) || ParakeetProvider.isInstalled($0) }.map(\.id))
         phraseBoosterInstalled = ParakeetProvider.isPhraseBoosterInstalled()
         speakerDetectionInstalled = SpeakerDetection.isInstalled()
+        meetings.builtInModelInstalled = BuiltInModel.isInstalled()
         modelRevision += 1
     }
 

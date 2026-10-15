@@ -20,28 +20,29 @@ func run() async throws {
           --download-phrase-booster
           --download-speaker-detection
           --download-yt-dlp
+          --download-builtin-model
           --transcribe-file PATH [--model MODEL_ID] [--language en] [--vocabulary "Term,Other term"] [--screen-terms "Term,Other term"]
           --live-file PATH [--model MODEL_ID] [--language en]
             Feeds the file through the Parakeet live preview in real time, printing each confirmed | provisional
             update with its pass latency, then the batch transcription of the same file.
-          --meeting PATH [--model MODEL_ID] [--language en] [--vocabulary "Term,Other term"] [--notes OUT.md] [--notes-model OLLAMA_MODEL]
+          --meeting PATH [--model MODEL_ID] [--language en] [--vocabulary "Term,Other term"] [--notes OUT.md] [--notes-model builtin|OLLAMA_MODEL]
             Plays the file through the meeting chunker as call audio, transcribes each chunk as meetings do and
             prints one JSON segment per line. Speaker detection labels voices when it is installed.
-            --notes writes the meeting with notes from Apple Intelligence or the named Ollama model. With --notes,
+            --notes writes the meeting with notes from Apple Intelligence, the built-in model or the named Ollama model. With --notes,
             PATH may instead be a .jsonl file of segments from an earlier run, which skips transcription.
           --media PATH|URL [--model MODEL_ID] [--language en] [--vocabulary "Term,Other term"]
             Transcribes an audio or video file, or a web link fetched with yt-dlp, as the Transcribe page does:
             chunks cut at the quietest moment 30 to 59.5 seconds apart, meeting cleanup and vocabulary, one JSON
             segment per line. Speaker detection labels voices when it is installed.
-          --bench MANIFEST.jsonl [--model MODEL_ID] [--language auto|en] [--vocabulary "Term,Other term"] [--screen-terms "Term,Other term"] [--cleanup light|medium] [--notes-model OLLAMA_MODEL]
+          --bench MANIFEST.jsonl [--model MODEL_ID] [--language auto|en] [--vocabulary "Term,Other term"] [--screen-terms "Term,Other term"] [--cleanup light|medium] [--notes-model builtin|OLLAMA_MODEL]
             Each manifest line is {"id", "language", "audio", "reference"}. Prints one JSON line per clip
             with the hypothesis and recognition seconds. Without --language, each clip uses its own language.
             --screen-terms passes names as if read from the screen, which Parakeet uses only to respell misspelled words.
-            --cleanup adds the app's cleanup of English text; medium edits with Apple's on-device model
-            or the named Ollama model.
+            --cleanup adds the app's cleanup of English text; medium edits with Apple's on-device model,
+            the built-in model or the named Ollama model.
 
         Default model: parakeet-v3. Downloads only run with --download-model, --download-phrase-booster,
-        --download-speaker-detection or --download-yt-dlp.
+        --download-speaker-detection, --download-yt-dlp or --download-builtin-model.
         Audio transcription loads existing local assets and never downloads them.
         """)
         return
@@ -65,6 +66,12 @@ func run() async throws {
     if arguments == ["--download-yt-dlp"] {
         try await YTDLP.install()
         print("Installed yt-dlp at \(YTDLP.installed.path).")
+        return
+    }
+    if arguments == ["--download-builtin-model"] {
+        try await BuiltInModel.install { FileHandle.standardError.write(Data("\rDownloading \(BuiltInModel.displayName): \(Int($0 * 100))%".utf8)) }
+        FileHandle.standardError.write(Data("\n".utf8))
+        print("Installed \(BuiltInModel.displayName) at \(BuiltInModel.fileURL.path).")
         return
     }
     var options: [String: String] = [:]
@@ -102,6 +109,7 @@ func run() async throws {
     }
     try await provider.prepare(model: model, download: options["--download-model"] != nil)
     FileHandle.standardError.write(Data("Prepared \(model.name) in \(started.duration(to: clock.now)).\n".utf8))
+    let notesSelection = options["--notes-model"].map { $0 == "builtin" ? NotesModelSelection.builtIn : .ollama($0) } ?? .apple
     let vocabulary = options["--vocabulary"].map { $0.split(separator: ",").map(String.init) } ?? []
     let screenTerms = options["--screen-terms"].map { $0.split(separator: ",").map(String.init) } ?? []
     if let path = options["--bench"] {
@@ -110,12 +118,12 @@ func run() async throws {
         }
         var settings = AppSettings()
         settings.cleanup = cleanup
-        settings.notesModel = options["--notes-model"]
+        settings.notesSelection = notesSelection
         try await bench(manifest: URL(fileURLWithPath: (path as NSString).expandingTildeInPath), provider: provider,
                         language: options["--language"], vocabulary: vocabulary, screenTerms: screenTerms, settings: settings)
     } else if let path = options["--meeting"] {
         var settings = AppSettings()
-        settings.notesModel = options["--notes-model"]
+        settings.notesSelection = notesSelection
         try await meeting(URL(fileURLWithPath: (path as NSString).expandingTildeInPath), provider: provider,
                           language: options["--language"].flatMap { $0 == "auto" ? nil : $0 }, vocabulary: vocabulary,
                           notes: options["--notes"].map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }, settings: settings)
@@ -291,6 +299,8 @@ func seconds(_ duration: Duration) -> Double {
 do {
     try await run()
 } catch {
+    LlamaEngine.shared.shutdown()
     FileHandle.standardError.write(Data("BetterWispr: \(error.localizedDescription)\n".utf8))
     exit(1)
 }
+LlamaEngine.shared.shutdown()
