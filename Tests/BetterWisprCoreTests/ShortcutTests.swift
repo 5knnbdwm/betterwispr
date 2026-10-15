@@ -143,3 +143,15 @@ import Testing
     #expect(events.map { $0.flags.contains(.maskCommand) } == [true, true, true, false])
     #expect(events.map { $0.flags.contains(FocusedAppIntegration.leftCommandDeviceFlag) } == [true, true, true, false])
 }
+
+@MainActor @Test func screenSharingClipboardMenuTitlesAreFoundInEveryLanguage() {
+    let app = URL(fileURLWithPath: "/System/Applications/Utilities/Screen Sharing.app")
+    let send = FocusedAppIntegration.menuTitles(FocusedAppIntegration.sendClipboardKey, in: app)
+    let shared = FocusedAppIntegration.menuTitles(FocusedAppIntegration.sharedClipboardKey, in: app)
+    #expect(send.isSuperset(of: ["Send Clipboard", "Zwischenablage senden", "クリップボードを送信"]))
+    #expect(!send.contains("Get Clipboard"))
+    #expect(shared.contains("Use Shared Clipboard"))
+    #expect(shared.count > 30)
+    #expect(send.isDisjoint(with: shared))
+    #expect(FocusedAppIntegration.menuTitles(FocusedAppIntegration.sendClipboardKey, in: nil).isEmpty)
+}
