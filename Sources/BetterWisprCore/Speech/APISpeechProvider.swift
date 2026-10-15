@@ -136,7 +136,7 @@ public final class APISpeechProvider: SpeechProvider {
         // Dictation is bounded by AudioRecorder.maximumDuration; allow a small scheduling margin at stop.
         guard duration <= AudioRecorder.maximumDuration + 5 else { throw SpeechAPIError.audioTooLong }
         var chunks: [Data] = []
-        // ponytail: fixed 25 s Sarvam chunks can split words; use silence-aware cuts if boundary errors matter.
+        // ponytail: fixed 125 s chunks (25 s for Sarvam) can split a word at each cut; cut at quiet points with MediaAudio.cut if boundary errors matter.
         for start in stride(from: 0.0, to: duration, by: seconds) {
             try Task.checkCancellation()
             let buffer = try AudioProcessor.loadAudio(fromPath: url.path, startTime: start, endTime: min(duration, start + seconds))

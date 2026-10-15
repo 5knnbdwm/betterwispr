@@ -805,6 +805,10 @@ retries. They do not access Keychain, mount disk images or submit to Apple.
   (microphone denied, no input, model missing). Turning the setting off silences
   them; recording meeting audio also suppresses them. Start a new dictation during
   a cue: playback stops before capture. Check reduced motion and increased contrast.
+- [ ] Dictate past 9:30 in toggle mode with Parakeet, Whisper, Apple and an API
+  connection. At 9:30 the capsule shows "Stops in 0:30" and counts down, and
+  VoiceOver says "Dictation stops in 30 seconds." At 10:00 dictation finishes on
+  its own and pastes the whole transcript. Hold mode behaves the same while held.
 - [ ] Meeting recording uses a 100 × 26 point pill, thirteen waveform
   bars, green border and stop square. Clicking it still stops the notetaker.
 - [ ] Keep another app focused and hover the microphone, notetaker icon and chevron.

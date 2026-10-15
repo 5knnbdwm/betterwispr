@@ -222,6 +222,11 @@ import Testing
     model.scheduleIdleUnload(after: .milliseconds(20))
     try await Task.sleep(for: .milliseconds(150))
     #expect(!model.isSpeechModelLoaded)
+
+    model.scheduleIdleUnload(after: .milliseconds(20))
+    model.selectModel(apple, prepared: AppleSpeechProvider())
+    try await Task.sleep(for: .milliseconds(150))
+    #expect(model.isSpeechModelLoaded)
 }
 
 @Test @MainActor func meetingPromptAppearsOncePerCallAndNeverAlongsideTheNotetaker() {

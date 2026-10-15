@@ -540,7 +540,6 @@ private struct CapsuleCardButtonStyle: ButtonStyle {
     }
 }
 
-/// Reads the live audio level in its own body so each level update redraws only the bars, not the whole capsule.
 /// Counts down the last 30 seconds before dictation finishes at the recording limit.
 private struct RecordingLimitLabel: View {
     let model: AppModel
@@ -571,6 +570,7 @@ private struct RecordingLimitLabel: View {
     }
 }
 
+/// Reads the live audio level in its own body so each level update redraws only the bars, not the whole capsule.
 private struct CapsuleWaveform: View {
     let model: AppModel
     let isNotetaking: Bool

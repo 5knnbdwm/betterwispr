@@ -93,6 +93,11 @@ public final class WhisperKitProvider: SpeechProvider {
         onProgress?(1)
     }
 
+    /// Whisper's own token for a saved code; Locale would rename "jw", "no" and "tl", which Whisper does not know.
+    nonisolated static func decoderLanguage(_ code: String?) -> String? {
+        code.flatMap { Constants.languages.values.contains($0) ? $0 : Locale(identifier: $0).language.languageCode?.identifier }
+    }
+
     public func transcribe(audioURL: URL, language: String?, vocabulary: [String]) async throws -> String {
         guard let runtime, !preparing else { throw SpeechError.notPrepared }
         guard transcriptionTask == nil else { throw SpeechError.busy }
@@ -100,7 +105,7 @@ public final class WhisperKitProvider: SpeechProvider {
         try Task.checkCancellation()
         let prompt = vocabulary.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.prefix(64).map { String($0.prefix(100)) }.joined(separator: ", ")
         let promptTokens = prompt.isEmpty ? nil : runtime.tokenizer.map { Array($0.encode(text: " " + prompt).prefix(160)) }
-        let languageCode = language.flatMap { Locale(identifier: $0).language.languageCode?.identifier }
+        let languageCode = Self.decoderLanguage(language)
         let options = DecodingOptions(
             language: languageCode, temperature: 0, temperatureFallbackCount: 2,
             detectLanguage: languageCode == nil, skipSpecialTokens: true, withoutTimestamps: true,
