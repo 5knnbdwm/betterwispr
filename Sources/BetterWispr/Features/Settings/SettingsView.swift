@@ -69,8 +69,8 @@ struct SettingsView: View {
                         Button("Open Vocabulary") { model.selectedPage = .vocabulary }
                     }
                     RowDivider()
-                    SettingRow("Unload model when idle", caption: "Frees memory between dictations. The next dictation loads the model again, so it can take a moment longer to finish.") {
-                        Picker("Unload model when idle", selection: Binding(
+                    SettingRow("Unload speech model when idle", caption: "Frees memory between dictations. The next dictation loads the model again, so it can take a moment longer to finish.") {
+                        Picker("Unload speech model when idle", selection: Binding(
                             get: { model.settings.unloadModelWhenIdle },
                             set: { model.settings.unloadModelWhenIdle = $0; model.saveSettings(); model.scheduleIdleUnload() }
                         )) {
