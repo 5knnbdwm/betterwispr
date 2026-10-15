@@ -2,6 +2,7 @@ import { ArrowRightIcon, CheckIcon, CoffeeIcon } from "@phosphor-icons/react";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
 import DownloadCTA, { ClosingCTA } from "@/components/download-cta";
+import DownloadCount from "@/components/download-count";
 import HeroDemo from "@/components/hero-demo";
 import FeatureBento from "@/components/feature-bento";
 import Testimonials, { type Testimonial } from "@/components/ui/cards";
@@ -174,6 +175,7 @@ function HomeComponent() {
               <DownloadCTA />
             </div>
             <p className="mt-3 text-xs leading-relaxed text-white/75 sm:text-sm lg:mt-4">
+              <DownloadCount className="font-semibold text-white" />
               Free · macOS 14+
               <span className="block sm:inline">
                 <span className="hidden sm:inline"> · </span>

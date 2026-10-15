@@ -12,6 +12,10 @@ import {
 } from "@phosphor-icons/react";
 
 import AppleLogo from "@/components/apple-logo";
+import DownloadCount, {
+  COUNT_FORMAT,
+  useDownloadCount,
+} from "@/components/download-count";
 import { DOWNLOAD_URL, INTEL_DOWNLOAD_URL } from "@/lib/links";
 
 const DOWNLOADS = [
@@ -32,6 +36,7 @@ export default function DownloadCTA({
 }: {
   compact?: boolean;
 }) {
+  const downloads = useDownloadCount();
   if (compact) {
     return (
       <DropdownMenu>
@@ -64,6 +69,11 @@ export default function DownloadCTA({
               <DownloadSimpleIcon className="text-zinc-500" />
             </DropdownMenuLinkItem>
           ))}
+          {downloads !== undefined && (
+            <p className="mt-1 border-t border-zinc-100 px-3 pt-2 pb-1.5 text-xs text-zinc-500 tabular-nums">
+              {COUNT_FORMAT.format(downloads)} downloads so far
+            </p>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     );
@@ -135,6 +145,7 @@ export function ClosingCTA() {
         <DownloadCTA />
       </div>
       <p className="mt-4 text-sm text-zinc-600">
+        <DownloadCount className="font-semibold text-zinc-900" />
         macOS 14+ · Apple Silicon recommended · No account in the app
       </p>
     </section>
