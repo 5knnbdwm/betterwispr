@@ -73,7 +73,16 @@ the policy immediately and persist through the existing workspace store.
    one exception: `LiveTranscriber` re-recognizes the unconfirmed tail of the
    16 kHz capture copy about once a second while recording and shows the
    agreed words in the capsule, but the pasted text is always this batch pass.
-5. Post-process the recognized text in a fixed order. Auto cleanup **None**
+   With automatic language and a Whisper model, a non-empty
+   `AppSettings.dictationLanguages` limits detection. `WhisperKitProvider`
+   runs Whisper's language detection once on the first 30 seconds, allowing
+   only those language tokens, and transcribes every chunk in the winner.
+   Codes the model's tokenizer lacks are dropped, and with none left detection
+   runs unrestricted. Other providers ignore the list.
+5. Post-process the recognized text in a fixed order. With a Chinese script
+   chosen, `ChineseScript` first converts Chinese text to Simplified or
+   Traditional, so cleanup and vocabulary see that script; the raw text keeps
+   the model's characters. Auto cleanup **None**
    only trims; **Light** (the default) removes English filled pauses and
    unpunctuated stutters. Apply vocabulary entries written as a voice command,
    so a misheard "Kocia Mark" becomes "question mark". Then apply voice

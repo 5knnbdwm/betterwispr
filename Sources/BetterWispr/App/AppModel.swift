@@ -484,18 +484,20 @@ final class AppModel {
                 try await self.prepare(model, language: recording.settings.language)
                 try Task.checkCancellation()
                 guard self.generation == token, let provider = self.provider else { return }
+                (provider as? WhisperKitProvider)?.detectionLanguages = recording.settings.dictationLanguages
                 let recognitionStarted = ContinuousClock.now
                 let raw = try await provider.transcribe(audioURL: audio.url, language: language, vocabulary: hints, screenTerms: screenTerms)
                 Logger(subsystem: "org.betterwispr.app", category: "DictationTiming").notice("Recognition completed: elapsed=\(String(describing: recognitionStarted.duration(to: .now)), privacy: .public) empty=\(raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)")
                 try Task.checkCancellation()
                 guard self.generation == token else { return }
-                let lightlyCleaned = TranscriptCleaner.clean(raw, language: language)
+                let recognized = recording.settings.chineseScript?.convert(raw, language: language) ?? raw
+                let lightlyCleaned = TranscriptCleaner.clean(recognized, language: language)
                 let trigger = recording.settings.modes.match(transcript: lightlyCleaned)
                 let mode = trigger?.mode ?? recording.mode
                 let writingSettings = recording.settings.applying(mode)
                 let cleanup = writingSettings.cleanup
                 let tone = writingSettings.tone(for: AppCategory(bundleID: appBundleID).style)
-                let base = cleanup == .none ? raw.trimmingCharacters(in: .whitespacesAndNewlines) : lightlyCleaned
+                let base = cleanup == .none ? recognized.trimmingCharacters(in: .whitespacesAndNewlines) : lightlyCleaned
                 let cleaned = trigger.flatMap { [$0.mode].match(transcript: base)?.transcript } ?? base
                 let sharesContext = recording.settings.sharesContext(startedIn: recording.mode, trigger: trigger?.mode)
                 if !sharesContext { context?.cancel() }

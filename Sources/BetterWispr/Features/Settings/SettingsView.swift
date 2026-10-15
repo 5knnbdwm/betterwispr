@@ -66,6 +66,32 @@ struct SettingsView: View {
                         .labelsHidden()
                         .fixedSize()
                     }
+                    if model.selectedModel.engine == .whisperKit && model.settings.language == "auto" {
+                        RowDivider()
+                        SettingRow("Dictation languages", caption: "Automatic detection chooses only among these.") {
+                            Menu(dictationLanguagesLabel) {
+                                Toggle("All languages", isOn: Binding(
+                                    get: { dictationLanguageNames.isEmpty },
+                                    set: { if $0 { setting(\.dictationLanguages).wrappedValue = [] } }
+                                ))
+                                Divider()
+                                ForEach(languageChoices, id: \.code) { Toggle($0.name, isOn: dictates($0.code)) }
+                            }
+                            .fixedSize()
+                        }
+                    }
+                    if showsChineseScript {
+                        RowDivider()
+                        SettingRow("Chinese script", caption: "Converts Chinese dictation to these characters.") {
+                            Picker("Chinese script", selection: setting(\.chineseScript)) {
+                                Text("As recognized").tag(ChineseScript?.none)
+                                Text("Simplified").tag(ChineseScript?.some(.simplified))
+                                Text("Traditional").tag(ChineseScript?.some(.traditional))
+                            }
+                            .labelsHidden()
+                            .fixedSize()
+                        }
+                    }
                     RowDivider()
                     SettingRow("Vocabulary", caption: vocabularyCaption) {
                         Button("Open Vocabulary") { model.selectedPage = .vocabulary }
@@ -206,6 +232,30 @@ struct SettingsView: View {
         guard current != "auto", !choices.contains(where: { $0.code == current }) else { return choices }
         let name = Locale.current.localizedString(forLanguageCode: current) ?? current
         return choices + [(code: current, name: "\(name) (not supported by \(selected.name))")]
+    }
+
+    private var dictationLanguageNames: [String] {
+        languageChoices.filter { model.settings.dictationLanguages.contains($0.code) }.map(\.name)
+    }
+
+    private var dictationLanguagesLabel: String {
+        let names = dictationLanguageNames
+        return names.isEmpty ? "All languages" : names.count > 2 ? "\(names.count) languages" : names.joined(separator: ", ")
+    }
+
+    private var showsChineseScript: Bool {
+        let language = model.settings.language
+        return language == "auto" ? model.selectedModel.languages?.contains("zh") ?? true : SpeechModel.engineLanguage(language) == "zh"
+    }
+
+    private func dictates(_ code: String) -> Binding<Bool> {
+        Binding(
+            get: { model.settings.dictationLanguages.contains(code) },
+            set: { isOn in
+                if isOn { model.settings.dictationLanguages.insert(code) } else { model.settings.dictationLanguages.remove(code) }
+                model.saveSettings()
+            }
+        )
     }
 
     private var vocabularyCaption: String {
