@@ -105,6 +105,7 @@ struct TranscriptRow: View {
             if let text = Binding($draft), let onEdit {
                 TextEditor(text: text)
                     .font(.body)
+                    .scrollContentBackground(.visible)
                     .frame(minHeight: 60)
                     .accessibilityLabel("Dictation text")
                 HStack {
