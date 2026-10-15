@@ -185,6 +185,49 @@ func notesAPIFailuresNeverProduceASummary(path: String) async throws {
     await #expect(throws: CancellationError.self) { try await task.value }
 }
 
+@Test func notesCLILookupSearchesNixFoldersAndTheLoginShellPATH() {
+    let directories = NotesCLI.searchDirectories(home: "/Users/me", user: "me", processPATH: "/usr/bin:/bin:relative:",
+                                                 loginShellPATH: "/Users/me/.volta/bin:/Users/me/.npm-global/bin")
+    #expect(directories == ["/Users/me/.local/bin", "/opt/homebrew/bin", "/usr/local/bin", "/Users/me/.nix-profile/bin",
+                            "/etc/profiles/per-user/me/bin", "/run/current-system/sw/bin", "/nix/var/nix/profiles/default/bin",
+                            "/usr/bin", "/bin", "/Users/me/.volta/bin", "/Users/me/.npm-global/bin"])
+    let nixOnly = NotesCLI.locate("claude", in: directories) { $0 == "/run/current-system/sw/bin/claude" }
+    #expect(nixOnly?.path == "/run/current-system/sw/bin/claude")
+    let shellOnly = NotesCLI.locate("codex", in: directories) { $0 == "/Users/me/.npm-global/bin/codex" }
+    #expect(shellOnly?.path == "/Users/me/.npm-global/bin/codex")
+    #expect(NotesCLI.locate("claude", in: directories) { _ in false } == nil)
+    #expect(NotesCLI.searchDirectories(home: "/Users/me", user: "me", processPATH: nil, loginShellPATH: nil).count == 7)
+}
+
+@MainActor
+@Test func notesCLILookupResolvesTheLoginShellPATHPastABannerAndRetriesAfterABrokenShell() async throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let bin = directory.appendingPathComponent("bin")
+    try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+    let claude = bin.appendingPathComponent("claude").path
+    let brokenShell = directory.appendingPathComponent("broken-shell").path
+    let loginShell = directory.appendingPathComponent("login-shell").path
+    let bannerThenPATHThenCommand = """
+    #!/bin/sh
+    [ "$1 $2" = "-l -i" ] || exit 1
+    /usr/bin/head -c 3000000 /dev/zero | /usr/bin/tr '\\0' x; echo
+    /bin/sleep 0.3
+    export PATH="\(bin.path):$PATH"
+    shift $(($# - 1))
+    eval "$1"
+
+    """
+    #expect(FileManager.default.createFile(atPath: claude, contents: Data("#!/bin/sh\n".utf8), attributes: [.posixPermissions: 0o755]))
+    #expect(FileManager.default.createFile(atPath: brokenShell, contents: Data("#!/bin/sh\nexit 1\n".utf8), attributes: [.posixPermissions: 0o755]))
+    #expect(FileManager.default.createFile(atPath: loginShell, contents: Data(bannerThenPATHThenCommand.utf8), attributes: [.posixPermissions: 0o755]))
+    let onlyTheFakeInstall: (String) -> Bool = { $0.hasPrefix(bin.path) && FileManager.default.isExecutableFile(atPath: $0) }
+    let afterBrokenShell = await NotesCLI.claudeCode.locateExecutable(shell: brokenShell, isExecutable: onlyTheFakeInstall)
+    #expect(afterBrokenShell == nil)
+    let found = await NotesCLI.claudeCode.locateExecutable(shell: loginShell, isExecutable: onlyTheFakeInstall)
+    #expect(found?.path == claude)
+}
+
 @Test func claudeCatalogResolvesAliasesAndKeepsExactModelChoices() throws {
     let output = #"{"type":"control_response","response":{"request_id":"models","response":{"models":[{"value":"default","resolvedModel":"claude-sonnet-example","displayName":"Default"},{"value":"sonnet","resolvedModel":"claude-sonnet-example","displayName":"Sonnet"},{"value":"claude-sonnet-example","displayName":"Sonnet duplicate"},{"value":"claude-haiku-example","displayName":"Haiku"}]}}}"#
     let catalog = try NotesCLICatalog.claudeCatalog("unrelated log\n" + output)

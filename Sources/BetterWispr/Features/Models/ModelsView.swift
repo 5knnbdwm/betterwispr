@@ -76,9 +76,7 @@ struct ModelsView: View {
             }
 
             Section {
-                if !SpeakerDetection.isSupported {
-                    LabeledContent("Speaker detection", value: "Needs macOS 15")
-                } else if model.speakerDetectionInstalled {
+                if model.speakerDetectionInstalled {
                     Label("Speaker detection is on. After each meeting, BetterWispr tells the voices on the call apart on this Mac and labels them Speaker 1, Speaker 2 and so on. Rename them above the transcript.", systemImage: "checkmark.circle")
                         .foregroundStyle(.secondary)
                 } else {

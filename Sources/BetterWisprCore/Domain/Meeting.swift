@@ -87,6 +87,9 @@ public struct Meeting: Codable, Identifiable, Equatable, Sendable {
     public var language: String
     /// Names the user gave voices on the call, by participant number.
     public var participantNames: [Int: String]?
+    /// Invitees of the Calendar event the meeting was recorded during, other than the user.
+    public var attendees: [String]?
+    public var eventID: String?
 
     public init(id: UUID = UUID(), title: String = "", createdAt: Date = .now, duration: TimeInterval = 0, notes: String = "",
                 summary: MeetingSummary? = nil, segments: [MeetingSegment] = [], modelName: String, language: String) {
@@ -110,6 +113,21 @@ public struct Meeting: Codable, Identifiable, Equatable, Sendable {
         [summary?.overview, notes, segments.first?.text]
             .compactMap { $0?.split(whereSeparator: \.isNewline).joined(separator: " ").trimmingCharacters(in: .whitespaces) }
             .first { !$0.isEmpty } ?? ""
+    }
+
+    /// The Calendar event's title and invitees for the notes model; empty for a meeting recorded outside an event.
+    public var calendarInvite: String {
+        guard eventID != nil else { return "" }
+        let attendees = (attendees ?? []).map(Self.oneLine)
+        let listed = attendees.prefix(Self.listedInvitees).joined(separator: ", ")
+        let invited = attendees.count > Self.listedInvitees ? "\(listed) and \(attendees.count - Self.listedInvitees) more" : listed
+        return "Title: \(Self.oneLine(title))\nInvited: \(invited.isEmpty ? "no one listed" : invited)"
+    }
+
+    private static let listedInvitees = 20
+
+    static func oneLine(_ text: String) -> String {
+        text.split(whereSeparator: \.isNewline).joined(separator: " ")
     }
 
     public var hasContent: Bool {

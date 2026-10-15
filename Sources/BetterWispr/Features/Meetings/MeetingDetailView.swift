@@ -97,6 +97,14 @@ struct MeetingDetailView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .help(meeting.createdAt.formatted(date: .long, time: .shortened))
+            if let attendees = meeting.attendees, !attendees.isEmpty {
+                Label(attendees.formatted(.list(type: .and)), systemImage: "person.2")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .help(attendees.joined(separator: "\n"))
+                    .accessibilityLabel("Invited: \(attendees.formatted(.list(type: .and)))")
+            }
         }
     }
 
@@ -522,7 +530,7 @@ struct MeetingDetailView: View {
     }
 
     @ViewBuilder private func speakerDetectionOffer(_ meeting: Meeting) -> some View {
-        if !isActive, SpeakerDetection.isSupported, !model.speakerDetectionInstalled, !model.settings.dismissedSpeakerDetectionOffer,
+        if !isActive, !model.speakerDetectionInstalled, !model.settings.dismissedSpeakerDetectionOffer,
            meeting.segments.contains(where: { $0.speaker == .them }) {
             let installation = model.installation?.id == AppModel.speakerDetectionID ? model.installation : nil
             let installing = installation != nil && installation?.failure == nil

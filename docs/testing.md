@@ -6,6 +6,42 @@ version, Mac model, input device, engine/model and date for future runs. A
 successful build does not verify microphone capture, clipboard behavior or
 general recognition accuracy.
 
+## Speaker detection check, 2026-10-14, version 0.1.6
+
+Apple M4 Pro, macOS 27.0.1, debug builds. `swift build`, all 168 tests in
+`swift test` and `./scripts/build-app.sh` passed. Tests cover the install check
+(the marker and every pinned model folder must exist) and a cancelled wait
+returning within 5 seconds while the work behind it keeps running.
+`swift run BetterWisprCLI --download-speaker-detection` installed 15,468,430
+bytes of models into
+`~/Library/Application Support/BetterWispr/Models/models/argmaxinc/speakerkit-coreml`
+and its verification load passed. A stand-in 0.1.5 folder at
+`~/Library/Application Support/FluidAudio/Models/speaker-diarization` holding
+the BetterWispr install marker was removed after the install, and the Parakeet
+folder beside it was left alone. `--model parakeet-110m --meeting` ran on
+16 kHz WAV files made with `say`, alternating Samantha and Daniel. With 0.5 s
+pauses the four lines were labelled 1, 2, 1, 2. With no pauses, the 20-second
+chunks were cut at 10.3, 21.1 and 30.8 s, within 0.15 s of the real voice
+changes, into five lines labelled 1, 2, 2, 1, 2, which matches who spoke. These
+are synthetic voices, not people on a call. macOS 14, an Intel Mac, a real
+call, Skip and quitting during detection in the app, and the Models download
+button have not been exercised.
+
+- [ ] On macOS 14.2 or later, install Speaker detection in Models. Hold a call
+  with at least two remote people, stop the meeting and check that "Telling the
+  speakers on the call apart" appears, then Speaker 1, Speaker 2 labels and name
+  fields. Type a name and check the transcript, Copy transcript and regenerated
+  notes.
+- [ ] Press Skip during detection. The notes start at once and the meeting keeps
+  Them.
+- [ ] Quit during detection, relaunch and check no `betterwispr-meeting-voices-`
+  file is left in the temporary folder.
+- [ ] With 0.1.5's Speaker detection installed, update to 0.1.6. Models shows
+  Speaker detection as not downloaded. Download it and check that
+  `~/Library/Application Support/FluidAudio/Models/speaker-diarization` is gone.
+- [ ] Turn off Wi-Fi after installing and run a meeting. Speakers are labelled
+  without network access.
+
 ## Accuracy and meetings check, 2026-10-12, version 0.1.5
 
 Apple M5, macOS 27.0.1, release builds of `BetterWisprCLI`. Every check below
@@ -62,7 +98,8 @@ UI automation was not enabled for this session.
 
 macOS 27.0.1. `swift run BetterWisprCLI --download-speaker-detection` installed
 21 MB into `~/Library/Application Support/FluidAudio/Models/speaker-diarization`
-and its verification load passed. `--find-speakers` ran the app's
+and its verification load passed. `--find-speakers`, since replaced by
+`--meeting`, ran the app's
 `SpeakerRecording` path on two 35.5 second WAV files made with `say`, cut into
 5-second pieces. Lines were Samantha (0 to 9.8 s), Daniel (to 21.6 s), Samantha
 (to 26.6 s) and a third voice. With Rishi as the third voice the pieces were
@@ -71,17 +108,8 @@ Karen was merged into Samantha (1, 1, 2, 2, 1, 1, 1, 1): two similar synthetic
 female voices became one speaker. Each run took about 3 seconds and left no
 temporary files. These are synthetic voices, not people on a call. A real call,
 Skip, quitting during detection, renaming in the app and macOS 14 hiding the
-download have not been exercised.
-
-- [ ] Install Speaker detection in Models on macOS 15 or later. Hold a call with at
-  least two remote people, stop the meeting and check that "Telling the speakers
-  on the call apart" appears, then Speaker 1, Speaker 2 labels and name fields.
-  Type a name and check the transcript, Copy transcript and regenerated notes.
-- [ ] Press Skip during detection. The meeting keeps Them and writes notes.
-- [ ] Quit during detection, relaunch and check no `betterwispr-meeting-voices-`
-  file is left in the temporary folder.
-- [ ] On macOS 14, Models shows Speaker detection as needing macOS 15 and offers no
-  download.
+download have not been exercised. The remaining steps moved to the 0.1.6 check
+above.
 
 ## Speaker correction check, 2026-10-14, version 0.1.6
 
@@ -101,11 +129,11 @@ download card have not been exercised in the app, and no download was run.
   summary shows as out of date.
 - [ ] While a meeting records, transcribes or finds speakers, no speaker menu or
   Merge into menu shows.
-- [ ] On macOS 15 without speaker detection, a finished meeting with Them lines
+- [ ] Without speaker detection, a finished meeting with Them lines
   shows the download card. Download shows progress, Cancel stops it, a failure
   shows Retry, and success hides the card. Don’t show again hides it in every
   meeting after relaunch. Nothing downloads until Download is clicked.
-- [ ] On macOS 14, or with speaker detection installed, the card never shows.
+- [ ] With speaker detection installed, the card never shows.
 
 ## Live meeting capture recheck, 2026-10-10, version 0.1.4
 
@@ -767,6 +795,12 @@ retries. They do not access Keychain, mount disk images or submit to Apple.
   `github.com` mode Medium cleanup and Screen context Off while Use screen
   context is on. Dictate in a GitHub tab in Safari with a notes model that logs
   requests. No selected text, clipboard or window text is sent.
+- [ ] Select Parakeet with the phrase booster, Light cleanup and Use screen
+  context. Open a Slack or Messages chat that shows an unusual name such as
+  Pannekeet or Supabase and say it in a sentence. Expect the on-screen
+  spelling when the plain result was misspelled, ordinary words left alone,
+  no Vocabulary fix counted in Insights and no request to any notes model or
+  speech API. With an API speech connection selected, nothing changes.
 - [ ] With Medium cleanup, add the instruction "Use British spelling." Dictate
   "the color of the organization" in the mode. Expect British spelling from the
   notes model; outside the mode, American spelling stays.
@@ -1053,6 +1087,56 @@ were not exercised in this UI pass.
   "Ask about the transcript so far", the answer cites lines already shown, and
   the Ask tab stays open when the summary finishes. Ask on the Notetaker page
   during the overlap; lines from both meetings can be cited.
+
+### Calendar events
+
+Automated tests cover choosing the event, video link detection, the invite text
+given to the notes model, invitee names in the meeting's speech hints,
+discarding a cancelled event meeting, and loading settings and meetings saved
+before Calendar. None of them touches EventKit or the
+permission prompt. Run these checks on a Mac whose Calendar app has at least an
+iCloud or local calendar, a Google or Exchange account, a calendar shared with
+you, and a subscribed calendar. Reset the permission first with
+`tccutil reset Calendar org.betterwispr.app`.
+
+- [ ] Launch the packaged app, finish onboarding and start and stop a meeting with
+  Use Calendar off. macOS never asks for Calendar access, and Settings lists no
+  calendars.
+- [ ] Turn on Use Calendar in Settings. macOS asks once, with the
+  `NSCalendarsFullAccessUsageDescription` text. Allow it. Every calendar that
+  Calendar shows appears under its account, shared and subscribed calendars
+  included, each switched on. The Calendar row under Permissions shows granted.
+- [ ] Reset the permission, turn Use Calendar on and deny. The toggle turns back
+  off, the Calendars pane of Privacy settings opens, and starting a meeting gives
+  an untitled note as before. The Calendar row under Permissions opens the same pane.
+  Allow BetterWispr there without quitting it, come back and turn Use Calendar on.
+  The calendars appear without a relaunch.
+- [ ] Grant access, then create a timed event starting in three minutes with two
+  invitees and a Zoom link. Start a meeting. The note takes the event title, and
+  the meeting header lists the invitees, without you and without rooms. Stop it.
+  The written notes keep the event title. Record whether the summary names the
+  invitees who spoke and leaves out those who did not; do not assume either way.
+- [ ] Overlap that event with one without a video link that started later. The
+  meeting takes the event with the Zoom link. Decline the Zoom event, or have its
+  organizer cancel it, and start again. The meeting takes the other event.
+- [ ] Turn off the event's calendar in Settings and start a meeting. The note is
+  untitled and lists no one. Turn it back on and relaunch; the choice persists.
+- [ ] Repeat the event check with an event on a shared calendar and on a
+  subscribed calendar, then with an all-day event only. Shared and subscribed
+  events name the note; the all-day event does not.
+- [ ] Disconnect networking and start a meeting during an event already synced.
+  The note still takes its title and invitees, and a network monitor shows no
+  requests from BetterWispr.
+- [ ] Start a meeting during an event and cancel it before anything is
+  transcribed. The note is discarded, not kept with only the event title.
+- [ ] Revoke access in System Settings while Use Calendar is on and switch back.
+  The Permissions row shows Calendar as not granted, the calendar list is gone,
+  the Use Calendar caption asks for access, and new meetings are untitled. Allow
+  BetterWispr again in System Settings, leaving the toggle on, and switch back.
+  The calendars return without a relaunch, and a new meeting takes the event.
+- [ ] With access granted and every calendar on, click Start Notetaker during an
+  event. The window keeps responding while the note starts. Double-click Start
+  Notetaker; only one meeting starts.
 
 ## Accuracy
 

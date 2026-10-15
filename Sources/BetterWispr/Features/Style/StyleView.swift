@@ -117,14 +117,13 @@ struct StyleView: View {
                         .padding(.horizontal, 16)
                         .padding(.vertical, 11)
                         .transition(.opacity)
+                    }
+                    RowDivider()
+                    SettingToggle("Use screen context", caption: Self.screenContextCaption, isOn: setting(\.useScreenContext).animation(reveal))
+                    if model.settings.useScreenContext {
                         RowDivider()
-                        SettingToggle("Use screen context", caption: Self.screenContextCaption, isOn: setting(\.useScreenContext).animation(reveal))
+                        SettingToggle("Read window text from the screen", caption: screenTextCaption, isOn: recognizeScreenText)
                             .transition(.opacity)
-                        if model.settings.useScreenContext {
-                            RowDivider()
-                            SettingToggle("Read window text from the screen", caption: screenTextCaption, isOn: recognizeScreenText)
-                                .transition(.opacity)
-                        }
                     }
                 } footer: {
                     Text(cleanupFooter)
@@ -234,11 +233,11 @@ struct StyleView: View {
                 set: { model.settings.styles[context] = $0; model.saveSettings() })
     }
 
-    private static let screenContextCaption = "Sends your selected text, your clipboard and the text of the window you dictate into to your notes model with each Medium dictation, so it can spell what you see. Your notes model may be a cloud service. Nothing is read while a password field is active, and clipboard items marked as passwords are skipped."
+    private static let screenContextCaption = "When you speak English to Parakeet with the phrase booster installed, reads your selected text and the window you dictate into on this Mac, and uses the names in them to fix words Parakeet heard as misspellings, such as superbase becoming Supabase. Correctly spelled words stay as heard. With Medium cleanup, your selected text, clipboard and window text also go to your notes model, which may be a cloud service. Nothing is read while a password field is active, and clipboard items marked as passwords are skipped."
 
     private var screenTextCaption: String {
         let status = CGPreflightScreenCaptureAccess() ? "Screen Recording is allowed." : "Needs Screen Recording. Allow BetterWispr under Privacy & Security, Screen & System Audio Recording in System Settings, then reopen BetterWispr."
-        return "When an app shares too little text, reads its window from a screenshot on this Mac and sends that text to your notes model too, which may be a cloud service. \(status)"
+        return "When an app shares too little text, reads its window from a screenshot on this Mac. With Medium cleanup, that text also goes to your notes model, which may be a cloud service. \(status)"
     }
 
     private var recognizeScreenText: Binding<Bool> {

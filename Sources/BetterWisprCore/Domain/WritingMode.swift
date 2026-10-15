@@ -145,8 +145,8 @@ extension AppSettings {
         return settings
     }
 
-    /// Whether Medium cleanup sends the context captured under the starting mode; a trigger word's mode can turn it off but not on.
+    /// Whether Medium cleanup sends the context captured under the starting mode, which needs Medium and screen context too; a trigger word's mode can turn it off but not on.
     public func sharesContext(startedIn mode: WritingMode?, trigger: WritingMode?) -> Bool {
-        applying(trigger ?? mode).cleanup == .medium && applying(mode).useScreenContext && trigger?.useScreenContext != false
+        applying(mode).cleanup == .medium && applying(trigger ?? mode).cleanup == .medium && applying(mode).useScreenContext && trigger?.useScreenContext != false
     }
 }

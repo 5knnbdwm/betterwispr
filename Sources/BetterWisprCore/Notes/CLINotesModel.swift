@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import os
 
 public enum NotesCLI: String, Codable, CaseIterable, Sendable {
     case claudeCode, codex
@@ -8,13 +9,73 @@ public enum NotesCLI: String, Codable, CaseIterable, Sendable {
     public var loginCommand: String { self == .claudeCode ? "claude auth login" : "codex login" }
     private var command: String { self == .claudeCode ? "claude" : "codex" }
 
-    public var executable: URL? {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let paths = ["\(home)/.local/bin", "/opt/homebrew/bin", "/usr/local/bin"]
-            + (ProcessInfo.processInfo.environment["PATH"] ?? "").split(separator: ":").map(String.init)
-        return paths.filter { $0.hasPrefix("/") }.map { URL(fileURLWithPath: $0).appendingPathComponent(command) }
-            .first { FileManager.default.isExecutableFile(atPath: $0.path) }
+    /// Synchronous for view bodies; sees the login shell's PATH only after `locateExecutable()` has resolved it once.
+    public var executable: URL? { Self.locate(command, in: Self.searchDirectories) }
+
+    /// Resolves the login shell's PATH when the well-known folders miss, once per launch unless the shell failed, then looks the CLI up.
+    @MainActor public func locateExecutable() async -> URL? {
+        await locateExecutable(shell: Self.loginShell, isExecutable: Self.isExecutableFile)
     }
+
+    @MainActor func locateExecutable(shell: String, isExecutable: (String) -> Bool) async -> URL? {
+        if let found = Self.locate(command, in: Self.searchDirectories, isExecutable: isExecutable) { return found }
+        if Self.loginShellResolution == nil {
+            Self.loginShellResolution = Task { @MainActor in
+                let path = await Self.loginShellPATH(shell: shell)
+                Self.loginShellPATHCache.withLock { $0 = path }
+                if path == nil { Self.loginShellResolution = nil }
+            }
+        }
+        await Self.loginShellResolution?.value
+        return Self.locate(command, in: Self.searchDirectories, isExecutable: isExecutable)
+    }
+
+    static func locate(_ command: String, in directories: [String], isExecutable: (String) -> Bool = isExecutableFile) -> URL? {
+        directories.map { URL(fileURLWithPath: $0).appendingPathComponent(command) }.first { isExecutable($0.path) }
+    }
+
+    static func isExecutableFile(_ path: String) -> Bool { FileManager.default.isExecutableFile(atPath: path) }
+
+    static var searchDirectories: [String] {
+        searchDirectories(home: FileManager.default.homeDirectoryForCurrentUser.path, user: NSUserName(),
+                          processPATH: ProcessInfo.processInfo.environment["PATH"], loginShellPATH: loginShellPATHCache.withLock { $0 })
+    }
+
+    static func searchDirectories(home: String, user: String, processPATH: String?, loginShellPATH: String?) -> [String] {
+        let wellKnown = ["\(home)/.local/bin", "/opt/homebrew/bin", "/usr/local/bin", "\(home)/.nix-profile/bin",
+                         "/etc/profiles/per-user/\(user)/bin", "/run/current-system/sw/bin", "/nix/var/nix/profiles/default/bin"]
+        return wellKnown + [processPATH, loginShellPATH].compactMap { $0 }.flatMap { $0.split(separator: ":").map(String.init) }
+            .filter { $0.hasPrefix("/") }
+    }
+
+    @MainActor static func loginShellPATH(shell: String) async -> String? {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("betterwispr-shell-\(UUID())")
+        guard (try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false,
+                                                         attributes: [.posixPermissions: 0o700])) != nil else { return nil }
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let pathFile = directory.appendingPathComponent("PATH")
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: shell)
+        process.arguments = ["-l", "-i", "-c", "/usr/bin/printenv PATH > '\(pathFile.path)'"]
+        process.currentDirectoryURL = directory
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        guard (try? process.run()) != nil else { return nil }
+        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        while process.isRunning {
+            guard ContinuousClock.now < deadline, !Task.isCancelled else { await CLINotesModel.stop(process); return nil }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        return try? String(contentsOf: pathFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static var loginShell: String {
+        getpwuid(getuid()).map { String(cString: $0.pointee.pw_shell) } ?? "/bin/zsh"
+    }
+
+    private static let loginShellPATHCache = OSAllocatedUnfairLock<String?>(initialState: nil)
+    @MainActor private static var loginShellResolution: Task<Void, Never>?
 }
 
 struct CLINotesModel: NotesLanguageModel {
@@ -28,7 +89,7 @@ struct CLINotesModel: NotesLanguageModel {
     }
 
     private func response(to prompt: String) async throws -> (text: String, modelName: String) {
-        guard let executable = cli.executable else {
+        guard let executable = await cli.locateExecutable() else {
             throw MeetingNotesError.unavailable("Install \(cli.name), then sign in with \(cli.loginCommand) in Terminal.")
         }
         // Use the CLI's login, never extract or store its OAuth credentials in BetterWispr.
@@ -119,7 +180,7 @@ struct CLINotesModel: NotesLanguageModel {
         // Prevent inherited API keys or provider URLs from changing the selected subscription route.
         let allowed = ["HOME", "USER", "LOGNAME", "TMPDIR", "LANG", "LC_ALL", "CODEX_HOME", "CLAUDE_CONFIG_DIR"]
         var environment = ProcessInfo.processInfo.environment.filter { allowed.contains($0.key) }
-        environment["PATH"] = "\(executable.deletingLastPathComponent().path):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+        environment["PATH"] = ([executable.deletingLastPathComponent().path] + NotesCLI.searchDirectories + ["/usr/bin", "/bin"]).joined(separator: ":")
         process.environment = environment
         if let controlInput { process.standardInput = controlInput } else { process.standardInput = stdin }
         process.standardOutput = stdout
@@ -161,7 +222,7 @@ struct CLINotesModel: NotesLanguageModel {
         return text
     }
 
-    @MainActor private static func stop(_ process: Process) async {
+    @MainActor static func stop(_ process: Process) async {
         guard process.isRunning else { return }
         process.terminate()
         // Cleanup must finish even when the calling task is cancelled.
