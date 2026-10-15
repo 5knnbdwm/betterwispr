@@ -25,6 +25,7 @@ public struct ClipboardIntegration: TextOutputIntegration {
 @MainActor
 public struct FocusedAppIntegration: TextOutputIntegration {
     private static var pendingRestore: (items: [NSPasteboardItem], task: Task<Void, Never>)?
+    private static let remoteDesktops: Set<String> = ["com.apple.ScreenSharing"]
     public let keepsCopy: Bool
     public init(keepsCopy: Bool) { self.keepsCopy = keepsCopy }
     public func deliver(_ text: String, to target: NSRunningApplication?) async throws -> OutputResult {
@@ -48,16 +49,9 @@ public struct FocusedAppIntegration: TextOutputIntegration {
         Self.pendingRestore = nil
         _ = try await ClipboardIntegration().deliver(text, to: target)
         let ourChange = pasteboard.changeCount
-        guard let source = CGEventSource(stateID: .combinedSessionState),
-              let down = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: true),
-              let up = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: false) else {
-            return .copiedForManualPaste
-        }
-        down.flags = .maskCommand
-        up.flags = .maskCommand
-        down.postToPid(target.processIdentifier)
-        up.postToPid(target.processIdentifier)
-        if !keepsCopy {
+        guard let events = Self.pasteKeystroke() else { return .copiedForManualPaste }
+        for event in events { event.postToPid(target.processIdentifier) }
+        if !keepsCopy, !Self.remoteDesktops.contains(target.bundleIdentifier ?? "") {
             Self.pendingRestore = (previousItems, Task {
                 // ponytail: applications expose no paste acknowledgement; allow 750 ms before restoring.
                 try? await Task.sleep(for: .milliseconds(750))
@@ -70,6 +64,22 @@ public struct FocusedAppIntegration: TextOutputIntegration {
             })
         }
         return .pasted(into: target.localizedName ?? "your app")
+    }
+
+    /// Command-V as a physical keyboard sends it, with Command pressed and released as its own events.
+    static func pasteKeystroke() -> [CGEvent]? {
+        guard let source = CGEventSource(stateID: .combinedSessionState),
+              let commandDown = CGEvent(keyboardEventSource: source, virtualKey: 0x37, keyDown: true),
+              let vDown = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: true),
+              let vUp = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: false),
+              let commandUp = CGEvent(keyboardEventSource: source, virtualKey: 0x37, keyDown: false) else { return nil }
+        commandDown.type = .flagsChanged
+        commandUp.type = .flagsChanged
+        commandDown.flags = .maskCommand
+        vDown.flags = .maskCommand
+        vUp.flags = .maskCommand
+        commandUp.flags = []
+        return [commandDown, vDown, vUp, commandUp]
     }
 }
 

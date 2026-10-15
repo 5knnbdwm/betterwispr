@@ -794,6 +794,10 @@ retries. They do not access Keychain, mount disk images or submit to Apple.
   18 points across with 24-point hit areas. Clicking ✓
   finishes, as does pressing ⌥ Space again; clicking the waveform does nothing.
   During preparation/transcription, × works and ✓ is disabled.
+- [ ] Connect Screen Sharing to another Mac with the shared clipboard on, click a
+  text field on the remote screen and dictate. The text is pasted on the remote
+  Mac, not "v", and it stays on this Mac's clipboard. Dictate into TextEdit on
+  this Mac afterwards; it still pastes and the clipboard is restored.
 - [ ] Cancel capture or transcription using ×, Escape or the menu. The capsule
   morphs into "Transcript cancelled", with Undo when audio is recoverable and
   a five-second progress line. Undo transcribes that audio once with its original

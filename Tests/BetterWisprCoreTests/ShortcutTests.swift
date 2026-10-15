@@ -1,5 +1,5 @@
 import AppKit
-import BetterWisprCore
+@testable import BetterWisprCore
 import Carbon.HIToolbox
 import IOKit.hidsystem
 import Testing
@@ -134,4 +134,11 @@ import Testing
     #expect(model.settings.shortcut == .optionSpace)
     model.changeCancelShortcut(nil)
     #expect(model.settings.cancelShortcut == nil)
+}
+
+@MainActor @Test func pastePressesCommandAsItsOwnKeyAroundV() throws {
+    let events = try #require(FocusedAppIntegration.pasteKeystroke())
+    #expect(events.map(\.type) == [.flagsChanged, .keyDown, .keyUp, .flagsChanged])
+    #expect(events.map { $0.getIntegerValueField(.keyboardEventKeycode) } == [0x37, 9, 9, 0x37])
+    #expect(events.map { $0.flags.contains(.maskCommand) } == [true, true, true, false])
 }
