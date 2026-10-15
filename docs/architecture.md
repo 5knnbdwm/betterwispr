@@ -15,16 +15,16 @@ organization, not separate packages or a plugin loader.
 Sources/
   BetterWispr/
     App/              Lifecycle, session coordination, global shortcut, capsule and toast panels, updater
-    Features/         Dashboard, insights, meetings, history, models, vocabulary, style, settings and capsule UI
+    Features/         Dashboard, insights, meetings, transcribe, history, models, vocabulary, style, settings and capsule UI
     Design/           Small shared view components and the brand mark, which also renders the app icon
   BetterWisprCore/
     Domain/           AppSettings, writing styles and app categories, usage insights, Transcript, VocabularyEntry and Meeting value types
     Persistence/      SavedState, per-meeting files and atomic local JSON storage
-    Audio/            Microphone and system audio capture, temporary recordings and level metering
+    Audio/            Microphone and system audio capture, temporary recordings, level metering and media file chunks
     Speech/           SpeechProvider contract, model catalog, Apple and WhisperKit
     Transcription/    English filler/stutter cleanup, spoken email layout, optional notes-model polish, writing styles and vocabulary replacements
     Notes/            Meeting notes with Apple Intelligence, Ollama, signed-in CLIs and explicit API connections
-    Integrations/     Clipboard and guarded paste delivery
+    Integrations/     Clipboard and guarded paste delivery, and the yt-dlp link downloader
   BetterWisprCLI/      Developer entry point for model and file smoke tests
 ```
 
@@ -396,6 +396,52 @@ Starting a meeting from the capsule or the menu bar docks a floating card
 (`NotetakerController`) to the right edge of the screen under the pointer. It
 hosts the same `MeetingDetailView` as the dashboard, closes when its meeting is
 deleted, and its expand button opens the meeting in the dashboard instead.
+
+## File and link transcription
+
+`TranscriptionModel` owns the Transcribe page and is separate from dictation and
+meetings. It runs one job at a time and keeps each finished transcript as a
+`Meeting` in its own `MeetingStore` under
+`Application Support/BetterWispr/Transcriptions`. The page's model menu lists
+installed models and configured API connections and starts on the dictation
+model. A model that is not installed sends the user to Models. Each job loads
+its own provider with `download: false`, and connections can't be edited while
+a job runs.
+
+1. `MediaLink` accepts only http and https links with a host. `YTDLP` runs
+   BetterWispr's own copy in `Application Support/BetterWispr/Tools`, otherwise
+   one from Homebrew, `/usr/local/bin`, `~/.local/bin` or MacPorts. It installs
+   or updates its copy only when the user clicks Install or Update, or runs
+   `BetterWisprCLI --download-yt-dlp`. The binary comes from the latest GitHub
+   release and is written only after its SHA-256 matches the release's
+   `SHA2-256SUMS`. yt-dlp runs with `--no-config`, a reduced environment and the
+   link after `--`. It fetches the best m4a or mp4 audio of the first video into
+   a private `betterwispr-media-<uuid>` folder, which is deleted after the
+   transcript, on error and on cancel. Deno or Node, when found, is passed with
+   `--js-runtimes`.
+2. `MediaAudio` reads only the first audio track with `AVAssetReader`, so
+   alternate-language tracks are not mixed in. It converts to 16 kHz mono and
+   writes one `betterwispr-media-<uuid>.caf` chunk at a time, holding about one
+   chunk of samples in memory. Each cut lands at the quietest point of a 300 ms
+   moving average of 10 ms levels, 30 to 59.5 seconds after the previous cut,
+   and the last 59.5 seconds or less become the final chunk. No chunk is dropped
+   for being quiet. Files with no audio track or an unreadable container, such
+   as mkv or webm, fail with the list of supported formats.
+3. `MediaTranscriber` sends each chunk to the selected provider in order,
+   applies the meeting cleanup and vocabulary, keeps the raw text beside the
+   cleaned text and deletes the chunk. A failed chunk fails the job, and
+   cancellation is checked after each chunk. Every segment is `.them`.
+   `participant` is set only when Speaker detection is installed, which labels
+   the voices afterwards and splits segments where the voice changes, as it
+   does for meetings.
+4. A job that found speech is saved and opened, unless another transcript is
+   open. A job that found none saves nothing and says so. Launch and quit delete
+   leftover `betterwispr-media-*` files and folders.
+
+The detail view names a voice only on segments Speaker detection labeled, so a
+transcript never says "Them". Copy all and the .txt and .md exports use the same
+timestamped lines. `BetterWisprCLI --media PATH|URL` runs the same pipeline and
+prints one JSON segment per line.
 
 ## Microphone selection
 
