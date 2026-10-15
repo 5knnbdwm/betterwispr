@@ -30,7 +30,6 @@ extension Color {
     static let creamCard = Color(red: 255 / 255, green: 253 / 255, blue: 248 / 255)
 }
 
-/// A surface color that turns warm under the cream theme and keeps the system color otherwise.
 struct ThemedFill: ShapeStyle {
     let standard: Color
     let cream: Color
@@ -45,7 +44,6 @@ extension ShapeStyle where Self == ThemedFill {
     static var pageFill: ThemedFill { ThemedFill(standard: Color(nsColor: .textBackgroundColor), cream: .creamPage) }
 }
 
-/// Paints the cream page behind a window's content; the other themes keep the system background.
 struct ThemedPage: ViewModifier {
     @Environment(\.appTheme) private var theme
 

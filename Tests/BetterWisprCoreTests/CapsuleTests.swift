@@ -31,7 +31,10 @@ import Testing
 @Test @MainActor func hiddenCapsuleStaysAwayWhileDictatingButReturnsForTheLimitWarningAndCards() {
     let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     let model = AppModel(store: LocalStore(directory: folder), startsServices: false)
-    defer { model.phase = .idle }
+    defer {
+        model.phase = .idle
+        try? FileManager.default.removeItem(at: folder)
+    }
     model.settings.showCapsule = false
     model.phase = .recording
     #expect(model.showsCapsule)

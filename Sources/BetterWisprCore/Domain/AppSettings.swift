@@ -12,7 +12,6 @@ public enum AppTheme: String, Codable, CaseIterable, Sendable {
 public enum DictationSound: String, Codable, CodingKeyRepresentable, CaseIterable, Sendable {
     case started, finished, cancelled, attention
 
-    /// The macOS system sound a cue plays until the user picks another.
     public var defaultSoundName: String {
         switch self {
         case .started: "Tink"
@@ -49,7 +48,6 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var showCapsule: Bool = true
     /// Shows Parakeet's provisional words in the capsule while recording.
     public var showLiveText: Bool = true
-    /// Keeps the capsule out of sight while listening and transcribing; anything that needs attention still appears.
     public var hideCapsuleWhileDictating: Bool = false
     public var soundEffects: Bool = true
     /// macOS system sound names picked per cue; missing cues use `DictationSound.defaultSoundName`.

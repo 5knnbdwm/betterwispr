@@ -825,8 +825,9 @@ retries. They do not access Keychain, mount disk images or submit to Apple.
   bar Cancel still cancel, and the Cancelled card with Undo appears. A failed
   dictation, copy-only and Transcript ready still show their cards. Dictate past
   9:30: the capsule appears with "Stops in 0:30" and VoiceOver announces it.
-  Meeting recording still shows its pill. Turning the setting off restores the
-  capsule during dictation.
+  Meeting recording still shows its pill. Dictating during a meeting hides the
+  pill and a meeting prompt until the dictation ends, then both return. Turning
+  the setting off restores the capsule during dictation.
 - [ ] Meeting recording uses a 100 × 26 point pill, thirteen waveform
   bars, green border and stop square. Clicking it still stops the notetaker.
 - [ ] Keep another app focused and hover the microphone, notetaker icon and chevron.

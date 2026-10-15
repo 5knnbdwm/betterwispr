@@ -20,7 +20,6 @@ extension DictationSound {
 
     func sound(named name: String) -> NSSound? { sound(named: name, in: Self.overrideDirectory) }
 
-    /// An override file wins over the picked system sound, and a missing system sound falls back to the default.
     func sound(named name: String, in directory: URL) -> NSSound? {
         if let override = url(in: directory) { return NSSound(contentsOf: override, byReference: false) }
         return NSSound(named: name) ?? NSSound(named: defaultSoundName)
