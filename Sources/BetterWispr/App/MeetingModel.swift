@@ -28,6 +28,8 @@ final class MeetingRun {
     @ObservationIgnored var drain: Task<Void, Never>?
     @ObservationIgnored var work: Task<Void, Never>?
     @ObservationIgnored var voices: SpeakerRecording?
+    /// Microphone audio also goes to speaker detection, to tell apart people in the room.
+    @ObservationIgnored var hearsRoom = false
     @ObservationIgnored var detection: Task<[MeetingSegment], Error>?
 
     init(meetingID: UUID, phase: MeetingPhase, language: String? = nil, vocabulary: [VocabularyEntry] = []) {
@@ -107,7 +109,7 @@ final class MeetingModel {
     var activeMeetingID: UUID? { meetings.first { runs[$0.id] != nil }?.id }
 
     func start(model: SpeechModel, language: String?, vocabulary: [VocabularyEntry], silenceThreshold: Float, microphone: AudioInputDevice?,
-               event: CalendarEvent? = nil) {
+               event: CalendarEvent? = nil, separateRoomVoices: Bool = false) {
         guard capturing == nil else { return }
         var meeting = Meeting(title: event?.title ?? "", modelName: model.name, language: language ?? "auto")
         meeting.attendees = event?.attendees
@@ -123,6 +125,7 @@ final class MeetingModel {
         showsCallAudioHint = false
         heard = (false, false)
         run.voices = SpeakerDetection.isInstalled() ? try? SpeakerRecording() : nil
+        run.hearsRoom = separateRoomVoices
         elapsed = 0
         let releasing = releasingRecorder
         run.work = Task { [weak self] in
@@ -414,7 +417,7 @@ final class MeetingModel {
                 guard let segment else { continue }
                 edit(id, save: false) { $0.insert(segment) }
                 saveNow(id)
-                if chunk.speaker == .them, let voices = run.voices { try? await voices.append(chunk.url, for: segment.id) }
+                if chunk.speaker == .them || run.hearsRoom, let voices = run.voices { try? await voices.append(chunk.url, for: segment.id) }
             } catch {
                 guard owns(run) else { return }
                 if !(error is CancellationError) {

@@ -80,6 +80,10 @@ struct ModelsView: View {
                 if model.speakerDetectionInstalled {
                     Label("Speaker detection is on. After each meeting, BetterWispr tells the voices on the call apart on this Mac and labels them Speaker 1, Speaker 2 and so on. Rename them above the transcript.", systemImage: "checkmark.circle")
                         .foregroundStyle(.secondary)
+                    Toggle(isOn: setting(\.separateRoomVoices)) {
+                        Text("Tell apart people in the room")
+                        Text("Also separates the voices on your microphone. The voice heard most stays Me, and the others get their own speaker numbers. Your microphone audio is kept on this Mac until the speakers are found, then deleted.")
+                    }
                 } else {
                     let installation = model.installation?.id == AppModel.speakerDetectionID ? model.installation : nil
                     let installing = installation != nil && installation?.failure == nil
@@ -104,7 +108,7 @@ struct ModelsView: View {
             } header: {
                 Text("Meeting speakers")
             } footer: {
-                Text("Your microphone is always Me. People in the room with you share your microphone and stay part of Me.")
+                Text("Your microphone is Me. People in the room with you stay part of Me unless speaker detection tells them apart.")
             }
 
             Section {
@@ -148,6 +152,11 @@ struct ModelsView: View {
                 .font(.caption)
                 .foregroundStyle(installing ? AnyShapeStyle(.secondary) : AnyShapeStyle(.red))
         }
+    }
+
+    private func setting<Value>(_ keyPath: WritableKeyPath<AppSettings, Value>) -> Binding<Value> {
+        Binding(get: { model.settings[keyPath: keyPath] },
+                set: { model.settings[keyPath: keyPath] = $0; model.saveSettings() })
     }
 
     private func modelRow(_ speechModel: SpeechModel) -> some View {
