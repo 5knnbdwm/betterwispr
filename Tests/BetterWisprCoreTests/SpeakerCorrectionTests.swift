@@ -99,6 +99,18 @@ private func labels(_ meeting: Meeting) -> [String] {
     #expect(merged.summaryNeedsUpdate)
 }
 
+@Test func inviteesAlreadyGivenToASpeakerLeaveTheNameMenu() {
+    var meeting = call([1, 2, 3], names: [1: " ana", 2: ""])
+    meeting.attendees = ["Ana", "Ben", "ben ", "Cy"]
+    #expect(meeting.unusedAttendees == ["Ben", "Cy"])
+
+    meeting.participantNames?[3] = "Cy"
+    #expect(meeting.unusedAttendees == ["Ben"])
+
+    meeting.attendees = nil
+    #expect(meeting.unusedAttendees.isEmpty)
+}
+
 @Test func settingsSavedBeforeTheSpeakerDetectionOfferStillLoad() throws {
     let legacy = #"{"autoPaste":true,"language":"auto","launchAtLogin":false,"saveHistory":true,"selectedModelID":"apple","showCapsule":true,"silenceThreshold":0.002}"#
     var settings = try JSONDecoder().decode(AppSettings.self, from: Data(legacy.utf8))

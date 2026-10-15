@@ -489,12 +489,31 @@ struct MeetingDetailView: View {
                     TextField("Speaker \(number)", text: participantName(number))
                         .textFieldStyle(.roundedBorder)
                         .accessibilityLabel("Name for speaker \(number)")
+                    if !meeting.unusedAttendees.isEmpty { inviteeMenu(meeting, number) }
                     if meeting.participants.count > 1, !isActive { mergeMenu(meeting, number) }
                 }
             }
         }
         .font(.callout)
         .help("Name the voices on the call. Names appear in the transcript and the notes.")
+    }
+
+    private func inviteeMenu(_ meeting: Meeting, _ number: Int) -> some View {
+        let name = MeetingSegment.label(of: number, names: meeting.participantNames)
+        return Menu {
+            Section("Name \(name)") {
+                ForEach(meeting.unusedAttendees, id: \.self) { attendee in
+                    Button(attendee) { participantName(number).wrappedValue = attendee }
+                }
+            }
+        } label: {
+            Image(systemName: "person.crop.circle.badge.plus")
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Name \(name) after someone invited")
+        .accessibilityLabel("Name \(name) after someone invited")
     }
 
     private func mergeMenu(_ meeting: Meeting, _ number: Int) -> some View {

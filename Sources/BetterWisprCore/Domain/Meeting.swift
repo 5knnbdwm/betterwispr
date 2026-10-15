@@ -156,6 +156,14 @@ public struct Meeting: Codable, Identifiable, Equatable, Sendable {
         return number
     }
 
+    /// Invitees that no speaker is named after yet, once each, in invite order.
+    public var unusedAttendees: [String] {
+        var taken = Set((participantNames ?? [:]).values.map(Self.nameKey))
+        return (attendees ?? []).filter { taken.insert(Self.nameKey($0)).inserted }
+    }
+
+    private static func nameKey(_ name: String) -> String { name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+
     /// Moves a remote line to another voice, or back to plain "Them" with nil; leaves Me lines alone.
     public mutating func assign(segment id: UUID, toParticipant participant: Int?) {
         guard let index = segments.firstIndex(where: { $0.id == id && $0.speaker == .them }) else { return }
