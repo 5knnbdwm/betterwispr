@@ -362,11 +362,13 @@ func everyListedParakeetV3LanguageReachesTheDecoderAsAHint(_ id: String) throws 
     #expect(ParakeetProvider.hint(for: nil) == nil)
 }
 
-@Test func everyListedWhisperLanguageReachesTheDecoderAsItsOwnToken() throws {
+@Test func everyListedWhisperLanguageReachesTheEngineAsItsOwnToken() throws {
     let languages = try #require(SpeechModel.catalog.first { $0.id == "whisper-turbo" }?.languages)
-    for code in languages { #expect(WhisperKitProvider.decoderLanguage(code) == code, "\(code)") }
-    #expect(WhisperKitProvider.decoderLanguage("en-US") == "en")
-    #expect(WhisperKitProvider.decoderLanguage(nil) == nil)
+    for code in languages { #expect(SpeechModel.engineLanguage(code) == code, "\(code)") }
+    #expect(SpeechModel.engineLanguage("en-US") == "en")
+    #expect(SpeechModel.engineLanguage("zh_Hans") == "zh")
+    #expect(SpeechModel.engineLanguage("auto") == nil)
+    #expect(SpeechModel.engineLanguage(nil) == nil)
 }
 
 @Test func everyDownloadableModelListsItsLanguagesByName() throws {

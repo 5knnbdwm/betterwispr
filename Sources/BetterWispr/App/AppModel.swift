@@ -630,7 +630,7 @@ final class AppModel {
         }
     }
 
-    /// Loads the selected local model and, when idle, transcribes a second of quiet noise and discards the text.
+    /// Loads the selected local model when `reloading` and, when idle, transcribes a second of quiet noise and discards the text.
     private func warmUpSelectedModel(after delay: Duration = .zero, reloading: Bool = true) {
         let model = selectedModel
         guard model.engine != .apple, model.engine != .api, isModelInstalled(model) else { return }

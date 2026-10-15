@@ -84,7 +84,7 @@ public struct SpeechConnection: Identifiable, Codable, Equatable, Hashable, Send
 
     /// Checked before recording in both session coordinators, and again at the request boundary.
     public func validateLanguage(_ language: String?) throws {
-        let code = language.flatMap { $0 == "auto" ? nil : Locale(identifier: $0).language.languageCode?.identifier }
+        let code = SpeechModel.engineLanguage(language)
         if api == .smallest {
             guard let code else {
                 throw SpeechAPIError.configuration("Smallest AI needs a specific spoken language. Open Settings and change Spoken language from Detect automatically to English, Hindi or another language.")

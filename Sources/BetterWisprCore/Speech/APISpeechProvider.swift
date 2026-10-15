@@ -77,7 +77,7 @@ public final class APISpeechProvider: SpeechProvider {
         let url = try connection.validatedURL()
         try connection.validateAPIKey(key)
         try connection.validateLanguage(language)
-        let language = language.flatMap { $0 == "auto" ? nil : Locale(identifier: $0).language.languageCode?.identifier }
+        let language = SpeechModel.engineLanguage(language)
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 60)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Accept")

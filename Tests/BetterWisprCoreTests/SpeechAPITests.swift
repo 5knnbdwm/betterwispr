@@ -58,6 +58,8 @@ import Testing
     try pro.validateLanguage("en")
     #expect(throws: SpeechAPIError.self) { try SpeechConnection(api: .smallest).validateLanguage("ar") }
     try SpeechConnection(api: .smallest).validateLanguage("hi")
+    let tagalog = try APISpeechProvider.request(SpeechConnection(api: .smallest), key: "key", wav: wav, language: "tl")
+    #expect(tagalog.url?.absoluteString == "https://api.smallest.ai/waves/v1/stt/?model=pulse&language=tl")
 
     let custom = try APISpeechProvider.request(SpeechConnection(api: .openAICompatible), key: "", wav: wav, language: nil)
     #expect(custom.value(forHTTPHeaderField: "Authorization") == nil)

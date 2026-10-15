@@ -22,6 +22,11 @@ public struct SpeechModel: Identifiable, Hashable, Sendable {
         languages?.map { Locale.current.localizedString(forLanguageCode: $0) ?? $0 }.sorted()
     }
 
+    /// The bare code an engine receives for a saved language; Locale would rename Whisper's "jw", "no" and "tl".
+    public static func engineLanguage(_ identifier: String?) -> String? {
+        identifier.flatMap { $0 == "auto" ? nil : $0.split(whereSeparator: { "-_".contains($0) }).first?.lowercased() }
+    }
+
     public init(id: String, name: String, detail: String, sizeLabel: String, engine: SpeechEngine,
                 modelName: String, tokenizerName: String? = nil, connection: SpeechConnection? = nil, languages: [String]? = nil) {
         self.id = id
