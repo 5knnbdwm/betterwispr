@@ -1,3 +1,4 @@
+import CoreML
 import Foundation
 @preconcurrency import WhisperKit
 
@@ -5,6 +6,8 @@ import Foundation
 public final class WhisperKitProvider: SpeechProvider {
     public var onProgress: (@MainActor @Sendable (Double) -> Void)?
     public var onPartialTranscript: (@MainActor @Sendable (String) -> Void)?
+    /// Language codes automatic detection chooses from; empty allows every language the model knows.
+    public var detectionLanguages: Set<String> = []
     public nonisolated static var defaultModelsDirectory: URL {
         URL.applicationSupportDirectory.appending(path: "BetterWispr/Models", directoryHint: .isDirectory)
     }
@@ -108,6 +111,7 @@ public final class WhisperKitProvider: SpeechProvider {
             compressionRatioThreshold: 2.4, logProbThreshold: -1, noSpeechThreshold: 0.6,
             concurrentWorkerCount: 1, chunkingStrategy: .vad
         )
+        let candidates = languageCode == nil ? detectionLanguages : []
         let id = UUID()
         transcriptionID = id
         let task = Task {
@@ -115,6 +119,12 @@ public final class WhisperKitProvider: SpeechProvider {
             try Task.checkCancellation()
             // Whisper can invent words for digital silence even with its no-speech filter.
             guard Self.containsSignal(in: samples) else { return "" }
+            var options = options
+            if let detected = try await Self.detectLanguage(in: samples, among: candidates, using: runtime) {
+                options.language = detected
+                options.detectLanguage = false
+            }
+            try Task.checkCancellation()
             let results = try await runtime.transcribe(audioArray: samples, decodeOptions: options) { [weak self] progress in
                 if Task.isCancelled { return false }
                 let text = progress.text
@@ -139,5 +149,39 @@ public final class WhisperKitProvider: SpeechProvider {
 
     nonisolated static func containsSignal(in samples: [Float]) -> Bool {
         samples.contains { $0.isFinite && abs($0) > 0.00001 }
+    }
+
+    private static func detectLanguage(in samples: [Float], among codes: Set<String>, using pipeline: WhisperKit) async throws -> String? {
+        guard let tokenizer = pipeline.tokenizer else { throw SpeechError.notPrepared }
+        let languageTokens = Set(codes.compactMap { code -> Int? in
+            let token = "<|\(code)|>"
+            return tokenizer.convertTokenToId(token).flatMap { tokenizer.convertIdToToken($0) == token ? $0 : nil }
+        })
+        guard !languageTokens.isEmpty else { return nil }
+        let window = pipeline.featureExtractor.windowSamples ?? Constants.defaultWindowSamples
+        guard let audio = pipeline.audioProcessor.padOrTrim(fromArray: samples, startAt: 0, toLength: window),
+              let features = try await pipeline.featureExtractor.logMelSpectrogram(fromAudio: audio),
+              let encoded = try await pipeline.audioEncoder.encodeFeatures(features)
+        else { throw WhisperError.transcriptionFailed("Language detection failed") }
+        let inputs = try pipeline.textDecoder.prepareDecoderInputs(withPrompt: [tokenizer.specialTokens.startOfTranscriptToken])
+        let result = try await pipeline.textDecoder.detectLanguage(
+            from: encoded, using: inputs, sampler: AllowedLanguageSampler(languageTokens: languageTokens),
+            options: DecodingOptions(), temperature: 0
+        )
+        return result.language
+    }
+}
+
+struct AllowedLanguageSampler: TokenSampling {
+    let languageTokens: Set<Int>
+
+    func update(tokens: [Int], logits: MLMultiArray, logProbs: [Float]) async -> SamplingResult {
+        let likeliest = languageTokens.max { logits[[0, 0, NSNumber(value: $0)]].floatValue < logits[[0, 0, NSNumber(value: $1)]].floatValue }
+        guard let likeliest else { return finalize(tokens: tokens, logProbs: logProbs) }
+        return SamplingResult(tokens: tokens + [likeliest], logProbs: logProbs + [0], completed: true)
+    }
+
+    func finalize(tokens: [Int], logProbs: [Float]) -> SamplingResult {
+        SamplingResult(tokens: tokens, logProbs: logProbs, completed: true)
     }
 }

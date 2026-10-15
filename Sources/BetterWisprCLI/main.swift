@@ -21,7 +21,8 @@ func run() async throws {
           --download-speaker-detection
           --download-yt-dlp
           --download-builtin-model
-          --transcribe-file PATH [--model MODEL_ID] [--language en] [--vocabulary "Term,Other term"] [--screen-terms "Term,Other term"]
+          --transcribe-file PATH [--model MODEL_ID] [--language en] [--languages en,es] [--vocabulary "Term,Other term"] [--screen-terms "Term,Other term"]
+            --languages limits a Whisper model's automatic detection to the listed languages, as Dictation languages does.
           --live-file PATH [--model MODEL_ID] [--language en]
             Feeds the file through the Parakeet live preview in real time, printing each confirmed | provisional
             update with its pass latency, then the batch transcription of the same file.
@@ -78,7 +79,7 @@ func run() async throws {
     var index = 0
     while index < arguments.count {
         let option = arguments[index]
-        guard ["--download-model", "--transcribe-file", "--live-file", "--bench", "--meeting", "--media", "--notes", "--model", "--language", "--vocabulary", "--screen-terms", "--cleanup", "--notes-model"].contains(option),
+        guard ["--download-model", "--transcribe-file", "--live-file", "--bench", "--meeting", "--media", "--notes", "--model", "--language", "--languages", "--vocabulary", "--screen-terms", "--cleanup", "--notes-model"].contains(option),
               index + 1 < arguments.count, !arguments[index + 1].hasPrefix("--"), options[option] == nil else {
             throw CLIError.usage("Invalid or repeated argument: \(option). Run --help for usage.")
         }
@@ -137,6 +138,7 @@ func run() async throws {
     } else if let path = options["--transcribe-file"] {
         let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
         let language = options["--language"].flatMap { $0 == "auto" ? nil : $0 }
+        (provider as? WhisperKitProvider)?.detectionLanguages = Set(options["--languages"]?.split(separator: ",").map(String.init) ?? [])
         let transcript = try await provider.transcribe(audioURL: url, language: language, vocabulary: vocabulary, screenTerms: screenTerms)
         print(transcript)
         FileHandle.standardError.write(Data("Completed in \(started.duration(to: clock.now)).\n".utf8))
