@@ -24,6 +24,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var claudeNotesModel: String = ""
     public var codexNotesModel: String = ""
     public var language: String = "auto"
+    /// Nil keeps Chinese in the script the speech model wrote.
+    public var chineseScript: ChineseScript?
     public var autoPaste: Bool = true
     public var copyToClipboard: Bool = false
     public var saveHistory: Bool = true
@@ -133,6 +135,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         claudeNotesModel = try container.decodeIfPresent(String.self, forKey: .claudeNotesModel) ?? ""
         codexNotesModel = try container.decodeIfPresent(String.self, forKey: .codexNotesModel) ?? ""
         language = try container.decode(String.self, forKey: .language)
+        chineseScript = try container.decodeIfPresent(ChineseScript.self, forKey: .chineseScript)
         autoPaste = try container.decode(Bool.self, forKey: .autoPaste)
         copyToClipboard = try container.decodeIfPresent(Bool.self, forKey: .copyToClipboard) ?? false
         saveHistory = try container.decode(Bool.self, forKey: .saveHistory)
