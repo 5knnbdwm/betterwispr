@@ -264,7 +264,8 @@ private struct ShortcutRecorder: View {
     }
 
     private var caption: String? {
-        if isCapturing { return feedback ?? "Press and release ⌃, ⌥, ⇧ or ⌘ alone, use a key combination, or press an F-key. Esc cancels." }
+        if isCapturing { return feedback ?? "Press and release ⌃, ⌥, ⇧, ⌘ or Fn alone, use a key combination, or press an F-key. Esc cancels." }
+        if shortcut.keyCode == UInt32(kVK_Function) { return "Needs Accessibility. Set “Press 🌐 key to” to “Do Nothing” in Keyboard settings." }
         return shortcut.isModifierOnly ? "Needs Accessibility. Uses the left or right key you recorded." : "Starts dictation from any app."
     }
 
@@ -300,8 +301,12 @@ private struct ShortcutRecorder: View {
 
     private func capture(_ event: NSEvent) {
         let flags = event.modifierFlags
-        let modifiers = ShortcutModifiers(Self.modifierFlags.filter { flags.contains($0.flag) }.map(\.modifier))
-        guard event.type == .keyDown else { return modifiersChanged(to: modifiers, keyCode: Int(event.keyCode)) }
+        var modifiers = ShortcutModifiers(Self.modifierFlags.filter { flags.contains($0.flag) }.map(\.modifier))
+        // Arrow and F-key presses also carry the Fn flag, so only track Fn from its own key transitions.
+        guard event.type == .keyDown else {
+            if flags.contains(.function) { modifiers.insert(.function) }
+            return modifiersChanged(to: modifiers, keyCode: Int(event.keyCode))
+        }
         modifierCandidate = nil
         if Int(event.keyCode) == kVK_Escape, modifiers.isEmpty { return stop() }
         let key = Self.keyNames[Int(event.keyCode)] ?? event.characters(byApplyingModifiers: [])?.uppercased() ?? ""
@@ -321,9 +326,7 @@ private struct ShortcutRecorder: View {
             return stop()
         }
         modifierCandidate = nil
-        if keyCode == kVK_Function {
-            feedback = "Fn can’t be a shortcut. Try ⌥ alone or an F-key such as F5."
-        } else if held.isEmpty, !modifiers.isEmpty {
+        if held.isEmpty, !modifiers.isEmpty {
             feedback = nil
             if modifiers == DictationShortcut.modifier(for: UInt32(keyCode)), let key = Self.keyNames[keyCode] {
                 modifierCandidate = DictationShortcut(keyCode: UInt32(keyCode), modifiers: [], key: key)
@@ -341,7 +344,7 @@ private struct ShortcutRecorder: View {
     private static let keyNames: [Int: String] = [
         kVK_Control: "Left Control", kVK_RightControl: "Right Control", kVK_Option: "Left Option", kVK_RightOption: "Right Option",
         kVK_Shift: "Left Shift", kVK_RightShift: "Right Shift", kVK_Command: "Left Command", kVK_RightCommand: "Right Command",
-        kVK_Space: "Space", kVK_Return: "Return", kVK_Tab: "Tab", kVK_Delete: "Delete", kVK_ForwardDelete: "Forward Delete",
+        kVK_Function: "Fn", kVK_Space: "Space", kVK_Return: "Return", kVK_Tab: "Tab", kVK_Delete: "Delete", kVK_ForwardDelete: "Forward Delete",
         kVK_Escape: "Esc", kVK_Home: "Home", kVK_End: "End", kVK_PageUp: "Page Up", kVK_PageDown: "Page Down",
         kVK_LeftArrow: "←", kVK_RightArrow: "→", kVK_UpArrow: "↑", kVK_DownArrow: "↓",
         kVK_F1: "F1", kVK_F2: "F2", kVK_F3: "F3", kVK_F4: "F4", kVK_F5: "F5", kVK_F6: "F6", kVK_F7: "F7",

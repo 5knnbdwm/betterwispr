@@ -104,7 +104,7 @@ import Testing
     }
 }
 
-@Test(arguments: [54, 55, 56, 58, 59, 60, 61, 62])
+@Test(arguments: [54, 55, 56, 58, 59, 60, 61, 62, 63])
 func standaloneModifiersRoundTripThroughSettings(keyCode: UInt32) throws {
     var settings = AppSettings()
     settings.shortcut = try #require(DictationShortcut(keyCode: keyCode, modifiers: [], key: "Modifier"))

@@ -676,14 +676,15 @@ retries. They do not access Keychain, mount disk images or submit to Apple.
   ⌃⌥D. ⌥ Space no longer starts dictation; the new shortcut works in hold and
   toggle mode and is still set after relaunch. While recording a shortcut, Esc
   cancels and keeps the old one. Held modifiers show on the button as you press
-  them. A letter alone or with only ⇧, Fn, or multiple modifiers released without
+  them. A letter alone or with only ⇧, or multiple modifiers released without
   a key are refused with feedback. An F-key alone such as F5 is accepted.
   A shortcut another app holds shows a toast and the old one keeps
   working. Reset restores ⌥ Space.
 - [ ] In Settings, press and release left Option alone. With Accessibility enabled,
   it saves as Left Option, works in hold and toggle mode inside BetterWispr and
   TextEdit, and survives relaunch. Repeat for right Option, Control, Shift and
-  Command. The opposite-side key alone must not trigger dictation. Releasing the
+  Command, and for Fn (🌐), which saves as Fn. Fn with ⌘ or another modifier, and
+  arrow or F-key presses while holding Fn, must not start dictation. The opposite-side key alone must not trigger dictation. Releasing the
   chosen key must finish hold mode even if another modifier is down. Recording
   ⌥ Space must still save the combination, not Option alone. Cancelling capture,
   leaving Settings and resetting must remove the temporary listeners.

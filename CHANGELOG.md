@@ -4,6 +4,11 @@ All notable changes to BetterWispr are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/). The current version lives in `VERSION`.
 
+## [Unreleased]
+
+### Added
+- Fn (🌐) can be the dictation shortcut on its own. In Settings, click the keyboard shortcut and press and release Fn. Like other single modifier keys it needs Accessibility, and it only starts dictation when no other modifier is held. Set "Press 🌐 key to" to "Do Nothing" in System Settings > Keyboard so macOS doesn't also show emoji or switch the input source.
+
 ## [0.1.5] - 2026-10-12
 
 ### Added
