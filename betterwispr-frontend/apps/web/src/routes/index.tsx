@@ -35,7 +35,7 @@ const FAQS = [
   ],
   [
     "How do I dictate?",
-    "Focus a text field, hold Option + Space, speak, and release to transcribe. You can switch to press to toggle or choose a different shortcut in Settings. Transcription begins after recording stops, rather than appearing word by word while you talk.",
+    "Focus a text field, hold Option + Space, speak, and release to transcribe. You can switch to press to toggle or choose a different shortcut in Settings. With a Parakeet model, the capsule shows your words as you speak. The text BetterWispr pastes is the transcription of the whole recording, made when you release.",
   ],
   [
     "Why does it need permissions?",
