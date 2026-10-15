@@ -2,6 +2,7 @@
 import Foundation
 import Testing
 @testable import BetterWisprCore
+@testable import BetterWispr
 
 @concurrent private func mediaFile(seconds: Double, silent: [Range<Double>], tone: Bool = true) async throws -> URL {
     let url = FileManager.default.temporaryDirectory.appending(path: "betterwispr-test-\(UUID().uuidString).wav")
@@ -145,4 +146,58 @@ private final class ScriptedProvider: SpeechProvider {
     await #expect(throws: CancellationError.self) { try await job.value }
     #expect(cancelling.heard.count == 2)
     #expect(cancelling.heard.allSatisfy { !FileManager.default.fileExists(atPath: $0.audio.path) })
+}
+
+@MainActor
+@Test func transcriptionJobBlocksConnectionEditsSavesItsRecordAndCancelsWithoutOne() async throws {
+    let folder = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let url = try await mediaFile(seconds: 40, silent: [], tone: false)
+    defer { try? FileManager.default.removeItem(at: url) }
+    let renamed = url.deletingLastPathComponent().appending(path: "Quarterly review \(UUID().uuidString.prefix(4)).wav")
+    try FileManager.default.moveItem(at: url, to: renamed)
+    defer { try? FileManager.default.removeItem(at: renamed) }
+    let model = AppModel(store: LocalStore(directory: folder), startsServices: false)
+    let speechModel = try #require(SpeechModel.catalog.first { $0.id == "parakeet-110m" })
+    let transcriptions = model.transcriptions
+
+    transcriptions.transcribe(file: renamed, with: speechModel, provider: ScriptedProvider([{ "thanks everyone" }]), language: "en", vocabulary: [])
+    #expect(!model.canEditConnections)
+    let ignored = ScriptedProvider([{ "never" }])
+    transcriptions.transcribe(file: renamed, with: speechModel, provider: ignored, language: "en", vocabulary: [])
+    await transcriptions.work?.value
+
+    #expect(transcriptions.job == nil && transcriptions.error == nil && model.canEditConnections)
+    #expect(ignored.heard.isEmpty)
+    let record = try #require(transcriptions.transcripts.first)
+    #expect(transcriptions.transcripts.count == 1)
+    #expect(record.title == renamed.deletingPathExtension().lastPathComponent)
+    #expect(record.language == "en" && record.modelName == speechModel.name && abs(record.duration - 40) < 0.01)
+    #expect(record.segments.map(\.rawText) == ["thanks everyone"])
+    #expect(MeetingStore(directory: folder.appending(path: "Transcriptions")).load().meetings.map(\.id) == [record.id])
+    #expect(record.transcriptionText == "[00:00] thanks everyone\n")
+
+    transcriptions.transcribe(file: renamed, with: speechModel, provider: ScriptedProvider([{
+        transcriptions.cancel()
+        return "cancelled words"
+    }]), language: "en", vocabulary: [])
+    let cancelled = transcriptions.work
+    await cancelled?.value
+
+    #expect(transcriptions.job == nil && transcriptions.error == nil && model.canEditConnections)
+    #expect(transcriptions.transcripts.map(\.id) == [record.id])
+    #expect(MeetingStore(directory: folder.appending(path: "Transcriptions")).load().meetings.count == 1)
+}
+
+@Test func transcriptionTextNamesOnlyVoicesSpeakerDetectionFound() {
+    var meeting = Meeting(title: "Panel", segments: [
+        MeetingSegment(speaker: .them, start: 0, duration: 5, text: "Welcome.", rawText: "welcome", participant: 2),
+        MeetingSegment(speaker: .them, start: 65, duration: 5, text: "Thanks.", rawText: "thanks"),
+    ], modelName: "Parakeet Ultra", language: "auto")
+    meeting.participantNames = [2: "Ada"]
+
+    #expect(meeting.transcriptionText == "[00:00] Ada: Welcome.\n[01:05] Thanks.\n")
+    #expect(!meeting.transcriptionMarkdown.contains("Them"))
+    #expect(meeting.transcriptionMarkdown.hasPrefix("# Panel\n\n"))
+    #expect(meeting.transcriptionMarkdown.contains("**01:05** Thanks."))
 }
