@@ -447,6 +447,25 @@ func everyListedParakeetV3LanguageReachesTheDecoderAsAHint(_ id: String) throws 
     ) == "Pick an option today.")
 }
 
+@Test func termsReadFromTheScreenReplaceOnlyMisspelledWords() {
+    for spoken in [(original: "prism", replacement: "Prisma"), (original: "Doris", replacement: "Joris"), (original: "whisper kit", replacement: "WhisperKit")] {
+        #expect(!ParakeetProvider.keepsOriginal(spoken, spelledCorrectly: true))
+        #expect(ParakeetProvider.keepsOriginal(spoken, spelledCorrectly: true, readFromScreen: true))
+    }
+    #expect(!ParakeetProvider.keepsOriginal((original: "Versal", replacement: "Vercel"), spelledCorrectly: false, readFromScreen: true))
+    #expect(!ParakeetProvider.keepsOriginal((original: "Better Wisper", replacement: "BetterWispr"), spelledCorrectly: false, readFromScreen: true))
+    #expect(ParakeetProvider.keepsOriginal((original: "Supabase's", replacement: "Supabase"), spelledCorrectly: false, readFromScreen: true))
+}
+
+@Test func onlyVocabularyTermsCountAsFixesAndOtherTermsReplaceOnlyMisspelledWords() {
+    let judged = ParakeetProvider.judging(
+        [(original: "prism", replacement: "Prisma"), (original: "superbase", replacement: "Supabase"),
+         (original: "Doris", replacement: "Joris"), (original: "versal", replacement: "Vercel")],
+        spelledCorrectly: [true, false, true, false], vocabulary: [" joris", "Vercel"])
+    #expect(judged.replacements.map(\.keepsOriginal) == [true, false, false, false])
+    #expect(judged.vocabularyFixes == 2)
+}
+
 @Test func phraseBoosterDownloadsIntoTheFolderItLoadsFrom() {
     #expect(CtcModelVariant.ctc110m.repo.folderName == ParakeetProvider.phraseBoosterDirectory.lastPathComponent)
 }

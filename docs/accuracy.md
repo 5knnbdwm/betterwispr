@@ -516,10 +516,63 @@ appeared anywhere in the reference, which scored "Christian countries" to
   the held-out result is not blind. Spell checking uses the macOS English
   dictionary, which includes words the user has taught macOS.
 
+## Names read from the screen, 2026-10-14
+
+Synthetic speech only, on an M4 Pro. macOS `say` read 24 sentences that say
+none of 20 names and 10 sentences that say two each, in 7 English voices
+(Rishi, Aman, Daniel, Karen, Moira, Tessa, Samantha): 168 absent and 70 present
+clips. The names were Joris, Pannekeet, Supabase, Vercel, Mem0, Ollama, Figma,
+Raycast, Jira, Kubectl, Qwen3, Kaggle, Opennook, BetterWispr, Prisma, Deno,
+Groq, WhisperKit, FluidAudio and PostHog. Most absent sentences use words close
+to a name, such as vessel, prism, memo, llama, denote and whisper kit. Every clip got all 20 names with Parakeet Ultra,
+`--language en`, the phrase booster installed and no cleanup. Repeated runs
+gave identical text.
+
+| Names used as | Absent WER | Absent clips changed, worse | Present WER | Names spelled exactly |
+| --- | ---: | ---: | ---: | ---: |
+| Not used | 2.15% | | 30.43% | 38 / 140 |
+| Vocabulary, with the spelling guard | 7.96% | 55, 54 | 12.63% | 99 / 140 |
+| Screen terms, misspelled words only | 2.15% | 1, 0 | 24.64% | 63 / 140 |
+
+- As vocabulary, the names made 54 absent clips worse. All 54 came from the
+  eight sentences with prism, Doris, super base, ray cast, grok, better whisper,
+  whisper kit and fluid audio, such as prism to Prisma, Doris to Joris and
+  whisper kit to WhisperKit. A name on screen is no
+  evidence it was said, so screen terms only replace words macOS spell
+  checking rejects, such as superbase to Supabase and versal to Vercel.
+- That rule loses names Parakeet decodes as real words. BetterWispr, Deno,
+  Groq, WhisperKit, FluidAudio and PostHog went from 7, 7, 4, 3, 7 and 7 of 7
+  as vocabulary to none as screen terms, heard as "better whisper", Dino, Grog
+  or Grott, Whisperkit, "fluid audio" and "post hog". Listing a name in
+  Vocabulary still uses the looser guard.
+- The one absent change was "jiro rice" to "Jira rice" for "jeera rice", at the
+  same edit distance.
+- The phrase booster pass cost about 12 ms per second of audio, nearly
+  independent of the number of names. A 79 second clip took 0.22 s without
+  names, 1.19 s with 20 and 1.11 s with one. With screen terms alone, the pass
+  now runs only when the first pass has a misspelled word. That left text
+  identical on all 238 clips and kept the 20, 39 and 79 second clips within 3 ms
+  of no names. Short clips that say a name usually trigger the pass, so their
+  median went from 0.04 s to 0.15 s. Over 0.12 s were 20 of 167 absent and 58 of
+  69 present short clips with names, against 3 and 0 without. These counts
+  leave out each run's first clip as a warm-up.
+- Real speech is not measured. A real window lists fewer, unrelated names, and
+  macOS accepts words the user has taught it, so such a capitalized name is not
+  passed unless it is mixed-case.
+
+Reproduce with `.build/release/BetterWisprCLI --bench MANIFEST --model
+parakeet-ultra --language en --screen-terms "Joris,Pannekeet,…"` against the
+same manifest without `--screen-terms`. The clip sentences and the script that
+writes the clips and manifest are not committed.
+
 ## Meetings and speakers, 2026-10-12
 
 Measured on an Apple M5 with macOS 27.0.1, release builds of `BetterWisprCLI`
 with the 0.1.5 changes, FluidAudio 0.17.5, `--language en` and Light cleanup.
+Speaker detection here is 0.1.5's FluidAudio 0.17.5 `OfflineDiarizerManager`.
+0.1.6 replaced it with Argmax SpeakerKit. Nothing in this section has been
+measured with SpeakerKit, including the WER of the split rows, which depends on
+where speaker detection hears the voice change.
 `--meeting` plays a file through the app's meeting chunker as call audio,
 transcribes each chunk as a meeting does and labels voices with Speaker
 detection. `scripts/evaluate_meetings.py` scores the segments against

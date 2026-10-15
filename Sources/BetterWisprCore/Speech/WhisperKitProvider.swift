@@ -5,7 +5,7 @@ import Foundation
 public final class WhisperKitProvider: SpeechProvider {
     public var onProgress: (@MainActor @Sendable (Double) -> Void)?
     public var onPartialTranscript: (@MainActor @Sendable (String) -> Void)?
-    public static var defaultModelsDirectory: URL {
+    public nonisolated static var defaultModelsDirectory: URL {
         URL.applicationSupportDirectory.appending(path: "BetterWispr/Models", directoryHint: .isDirectory)
     }
     private let modelsDirectory: URL
