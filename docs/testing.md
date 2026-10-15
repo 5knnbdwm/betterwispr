@@ -8,7 +8,7 @@ general recognition accuracy.
 
 ## Built-in notes model check, 2026-10-15, version 0.1.6
 
-Apple M4 Pro with 48 GB, macOS 27.0.1, debug builds. `swift build`, all 223
+Apple M4 Pro with 48 GB, macOS 27.0.1, debug builds. `swift build`, all 242
 tests in `swift test` and `./scripts/build-app.sh` passed. The new tests use
 fake weights and small files, so none needs the download. They cover settings
 round trips, the install marker, prompt injection through control tokens,
