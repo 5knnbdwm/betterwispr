@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import BetterWisprCore
+@testable import BetterWispr
 
 private func voice(at angle: Double, length: Float = 1) -> [Float] {
     [Float(cos(angle)) * length, Float(sin(angle)) * length]
@@ -8,6 +9,18 @@ private func voice(at angle: Double, length: Float = 1) -> [Float] {
 
 private func known(_ name: String, _ embedding: [Float], meeting: UUID = UUID(), participant: Int = 1) -> KnownVoice {
     KnownVoice(name: name, meetingID: meeting, participant: participant, embedding: embedding)
+}
+
+private func call(_ speakers: [Int]) -> Meeting {
+    var meeting = Meeting(modelName: "Parakeet", language: "en")
+    for (index, speaker) in speakers.enumerated() {
+        meeting.insert(MeetingSegment(speaker: .them, start: TimeInterval(index), duration: 1, text: "Point \(index)", rawText: "point \(index)", participant: speaker))
+    }
+    return meeting
+}
+
+private func temporaryStore() -> VoiceStore {
+    VoiceStore(url: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathComponent("Voices.json"))
 }
 
 @Test func rememberedVoicesNameOnlyVoicesWithinSpeakerKitsClusteringDistance() {
@@ -18,10 +31,10 @@ private func known(_ name: String, _ embedding: [Float], meeting: UUID = UUID(),
         2: voice(at: .pi),
         3: [1, 0, 0],
         4: [0, 0],
-    ], among: remembered)
+    ], among: remembered).mapValues(\.name)
 
     #expect(names == [1: "Bo"])
-    #expect(SpeakerDetection.recognise([1: voice(at: 0.60, length: 7)], among: remembered) == [1: "Ana"])
+    #expect(SpeakerDetection.recognise([1: voice(at: 0.60, length: 7)], among: remembered).mapValues(\.name) == [1: "Ana"])
     #expect(SpeakerDetection.recognise([1: voice(at: 0.62)], among: remembered).isEmpty)
     #expect(SpeakerDetection.recognise([1: voice(at: 0)], among: []).isEmpty)
 }
@@ -29,27 +42,90 @@ private func known(_ name: String, _ embedding: [Float], meeting: UUID = UUID(),
 @Test func eachRememberedNameGoesToTheNearestVoiceOnly() {
     let remembered = [known("Ana", voice(at: 0)), known(" ana", voice(at: 0.4)), known("Bo", voice(at: 0.55))]
 
-    let names = SpeakerDetection.recognise([1: voice(at: 0.43), 2: voice(at: 0.01), 3: voice(at: 0.2)], among: remembered)
+    let names = SpeakerDetection.recognise([1: voice(at: 0.43), 2: voice(at: 0.01), 3: voice(at: 0.2)], among: remembered).mapValues(\.name)
 
     #expect(names == [2: "Ana", 1: "Bo"])
 }
 
-@Test func namingAVoiceRemembersItUnlessItKeepsTheRecognisedName() {
-    let meeting = UUID()
-    let voices: [Int: [Float]] = [1: [1, 0], 2: [0, 1], 3: [1, 1]]
+@Test func aRememberedVoiceIsOnlySuggestedAndAcceptingItStoresNothingNew() throws {
+    let store = temporaryStore()
+    defer { try? FileManager.default.removeItem(at: store.url.deletingLastPathComponent()) }
+    let ana = known("Ana", voice(at: 0))
+    try store.replaceVoices(from: ana.meetingID, with: [ana])
+    var meeting = call([1, 2])
+    var heard = HeardVoices([1: voice(at: 0.01), 2: voice(at: .pi)], among: try store.load())
 
-    let named = SpeakerDetection.namedVoices(voices, names: [1: " Ana ", 2: "BO", 3: "  ", 4: "Cy"], recognised: [2: "Bo"], in: meeting)
-    #expect(named == [known("Ana", [1, 0], meeting: meeting, participant: 1)])
+    #expect(heard.suggestion(for: 1, in: meeting) == "Ana")
+    #expect(heard.suggestion(for: 2, in: meeting) == nil)
+    #expect(meeting.participantNames == nil)
 
-    let renamed = SpeakerDetection.namedVoices(voices, names: [1: "Ana", 2: "Di"], recognised: [2: "Bo"], in: meeting)
-    #expect(renamed == [known("Ana", [1, 0], meeting: meeting, participant: 1), known("Di", [0, 1], meeting: meeting, participant: 2)])
+    meeting.participantNames = [1: "ana ", 2: " Bo "]
+    try heard.remember(in: meeting, to: store)
+    #expect(heard.suggestion(for: 1, in: meeting) == nil)
+    #expect(try store.load() == [ana, known("Bo", voice(at: .pi), meeting: meeting.id, participant: 2)])
+}
 
-    #expect(SpeakerDetection.namedVoices(voices, names: nil, recognised: [:], in: meeting).isEmpty)
+@Test func mergingThenRenamingRemembersOnlyTheVoiceThatKeptItsLines() throws {
+    let store = temporaryStore()
+    defer { try? FileManager.default.removeItem(at: store.url.deletingLastPathComponent()) }
+    var meeting = call([1, 2, 3])
+    var heard = HeardVoices([1: voice(at: 0), 2: voice(at: 1), 3: voice(at: 2)], among: [])
+
+    meeting.mergeParticipant(2, into: 3)
+    heard.drop(2)
+    meeting.assign(segment: meeting.segments[0].id, toParticipant: meeting.nextParticipant)
+    #expect(meeting.participants == [2, 3])
+    meeting.participantNames = [1: "Di", 2: "Cy", 3: "Bo"]
+    try heard.remember(in: meeting, to: store)
+
+    #expect(try store.load() == [known("Bo", voice(at: 2), meeting: meeting.id, participant: 3)])
+}
+
+@Test func namingASuggestedSpeakerSomeoneElseForgetsTheVoiceThatSuggestedIt() throws {
+    let store = temporaryStore()
+    defer { try? FileManager.default.removeItem(at: store.url.deletingLastPathComponent()) }
+    let ana = known("Ana", voice(at: 0))
+    let bo = known("Bo", voice(at: .pi / 2))
+    try store.replaceVoices(from: ana.meetingID, with: [ana])
+    try store.replaceVoices(from: bo.meetingID, with: [bo])
+    var meeting = call([1])
+    var heard = HeardVoices([1: voice(at: 0.01)], among: try store.load())
+    #expect(heard.suggestion(for: 1, in: meeting) == "Ana")
+
+    meeting.participantNames = [1: "Cy"]
+    try heard.remember(in: meeting, to: store)
+    #expect(try store.load() == [bo, known("Cy", voice(at: 0.01), meeting: meeting.id, participant: 1)])
+
+    meeting.participantNames = nil
+    #expect(heard.suggestion(for: 1, in: meeting) == nil)
+    try heard.remember(in: meeting, to: store)
+    #expect(try store.load() == [bo])
+}
+
+@MainActor
+@Test func deletingAMeetingDeletesTheVoicesNamedInIt() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let meetings = MeetingStore(directory: root.appendingPathComponent("Meetings"))
+    let voices = VoiceStore(url: root.appendingPathComponent("Voices.json"))
+    let meeting = call([1])
+    try meetings.save(meeting)
+    let kept = known("Bo", voice(at: 1))
+    try voices.replaceVoices(from: meeting.id, with: [known("Ana", voice(at: 0), meeting: meeting.id)])
+    try voices.replaceVoices(from: kept.meetingID, with: [kept])
+    let model = MeetingModel(store: meetings)
+
+    model.delete(meeting.id)
+
+    #expect(model.meetings.isEmpty)
+    #expect(model.voicesMessage == nil)
+    #expect(try voices.load() == [kept])
 }
 
 @Test func voiceStoreReplacesOneMeetingsVoicesAndNeverWritesOverAnUnreadableFile() throws {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory) }
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o755])
     let store = VoiceStore(url: directory.appendingPathComponent("Voices.json"))
     let first = UUID()
     let second = UUID()
@@ -59,8 +135,8 @@ private func known(_ name: String, _ embedding: [Float], meeting: UUID = UUID(),
     try store.replaceVoices(from: second, with: [known("Bo", [0, 1], meeting: second)])
     try store.replaceVoices(from: first, with: [known("Cy", [1, 1], meeting: first, participant: 2)])
     #expect(try store.load() == [known("Bo", [0, 1], meeting: second), known("Cy", [1, 1], meeting: first, participant: 2)])
-    let permissions = try FileManager.default.attributesOfItem(atPath: store.url.path)[.posixPermissions] as? Int
-    #expect(permissions == 0o600)
+    #expect(try FileManager.default.attributesOfItem(atPath: store.url.path)[.posixPermissions] as? Int == 0o600)
+    #expect(try FileManager.default.attributesOfItem(atPath: directory.path)[.posixPermissions] as? Int == 0o700)
 
     let unreadable = Data("not voices".utf8)
     try unreadable.write(to: store.url)

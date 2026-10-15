@@ -34,17 +34,18 @@ public struct VoiceStore: Sendable {
     }
 
     private func save(_ voices: [KnownVoice]) throws {
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true,
-                                               attributes: [.posixPermissions: 0o700])
+        let directory = url.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
         try JSONEncoder().encode(File(version: 1, voices: voices)).write(to: url, options: .atomic)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
     }
 
-    /// Replaces the voices remembered from one meeting, writing only on a change and never over a file that can't be read.
-    public func replaceVoices(from meeting: UUID, with voices: [KnownVoice]) throws {
+    /// Replaces the voices remembered from one meeting and removes rejected ones, writing only on a change and never over a file that can't be read.
+    public func replaceVoices(from meeting: UUID, with voices: [KnownVoice], removing rejected: [KnownVoice] = []) throws {
         let known = try load()
-        guard known.filter({ $0.meetingID == meeting }) != voices else { return }
-        try save(known.filter { $0.meetingID != meeting } + voices)
+        guard known.filter({ $0.meetingID == meeting }) != voices || known.contains(where: rejected.contains) else { return }
+        try save(known.filter { $0.meetingID != meeting && !rejected.contains($0) } + voices)
     }
 
     /// Deletes every remembered voice, including a file that couldn't be read.

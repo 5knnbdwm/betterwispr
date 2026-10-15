@@ -156,28 +156,18 @@ public enum SpeakerDetection {
         return (numbered, Dictionary(uniqueKeysWithValues: numbers.compactMap { voice, number in embeddings[voice].map { (number, $0) } }))
     }
 
-    /// Names each voice after the nearest remembered voice within `sameVoiceDistance`, giving each name to one voice at most.
-    public static func recognise(_ voices: [Int: [Float]], among known: [KnownVoice]) -> [Int: String] {
+    static func recognise(_ voices: [Int: [Float]], among known: [KnownVoice]) -> [Int: KnownVoice] {
         let matches = voices.flatMap { number, embedding in
-            known.compactMap { voice in distance(embedding, voice.embedding).map { (number: number, name: voice.name, distance: $0) } }
+            known.compactMap { voice in distance(embedding, voice.embedding).map { (number: number, voice: voice, distance: $0) } }
         }
         .filter { $0.distance <= sameVoiceDistance }
-        .sorted { ($0.distance, $0.number, $0.name) < ($1.distance, $1.number, $1.name) }
-        var names: [Int: String] = [:]
+        .sorted { ($0.distance, $0.number, $0.voice.name) < ($1.distance, $1.number, $1.voice.name) }
+        var recognised: [Int: KnownVoice] = [:]
         var taken: Set<String> = []
-        for match in matches where names[match.number] == nil && taken.insert(Meeting.nameKey(match.name)).inserted {
-            names[match.number] = match.name
+        for match in matches where recognised[match.number] == nil && taken.insert(Meeting.nameKey(match.voice.name)).inserted {
+            recognised[match.number] = match.voice
         }
-        return names
-    }
-
-    /// The voices to remember from one meeting: each one the user named, unless it keeps the name it was recognised as.
-    public static func namedVoices(_ voices: [Int: [Float]], names: [Int: String]?, recognised: [Int: String], in meeting: UUID) -> [KnownVoice] {
-        voices.keys.sorted().compactMap { number in
-            let name = names?[number]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            guard !name.isEmpty, Meeting.nameKey(name) != recognised[number].map(Meeting.nameKey), let embedding = voices[number] else { return nil }
-            return KnownVoice(name: name, meetingID: meeting, participant: number, embedding: embedding)
-        }
+        return recognised
     }
 
     static func distance(_ a: [Float], _ b: [Float]) -> Float? {
@@ -188,6 +178,49 @@ public enum SpeakerDetection {
     private static func unit(_ vector: [Float]) -> [Float]? {
         let length = vector.reduce(0) { $0 + $1 * $1 }.squareRoot()
         return length > 0 && length.isFinite ? vector.map { $0 / length } : nil
+    }
+}
+
+public struct HeardVoices: Sendable {
+    private var embeddings: [Int: [Float]]
+    private var suggestions: [Int: KnownVoice]
+
+    public init(_ embeddings: [Int: [Float]], among known: [KnownVoice]) {
+        self.embeddings = embeddings
+        suggestions = SpeakerDetection.recognise(embeddings, among: known)
+    }
+
+    /// The remembered name a speaker sounds like, offered until the user names that speaker.
+    public func suggestion(for number: Int, in meeting: Meeting) -> String? {
+        Meeting.nameKey(meeting.participantNames?[number] ?? "").isEmpty ? suggestions[number]?.name : nil
+    }
+
+    public mutating func drop(_ number: Int) {
+        embeddings[number] = nil
+        suggestions[number] = nil
+    }
+
+    /// Saves each speaker the user named who still has lines, and forgets the remembered voice behind any suggestion the user named someone else.
+    public mutating func remember(in meeting: Meeting, to store: VoiceStore) throws {
+        let rejected = rejected(in: meeting)
+        try store.replaceVoices(from: meeting.id, with: named(in: meeting), removing: rejected)
+        suggestions = suggestions.filter { !rejected.contains($0.value) }
+    }
+
+    private func named(in meeting: Meeting) -> [KnownVoice] {
+        let speaking = Set(meeting.participants)
+        return embeddings.sorted { $0.key < $1.key }.compactMap { number, embedding in
+            let name = meeting.participantNames?[number]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard speaking.contains(number), !name.isEmpty, Meeting.nameKey(name) != suggestions[number].map({ Meeting.nameKey($0.name) }) else { return nil }
+            return KnownVoice(name: name, meetingID: meeting.id, participant: number, embedding: embedding)
+        }
+    }
+
+    private func rejected(in meeting: Meeting) -> [KnownVoice] {
+        suggestions.sorted { $0.key < $1.key }.compactMap { number, voice in
+            let name = Meeting.nameKey(meeting.participantNames?[number] ?? "")
+            return name.isEmpty || name == Meeting.nameKey(voice.name) ? nil : voice
+        }
     }
 }
 

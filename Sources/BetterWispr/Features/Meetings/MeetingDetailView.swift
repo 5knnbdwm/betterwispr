@@ -489,7 +489,8 @@ struct MeetingDetailView: View {
                     TextField("Speaker \(number)", text: participantName(number))
                         .textFieldStyle(.roundedBorder)
                         .accessibilityLabel("Name for speaker \(number)")
-                    if !meeting.unusedAttendees.isEmpty { inviteeMenu(meeting, number) }
+                    let suggestion = meetings.suggestedName(for: number, in: meeting)
+                    if suggestion != nil || !meeting.unusedAttendees.isEmpty { nameMenu(meeting, number, suggestion: suggestion) }
                     if meeting.participants.count > 1, !isActive { mergeMenu(meeting, number) }
                 }
             }
@@ -498,22 +499,26 @@ struct MeetingDetailView: View {
         .help("Name the voices in this meeting. Names appear in the transcript and the notes.")
     }
 
-    private func inviteeMenu(_ meeting: Meeting, _ number: Int) -> some View {
+    private func nameMenu(_ meeting: Meeting, _ number: Int, suggestion: String?) -> some View {
         let name = MeetingSegment.label(of: number, names: meeting.participantNames)
+        let hint = suggestion.map { "\(name) sounds like \($0)" } ?? "Name \(name) after someone invited"
         return Menu {
             Section("Name \(name)") {
+                if let suggestion {
+                    Button("Sounds like \(suggestion)") { participantName(number).wrappedValue = suggestion }
+                }
                 ForEach(meeting.unusedAttendees, id: \.self) { attendee in
                     Button(attendee) { participantName(number).wrappedValue = attendee }
                 }
             }
         } label: {
-            Image(systemName: "person.crop.circle.badge.plus")
+            Image(systemName: suggestion == nil ? "person.crop.circle.badge.plus" : "person.crop.circle.badge.questionmark")
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
-        .help("Name \(name) after someone invited")
-        .accessibilityLabel("Name \(name) after someone invited")
+        .help(hint)
+        .accessibilityLabel(hint)
     }
 
     private func mergeMenu(_ meeting: Meeting, _ number: Int) -> some View {
@@ -522,7 +527,7 @@ struct MeetingDetailView: View {
             Section("Merge \(name) into") {
                 ForEach(meeting.participants.filter { $0 != number }, id: \.self) { target in
                     Button(MeetingSegment.label(of: target, names: meeting.participantNames)) {
-                        meetings.edit(id) { $0.mergeParticipant(number, into: target) }
+                        meetings.merge(number, into: target, in: id)
                     }
                 }
             }

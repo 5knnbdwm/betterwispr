@@ -126,6 +126,10 @@ private func labels(_ meeting: Meeting) -> [String] {
     meeting.participantNames?[3] = "Cy"
     #expect(meeting.unusedAttendees == ["Ben"])
 
+    meeting.participantNames = nil
+    meeting.attendees = ["  ", "Ben"]
+    #expect(meeting.unusedAttendees == ["Ben"])
+
     meeting.attendees = nil
     #expect(meeting.unusedAttendees.isEmpty)
 }

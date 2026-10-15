@@ -84,17 +84,17 @@ struct ModelsView: View {
                         .foregroundStyle(.secondary)
                     Toggle(isOn: setting(\.separateRoomVoices)) {
                         Text("Tell apart people in the room")
-                        Text("Also separates the voices on your microphone. The voice heard most stays Me, and the others get their own speaker numbers. Your microphone audio is kept on this Mac until the speakers are found, then deleted.")
+                        Text("Also separates the voices on your microphone. The voice your microphone hears longest stays Me and the others get their own speaker numbers, so if someone near you talks more than you do, move your lines back to Me. Your microphone audio is kept on this Mac until the speakers are found, then deleted.")
                     }
                     Toggle(isOn: setting(\.rememberVoices)) {
                         Text("Remember named voices")
-                        Text("When you name a speaker, a profile of that voice is saved on this Mac and used to name the same voice in later meetings. A voice profile can identify a person, so ask people before you name them. Profiles are never uploaded, but Time Machine backs them up. Matching uses SpeakerKit’s own cutoff for grouping voices within one meeting, which wasn’t tuned for matching across meetings, so check the names it fills in.")
+                        Text("When you name a speaker, a profile of that voice is saved on this Mac. In later meetings, a speaker who sounds like a saved voice shows that name as a suggestion in its name menu, and no name is filled in until you choose one. Name speakers before you quit BetterWispr, because a meeting’s voices are held only in memory until then. A voice profile can identify a person, so ask people before you name them. Profiles are never uploaded, but Time Machine backs them up. Suggestions use SpeakerKit’s cutoff for grouping voices within one meeting, which wasn’t tuned for matching across meetings.")
                     }
                     LabeledContent {
                         Button("Forget Voices…", role: .destructive) { forgettingVoices = true }
                     } label: {
                         Text("Remembered voices")
-                        Text(forgetFailure ?? "Deletes every saved voice profile. Names already in your meetings stay.")
+                        Text(forgetFailure ?? "Deletes every saved voice profile. Names already in your meetings stay. Deleting a meeting deletes the profiles named in it.")
                             .foregroundStyle(forgetFailure == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.red))
                     }
                     .confirmationDialog("Forget every remembered voice?", isPresented: $forgettingVoices) {

@@ -50,6 +50,7 @@ final class MeetingModel {
     var elapsed: TimeInterval = 0
     var message: String?
     var allMeetingsThread: [AskExchange] = []
+    var voicesMessage: String?
     var systemAudioIssue: String?
     var microphone: AudioInputDevice?
     var showsCallAudioHint = false
@@ -67,7 +68,7 @@ final class MeetingModel {
     @ObservationIgnored private let store: MeetingStore
     @ObservationIgnored private var writableAskStore: AllMeetingsAskStore?
     @ObservationIgnored private let voiceStore: VoiceStore
-    @ObservationIgnored private var heardVoices: [UUID: (voices: [Int: [Float]], recognised: [Int: String])] = [:]
+    private var heardVoices: [UUID: HeardVoices] = [:]
     @ObservationIgnored private let recorder = MeetingRecorder()
     /// The run that receives the recorder's chunks, including the last ones a stopped meeting hands off.
     @ObservationIgnored private var recorderOwner: MeetingRun?
@@ -277,6 +278,7 @@ final class MeetingModel {
             return
         }
         heardVoices[id] = nil
+        do { try voiceStore.replaceVoices(from: id, with: []) } catch { voicesMessage = voicesError(error) }
         meetings.removeAll { $0.id == id }
         if selectedID == id { selectedID = nil }
         let kept = allMeetingsThread.filter { !$0.answer.citations.contains { $0.line.meetingID == id } }
@@ -354,15 +356,10 @@ final class MeetingModel {
         do {
             let labelled = try await detection.value
             guard owns(run) else { return }
-            var recognised: [Int: String] = [:]
             if remembersVoices {
-                do { recognised = SpeakerDetection.recognise(labelled.voices, among: try voiceStore.load()) } catch { message = voicesError(error) }
+                do { heardVoices[id] = HeardVoices(labelled.voices, among: try voiceStore.load()) } catch { voicesMessage = voicesError(error) }
             }
-            edit(id, save: false) { meeting in
-                meeting.segments = labelled.segments
-                if !recognised.isEmpty { meeting.participantNames = (meeting.participantNames ?? [:]).merging(recognised) { current, _ in current } }
-            }
-            if remembersVoices { heardVoices[id] = (labelled.voices, recognised) }
+            edit(id, save: false) { $0.segments = labelled.segments }
             saveNow(id)
         } catch {
             guard owns(run) else { return }
@@ -493,14 +490,18 @@ final class MeetingModel {
         try voiceStore.forget()
     }
 
+    func suggestedName(for number: Int, in meeting: Meeting) -> String? {
+        heardVoices[meeting.id]?.suggestion(for: number, in: meeting)
+    }
+
+    func merge(_ source: Int, into target: Int, in id: UUID) {
+        heardVoices[id]?.drop(source)
+        edit(id) { $0.mergeParticipant(source, into: target) }
+    }
+
     private func rememberNamedVoices(in meeting: Meeting) {
-        guard remembersVoices, let heard = heardVoices[meeting.id] else { return }
-        do {
-            try voiceStore.replaceVoices(from: meeting.id, with: SpeakerDetection.namedVoices(
-                heard.voices, names: meeting.participantNames, recognised: heard.recognised, in: meeting.id))
-        } catch {
-            message = voicesError(error)
-        }
+        guard remembersVoices else { return }
+        do { try heardVoices[meeting.id]?.remember(in: meeting, to: voiceStore) } catch { voicesMessage = voicesError(error) }
     }
 
     private func voicesError(_ error: any Error) -> String {

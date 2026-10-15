@@ -158,7 +158,7 @@ public struct Meeting: Codable, Identifiable, Equatable, Sendable {
     /// Invitees that no speaker is named after yet, once each, in invite order.
     public var unusedAttendees: [String] {
         var taken = Set((participantNames ?? [:]).values.map(Self.nameKey))
-        return (attendees ?? []).filter { taken.insert(Self.nameKey($0)).inserted }
+        return (attendees ?? []).filter { !Self.nameKey($0).isEmpty && taken.insert(Self.nameKey($0)).inserted }
     }
 
     static func nameKey(_ name: String) -> String { name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }

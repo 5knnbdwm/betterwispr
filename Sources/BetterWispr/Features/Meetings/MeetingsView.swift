@@ -11,19 +11,8 @@ struct MeetingsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if let message = meetings.message {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-                    Text(message).textSelection(.enabled)
-                    Spacer(minLength: 0)
-                    Button { meetings.message = nil } label: { Image(systemName: "xmark") }
-                        .buttonStyle(.borderless)
-                        .accessibilityLabel("Dismiss meeting message")
-                }
-                .font(.callout)
-                .padding(12)
-                .background(.orange.opacity(0.1))
-            }
+            banner(\.message, dismissal: "Dismiss meeting message")
+            banner(\.voicesMessage, dismissal: "Dismiss remembered voices message")
             if let meeting = meetings.selectedID.flatMap(meetings.meeting) {
                 noteBar(meeting)
                 MeetingDetailView(model: model, id: meeting.id, citation: $citation).id(meeting.id)
@@ -51,6 +40,22 @@ struct MeetingsView: View {
             }
         } message: {
             Text("This removes the meeting, its notes and transcript from this Mac. It cannot be undone.")
+        }
+    }
+
+    @ViewBuilder private func banner(_ field: ReferenceWritableKeyPath<MeetingModel, String?>, dismissal: String) -> some View {
+        if let message = meetings[keyPath: field] {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                Text(message).textSelection(.enabled)
+                Spacer(minLength: 0)
+                Button { meetings[keyPath: field] = nil } label: { Image(systemName: "xmark") }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel(dismissal)
+            }
+            .font(.callout)
+            .padding(12)
+            .background(.orange.opacity(0.1))
         }
     }
 
