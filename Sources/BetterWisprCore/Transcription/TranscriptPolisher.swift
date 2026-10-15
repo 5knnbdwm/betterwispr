@@ -92,12 +92,24 @@ public enum TranscriptPolisher {
     /// Characters of prompt, request and reply that fit Apple's 4,096-token window, at a guessed 3 characters a token.
     static let appleBudget = 12_000
 
+    /// Characters of prompt, request and reply for the built-in model's 7,168 prompt tokens (8,192 less the reply reserve) at the same guess.
+    static let builtInBudget = 21_000
+
+    /// The character budget of a model with a small fixed window; nil sends the context whole.
+    static func budget(for selection: NotesModelSelection) -> Int? {
+        switch selection {
+        case .apple: appleBudget
+        case .builtIn: builtInBudget
+        case .ollama, .connection, .cli: nil
+        }
+    }
+
     /// The model instructions and request; a CLI gets only the fixed instructions because Claude Code receives them on its command line.
     static func exchange(_ text: String, for selection: NotesModelSelection, vocabulary: [String], context: DictationContext?,
                          instructions extra: String) -> (instructions: String, request: String) {
         let framed = prompt(vocabulary: vocabulary, context: DictationContext(selectedText: "x", clipboard: "x", window: "x"), instructions: extra)
-        let room = appleBudget - (framed.count - 3) - message(for: text).count - text.count
-        let sources = sources(vocabulary: vocabulary, context: selection == .apple ? context?.fitting(room) : context, instructions: extra)
+        let room = budget(for: selection).map { $0 - (framed.count - 3) - message(for: text).count - text.count }
+        let sources = sources(vocabulary: vocabulary, context: room.map { context?.fitting($0) } ?? context, instructions: extra)
         if case .cli = selection { return (instructions, (sources + [message(for: text)]).joined(separator: "\n\n")) }
         return (([instructions] + sources).joined(separator: "\n\n"), message(for: text))
     }
