@@ -12,8 +12,8 @@ import Testing
         AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: rate, AVNumberOfChannelsKey: 2,
         AVLinearPCMBitDepthKey: 16, AVLinearPCMIsFloatKey: false, AVLinearPCMIsBigEndianKey: false, AVLinearPCMIsNonInterleaved: false,
     ])
-    let frames = Int(rate)
-    for second in 0..<Int(seconds) {
+    for second in 0..<Int(seconds.rounded(.up)) {
+        let frames = Int(min(1, seconds - Double(second)) * rate)
         let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frames))!
         buffer.frameLength = AVAudioFrameCount(frames)
         for frame in 0..<frames {
@@ -77,6 +77,17 @@ private func chunks(of url: URL) async throws -> (audio: MediaAudio, chunks: [Me
     #expect(chunks.count == 2)
     #expect(chunks.first?.duration == 30)
     #expect(abs((chunks.last?.duration ?? 0) - 40) < 0.01)
+}
+
+@Test func mediaAudioKeepsAtLeastASecondAfterTheLastCut() async throws {
+    let url = try await mediaFile(seconds: 59.7, silent: [59.3..<60])
+    defer { try? FileManager.default.removeItem(at: url) }
+    let (_, chunks) = try await chunks(of: url)
+    defer { for chunk in chunks { try? FileManager.default.removeItem(at: chunk.url) } }
+
+    #expect(chunks.count == 2)
+    #expect(chunks.allSatisfy { $0.duration >= 1 })
+    #expect(abs(chunks.map(\.duration).reduce(0, +) - 59.7) < 0.01)
 }
 
 @Test func mediaAudioRejectsAFileItCannotReadWithTheSupportedFormats() async throws {

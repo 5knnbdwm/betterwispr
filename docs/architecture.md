@@ -424,7 +424,9 @@ a job runs.
    writes one `betterwispr-media-<uuid>.caf` chunk at a time, holding about one
    chunk of samples in memory. Each cut lands at the quietest point of a 300 ms
    moving average of 10 ms levels, 30 to 59.5 seconds after the previous cut,
-   and the last 59.5 seconds or less become the final chunk. No chunk is dropped
+   and the last 59.5 seconds or less become the final chunk. A cut leaves at
+   least one second after it, because Parakeet rejects audio under 0.3 seconds
+   and a failed chunk fails the job. No chunk is dropped
    for being quiet. Files with no audio track or an unreadable container, such
    as mkv or webm, fail with the list of supported formats.
 3. `MediaTranscriber` sends each chunk to the selected provider in order,

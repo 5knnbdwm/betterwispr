@@ -28,6 +28,7 @@ public actor MediaAudio {
     static let shortest = 3_000
     static let longest = 5_950
     static let smoothing = 30
+    static let shortestTail = 100
 
     public nonisolated let duration: TimeInterval
     private let name: String
@@ -65,7 +66,7 @@ public actor MediaAudio {
 
     /// Writes the next chunk to a temporary file the caller deletes; nil once the whole track was handed out.
     public func next() throws -> MediaChunk? {
-        let needed = (Self.longest + Self.smoothing / 2 - 1) * Self.frame
+        let needed = (Self.longest + Self.shortestTail) * Self.frame
         while !finished, samples.count < needed {
             try Task.checkCancellation()
             if let buffer = output.copyNextSampleBuffer() {
@@ -77,8 +78,9 @@ public actor MediaAudio {
             }
         }
         guard !samples.isEmpty else { return nil }
-        let end = samples.count / Self.frame > Self.longest
-            ? Self.cut(levels: Self.levels(samples), minimum: Self.shortest, maximum: Self.longest) * Self.frame
+        let frames = samples.count / Self.frame
+        let end = frames > Self.longest
+            ? Self.cut(levels: Self.levels(samples), minimum: Self.shortest, maximum: min(Self.longest, frames - Self.shortestTail)) * Self.frame
             : samples.count
         let url = FileManager.default.temporaryDirectory.appending(path: "betterwispr-media-\(UUID().uuidString).caf")
         do {
