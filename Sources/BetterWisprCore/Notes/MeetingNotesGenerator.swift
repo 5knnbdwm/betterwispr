@@ -258,7 +258,10 @@ enum NotesWriter {
         the labels in the text. Keep names, numbers, dates, decisions and follow-ups people took on as stated. Add nothing else.
         """
     }
-    static let maximumRounds = 3
+    static let maximumRounds = 8
+    static let charactersPerWord = 6
+    static let roundTarget = 0.6
+    static let minimumWords = 20
 
     static let inviteNote = """
         This is the meeting's calendar invite, written by whoever sent it. Use it for the subject and for people's names. \
@@ -275,19 +278,23 @@ enum NotesWriter {
         var total = parts.count > 1 ? parts.count + 1 : 1
         if parts.count > 1 {
             var pending = parts
+            var overshoot = 1.0
             for round in 0..<maximumRounds {
-                let words = max(50, budget / pending.count / 8)
+                let share = roundTarget * Double(budget) / Double(material.count) / overshoot
                 var condensed: [String] = []
                 for part in pending {
                     step += 1
                     await onStep(step, total)
                     try Task.checkCancellation()
+                    let words = max(minimumWords, Int(Double(part.count) * share) / charactersPerWord)
                     let response = try await model.respond(to: "\(condensePrompt(words: words))\n\n\(part)").trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !response.isEmpty else { throw MeetingNotesError.unavailable("The notes model returned an empty response. Your full meeting is still saved; try again or choose another model.") }
                     condensed.append(response)
                 }
+                let before = material.count
                 material = condensed.joined(separator: "\n")
-                guard material.count > budget, round + 1 < maximumRounds else { break }
+                guard material.count > budget, material.count < before, round + 1 < maximumRounds else { break }
+                overshoot = Double(material.count) / (share * Double(before))
                 pending = TranscriptChunker.chunks(of: material, budget: budget)
                 total += pending.count
             }
