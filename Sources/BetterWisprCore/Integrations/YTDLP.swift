@@ -106,8 +106,9 @@ public enum YTDLP {
     }
 
     static func failure(_ errors: String, status: Int32, runtime: URL?) -> YTDLPError {
-        let reason = errors.split(whereSeparator: \.isNewline).last { $0.hasPrefix("ERROR:") }
-            .map { $0.dropFirst("ERROR:".count).trimmingCharacters(in: .whitespaces) } ?? (status == 0 ? "yt-dlp found no audio at this link." : "yt-dlp stopped with status \(status).")
+        let lines = errors.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        let reason = lines.last { $0.hasPrefix("ERROR:") }.map { $0.dropFirst("ERROR:".count).trimmingCharacters(in: .whitespaces) }
+            ?? (status == 0 ? "yt-dlp found no audio at this link." : lines.last ?? "yt-dlp stopped with status \(status).")
         let hint = runtime == nil ? " If YouTube links fail, install Deno with brew install deno so yt-dlp can read YouTube fully." : ""
         return .download(reason + hint)
     }

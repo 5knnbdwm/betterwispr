@@ -42,6 +42,9 @@ import Testing
     let errors = "WARNING: [youtube] No supported JavaScript runtime\nERROR: first\nERROR: [youtube] abc: Video unavailable\n"
     #expect(YTDLP.failure(errors, status: 1, runtime: URL(fileURLWithPath: "/opt/homebrew/bin/deno")) == .download("[youtube] abc: Video unavailable"))
     #expect(YTDLP.failure(errors, status: 1, runtime: nil).localizedDescription.contains("brew install deno"))
+    #expect(YTDLP.failure("Usage: yt-dlp [OPTIONS] URL\n\nyt-dlp: error: no such option: --js-runtimes\n", status: 2, runtime: nil)
+        .localizedDescription.contains("no such option: --js-runtimes"))
+    #expect(YTDLP.failure("", status: 0, runtime: nil).localizedDescription.contains("found no audio"))
 }
 
 @MainActor
