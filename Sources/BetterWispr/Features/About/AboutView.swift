@@ -4,7 +4,8 @@ import SwiftUI
 struct AboutView: View {
     @Bindable var updater: AppUpdater
     let shortcut: DictationShortcut
-    private let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Development"
+    static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Development"
+    static let changelog = URL(string: "https://betterwispr.com/changelog")!
     private let repository = URL(string: "https://github.com/opennookorg/betterwispr")!
 
     var body: some View {
@@ -13,7 +14,7 @@ struct AboutView: View {
                 VStack(spacing: 10) {
                     BrandMark(size: 72)
                     Text("BetterWispr").font(.title.weight(.semibold))
-                    Text("Version \(version)")
+                    Text("Version \(Self.version)")
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                     Text("Private dictation for your Mac. Press \(shortcut.displayName) in any app, speak, and your words appear where you’re typing. Speech is processed on this Mac.")
@@ -57,6 +58,18 @@ struct AboutView: View {
                 } label: {
                     Text("Feedback")
                     Text("Report a bug or suggest a feature.")
+                }
+                LabeledContent {
+                    Link("What’s New", destination: Self.changelog)
+                } label: {
+                    Text("Changelog")
+                    Text("See what changed in each release.")
+                }
+                LabeledContent {
+                    Link("Buy Me a Coffee", destination: URL(string: "https://buymeacoffee.com/code_kartik")!)
+                } label: {
+                    Text("Support")
+                    Text("Help fund BetterWispr’s development.")
                 }
             } header: {
                 Text("Open Source")
