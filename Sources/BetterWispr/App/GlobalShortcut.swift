@@ -19,6 +19,11 @@ final class GlobalShortcut {
         identifier = EventHotKeyID(signature: 0x42575350, id: id)
     }
 
+    isolated deinit {
+        unregister()
+        if let handler { RemoveEventHandler(handler) }
+    }
+
     func register(_ shortcut: DictationShortcut) throws {
         unregister()
         if shortcut.isModifierOnly {

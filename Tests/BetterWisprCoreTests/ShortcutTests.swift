@@ -90,6 +90,13 @@ import Testing
     #expect(fired == ["cancel press", "dictation press", "dictation release"])
 }
 
+@Test @MainActor func aShortcutThatGoesAwayFreesItsKeyForTheNextOne() throws {
+    let f16 = try #require(DictationShortcut(keyCode: UInt32(kVK_F16), modifiers: [], key: "F16"))
+    for _ in 0..<20 {
+        try GlobalShortcut(id: 8).register(f16)
+    }
+}
+
 @Test @MainActor func standaloneFnDeliversPressAndReleaseOnlyWhenAlone() throws {
     let listener = GlobalShortcut()
     let shortcut = try #require(DictationShortcut(keyCode: UInt32(kVK_Function), modifiers: [], key: "Fn"))
