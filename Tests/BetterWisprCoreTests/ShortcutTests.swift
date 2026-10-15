@@ -87,3 +87,23 @@ import Testing
     #expect(try send(kEventHotKeyPressed, signature: 0x4F544852, id: 2) == [passed, passed])
     #expect(fired == ["cancel press", "dictation press", "dictation release"])
 }
+
+@Test @MainActor func cancelShortcutRefusesTheDictationShortcutAndAModifierAloneThenSavesAKeyAndClears() throws {
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let model = AppModel(store: LocalStore(directory: folder), startsServices: false)
+    let leftOption = try #require(DictationShortcut(keyCode: UInt32(kVK_Option), modifiers: [], key: "Left Option"))
+    let f19 = try #require(DictationShortcut(keyCode: UInt32(kVK_F19), modifiers: [], key: "F19"))
+
+    model.changeCancelShortcut(model.settings.shortcut)
+    #expect(model.settings.cancelShortcut == nil)
+    model.changeCancelShortcut(leftOption)
+    #expect(model.settings.cancelShortcut == nil)
+    model.changeCancelShortcut(f19)
+    #expect(model.settings.cancelShortcut == f19)
+    model.changeShortcut(f19)
+    #expect(model.settings.shortcut == .optionSpace)
+    model.changeCancelShortcut(nil)
+    #expect(model.settings.cancelShortcut == nil)
+}

@@ -274,10 +274,7 @@ private struct ShortcutRecorder: View {
                     .help("Reset to \(DictationShortcut.optionSpace.displayName)")
                     .transition(.opacity)
                 } else if kind == .cancel, shortcut != nil, !isCapturing {
-                    Button("Clear", systemImage: "xmark.circle") {
-                        stop()
-                        model.changeCancelShortcut(nil)
-                    }
+                    Button("Clear", systemImage: "xmark.circle") { model.changeCancelShortcut(nil) }
                     .labelStyle(.iconOnly)
                     .buttonStyle(.borderless)
                     .foregroundStyle(.secondary)
@@ -286,7 +283,8 @@ private struct ShortcutRecorder: View {
                 }
                 recordButton
                     .accessibilityLabel(isCapturing ? "\(title), waiting for keys" : "\(title), \(shortcut?.spokenName ?? "not set")")
-                    .accessibilityHint("Click, then press a shortcut, or press and release a modifier key such as Option.")
+                    .accessibilityHint(kind == .dictation ? "Click, then press a shortcut, or press and release a modifier key such as Option."
+                                                          : "Click, then press a shortcut that includes a key, such as Control Option K.")
             }
             .disabled(model.isBusy)
         }
@@ -297,10 +295,13 @@ private struct ShortcutRecorder: View {
     }
 
     private var caption: String? {
-        if isCapturing { return feedback ?? "Press and release ⌃, ⌥, ⇧ or ⌘ alone, use a key combination, or press an F-key. Esc cancels." }
+        if isCapturing {
+            return feedback ?? (kind == .dictation ? "Press and release ⌃, ⌥, ⇧ or ⌘ alone, use a key combination, or press an F-key. Esc cancels."
+                                                   : "Hold ⌃, ⌥ or ⌘ and press a key, or press an F-key. Esc leaves it as is.")
+        }
         switch kind {
         case .dictation: return shortcut?.isModifierOnly == true ? "Needs Accessibility. Uses the left or right key you recorded." : "Starts dictation from any app."
-        case .cancel: return "Stops dictation without pasting it, from any app."
+        case .cancel: return "Also cancels a dictation from any app. Esc always does."
         }
     }
 
@@ -319,7 +320,7 @@ private struct ShortcutRecorder: View {
         held = []
         modifierCandidate = nil
         feedback = nil
-        suspend()
+        model.suspendShortcut()
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { event in
             MainActor.assumeIsolated { capture(event) }
             return nil
@@ -331,11 +332,9 @@ private struct ShortcutRecorder: View {
         NSEvent.removeMonitor(monitor)
         self.monitor = nil
         modifierCandidate = nil
-        resume()
+        model.registerShortcut()
     }
 
-    private func suspend() { kind == .dictation ? model.suspendShortcut() : model.suspendCancelShortcut() }
-    private func resume() { kind == .dictation ? model.registerShortcut() : model.registerCancelShortcut() }
     private func change(_ shortcut: DictationShortcut) {
         kind == .dictation ? model.changeShortcut(shortcut) : model.changeCancelShortcut(shortcut)
     }
