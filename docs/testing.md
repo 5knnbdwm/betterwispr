@@ -1011,7 +1011,11 @@ player; real playback and the Automation prompt need these steps.
   repair ("at 5, no, at 6"); the capsule says "Editing with" the notes model.
 - [ ] Choose another Ollama model or a notes API connection as the cleanup
   provider. Medium dictation uses it while meeting notes and Ask keep theirs.
-  Remove that API connection; the picker returns to "Same as notes".
+  The footer under Auto cleanup names that provider and no longer says it is
+  the meeting notes model. Remove that API connection; the picker returns to
+  "Same as notes".
+- [ ] Choose Light and set the selected text shortcut. The Cleanup provider
+  picker stays visible. Clear the shortcut; the picker hides.
 - [ ] Choose an unavailable cleanup provider (Apple Intelligence off, or a CLI
   with no model). The Style page shows the reason, Medium dictations get Light
   cleanup and no other provider is asked.
@@ -1019,7 +1023,7 @@ player; real playback and the Automation prompt need these steps.
 ### Selected text cleanup
 
 - [ ] On a fresh install, Settings > Shortcut shows "Clean up selected text"
-  empty. Record ⌃⌥C. In TextEdit, select "so um we should probably ship it on
+  with "Set Shortcut…". Record ⌃⌥C. In TextEdit, select "so um we should probably ship it on
   friday i think" and press ⌃⌥C. A "Cleaning up…" toast names the cleanup
   provider, then the edit replaces the selection and the toast says "Cleaned
   up". ⌘Z in TextEdit brings the original back, and the clipboard holds what it
@@ -1034,10 +1038,11 @@ player; real playback and the Automation prompt need these steps.
   pasted or copied. Pressing ⌃⌥C while an edit runs shows the progress toast
   again.
 - [ ] Press ⌃⌥C during a dictation. The toast says "Finish dictating first" and
-  the dictation continues. Revoke Accessibility and press it; the toast offers
-  Allow.
-- [ ] Try a modifier alone, the dictation shortcut and the Cancel shortcut as
-  this shortcut, and this shortcut as the other two. Each is refused with a
+  the dictation continues. Press ⌃⌥C with a slow provider, then start a
+  dictation before the edit arrives. The same toast appears, and nothing is
+  pasted or copied. Revoke Accessibility and press it; the toast offers Allow.
+- [ ] Try a modifier alone, Escape with a modifier, the dictation shortcut and
+  the Cancel shortcut as this shortcut, and this shortcut as the other two. Each is refused with a
   toast. Clear turns it off, ⌃⌥C reaches other apps again, and relaunching
   keeps the setting you left.
 - [ ] Repeat in Safari or Chrome text areas, Notes, Mail and Slack. Record the

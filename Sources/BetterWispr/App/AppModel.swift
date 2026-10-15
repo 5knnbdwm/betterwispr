@@ -322,7 +322,9 @@ final class AppModel {
         if let shortcut {
             do {
                 if shortcut.isModifierOnly { throw ShortcutError.needsKey }
-                if shortcut == settings.shortcut || shortcut == settings.cancelShortcut { throw ShortcutError.alreadyAssigned(shortcut) }
+                if shortcut.keyCode == UInt32(kVK_Escape) || shortcut == settings.shortcut || shortcut == settings.cancelShortcut {
+                    throw ShortcutError.alreadyAssigned(shortcut)
+                }
                 try selectedTextShortcut.register(shortcut)
             } catch {
                 ToastWindow.shared.show(Toast(failure: "Couldn’t use \(shortcut.displayName)", error))
@@ -396,6 +398,11 @@ final class AppModel {
             selectedPage = .models
             fail(DictationFailure(title: "Download a model first.", message: "Download \(selectedModel.name) in Models before recording."))
             return
+        }
+        if let cleanup = selectedTextCleanup {
+            cleanup.cancel()
+            selectedTextCleanup = nil
+            ToastWindow.shared.show(SelectedTextCleanupOutcome.busy.toast(allowingAccessibility: requestAccessibility))
         }
         targetApplication = NSWorkspace.shared.frontmostApplication
         let modes = settings.modes

@@ -75,7 +75,7 @@ public enum TranscriptPolisher {
 
     public static let minimumWords = 4
 
-    /// Edits English dictation with the notes model chosen in Models; nil means keep the light cleanup.
+    /// Edits English text with the model that settings selects; nil means keep the light cleanup.
     public static func polish(_ text: String, settings: AppSettings, vocabulary: [String], context: DictationContext?, instructions extra: String = "") async -> String? {
         let words = text.split(whereSeparator: \.isWhitespace).count
         let (system, request) = exchange(text, for: settings.notesSelection, vocabulary: vocabulary, context: context, instructions: extra)

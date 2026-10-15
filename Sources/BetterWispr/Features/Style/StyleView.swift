@@ -102,12 +102,13 @@ struct StyleView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.primary.opacity(0.04), in: .rect(cornerRadius: 8, style: .continuous))
                     .padding([.horizontal, .bottom], 16)
-                    if model.settings.cleanup == .medium {
+                    if model.settings.cleanup == .medium || model.settings.selectedTextShortcut != nil {
                         RowDivider()
                         VStack(alignment: .leading, spacing: 8) {
                             NotesModelPicker(model: model, title: "Cleanup provider", overrideSelection: \.cleanupSelection)
                             if case .unavailable(let reason) = MeetingNotesGenerator.availability(settings: model.settings.cleanupSettings) {
-                                Label("\(reason) Until then, Medium dictations get Light cleanup.", systemImage: "exclamationmark.triangle")
+                                Label(model.settings.cleanup == .medium ? "\(reason) Until then, Medium dictations get Light cleanup." : reason,
+                                      systemImage: "exclamationmark.triangle")
                                     .font(.callout)
                                     .foregroundStyle(.secondary)
                             }
@@ -206,14 +207,16 @@ struct StyleView: View {
     private var cleanupFooter: String {
         let original = "Your original words are never lost. In History, open Original transcription and choose Use Original."
         guard model.settings.cleanup == .medium else { return original }
-        let destination = switch model.settings.notesSelection {
+        let provider = model.settings.cleanupSettings
+        let destination = switch provider.notesSelection {
         case .apple: "Medium edits with Apple Intelligence on this Mac."
         case .builtIn: "Medium edits with the built-in model on this Mac."
         case .ollama: "Medium edits with Ollama on this Mac."
         case .cli(let cli): "Medium sends English dictation to \(cli.name) through your subscription, which adds a few seconds."
-        case .connection: "Medium sends English dictation to \(model.settings.notesModelName) with your API key."
+        case .connection: "Medium sends English dictation to \(provider.notesModelName) with your API key."
         }
-        return "\(destination) It uses the same model as meeting notes, and results vary by model. Other languages, very short dictations and edits that fail, take too long or rewrite too much get Light cleanup. \(original)"
+        let results = model.settings.cleanupSelection == nil ? "It uses the same model as meeting notes, and results vary by model." : "Results vary by model."
+        return "\(destination) \(results) Other languages, very short dictations and edits that fail, take too long or rewrite too much get Light cleanup. \(original)"
     }
 
     private func example(_ title: String, _ text: String, emphasized: Bool) -> some View {

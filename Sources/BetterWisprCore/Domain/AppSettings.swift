@@ -57,7 +57,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var selectedTextShortcut: DictationShortcut?
     public var learnCorrections: Bool = true
     public var cleanup: CleanupLevel = .light
-    /// Sends selected text, clipboard text and the focused window's text to the notes model during Medium cleanup.
+    /// Sends selected text, clipboard text and the focused window's text to the cleanup provider during Medium cleanup.
     public var useScreenContext: Bool = false
     /// Reads window text from pixels when the app exposes too little through Accessibility; needs Screen Recording.
     public var recognizeScreenText: Bool = false
