@@ -184,8 +184,9 @@ tabs backed by the existing meeting fields.
    the [built-in model](#built-in-notes-model), local Ollama, Claude Code, Codex, or an OpenAI-compatible chat API. Transcription
    selection remains independent. `NotesWriter` combines the transcript and all
    personal thoughts, condensing long inputs before the final structured summary.
-   If condensation still exceeds the budget it reports an error instead of
-   truncating the source. Provider failure never selects another engine; the
+   If condensing stalls above the budget, it drafts notes for each remaining
+   chunk and merges them in order, so every part reaches the model and nothing
+   is truncated. Provider failure never selects another engine; the
    transcript, thoughts and previous summary remain saved.
 5. Each meeting is one JSON file in `Application Support/BetterWispr/Meetings`.
    Unreadable files are reported and left untouched. Chunk files are deleted after
