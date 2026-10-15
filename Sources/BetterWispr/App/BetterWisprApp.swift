@@ -1,4 +1,5 @@
 import AppKit
+import BetterWisprCore
 import SwiftUI
 
 @main
@@ -88,11 +89,10 @@ private struct MenuContents: View {
         }
         .disabled(model.phase == .preparing || model.phase == .transcribing)
         if model.isBusy { Button("Cancel") { model.cancelRecording() } }
-        Button(model.meetings.activity.capturingID == nil ? "Start Meeting Notes" : "Stop Meeting") {
-            guard model.meetings.activity.capturingID == nil else { return model.meetings.stop() }
+        Button(model.meetings.capturingID == nil ? "Start Meeting Notes" : "Stop Meeting") {
+            guard model.meetings.capturingID == nil else { return model.meetings.stop() }
             model.startNotetaker()
         }
-        .disabled(model.meetings.activity != .idle && model.meetings.activity.capturingID == nil)
         Divider()
         Picker("Model", selection: Binding(
             get: { model.selectedModel.id },
@@ -167,11 +167,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        model.discardRecording()
+        guard let pending = model.mediaPauser.pending else { return .terminateNow }
+        Task {
+            await pending.value
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         model.discardRecording()
         model.meetings.endForQuit()
+        model.transcriptions.endForQuit()
         capsule?.close()
         notetaker?.close()
+        LlamaEngine.shared.shutdown()
     }
 }
 

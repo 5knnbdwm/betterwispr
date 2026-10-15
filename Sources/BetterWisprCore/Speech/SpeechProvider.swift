@@ -1,4 +1,5 @@
 import Foundation
+@preconcurrency import WhisperKit
 
 public enum SpeechEngine: String, Codable, Sendable {
     case apple, whisperKit, parakeet, api
@@ -15,6 +16,16 @@ public struct SpeechModel: Identifiable, Hashable, Sendable {
     public let connection: SpeechConnection?
     /// Language codes the model recognizes; nil when its coverage is not a known fixed list.
     public let languages: [String]?
+
+    /// Supported languages as sorted display names in the user's locale.
+    public var languageNames: [String]? {
+        languages?.map { Locale.current.localizedString(forLanguageCode: $0) ?? $0 }.sorted()
+    }
+
+    /// The bare code an engine receives for a saved language; Locale would rename Whisper's "jw", "no" and "tl".
+    public static func engineLanguage(_ identifier: String?) -> String? {
+        identifier.flatMap { $0 == "auto" ? nil : $0.split(whereSeparator: { "-_".contains($0) }).first?.lowercased() }
+    }
 
     public init(id: String, name: String, detail: String, sizeLabel: String, engine: SpeechEngine,
                 modelName: String, tokenizerName: String? = nil, connection: SpeechConnection? = nil, languages: [String]? = nil) {
@@ -33,6 +44,8 @@ public struct SpeechModel: Identifiable, Hashable, Sendable {
         "bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de", "el", "hu", "it",
         "lv", "lt", "mt", "pl", "pt", "ro", "sk", "sl", "es", "sv", "ru", "uk",
     ]
+    private static let whisperLargeV3Languages = Set(Constants.languages.values).sorted()
+    private static let whisperLanguagesBeforeLargeV3 = whisperLargeV3Languages.filter { $0 != "yue" }
 
     public static let catalog: [SpeechModel] = [
         .init(id: "apple", name: "Apple on-device", detail: "Uses an available macOS language pack. No cloud fallback.",
@@ -48,11 +61,11 @@ public struct SpeechModel: Identifiable, Hashable, Sendable {
         .init(id: "parakeet-ja", name: "Parakeet Japanese", detail: "NVIDIA's Parakeet model for Japanese speech.",
               sizeLabel: "~720 MB", engine: .parakeet, modelName: "parakeet-ja", languages: ["ja"]),
         .init(id: "whisper-turbo", name: "Whisper Large v3 Turbo", detail: "Broadest language coverage, including languages Parakeet does not support.",
-              sizeLabel: "~1.6 GB", engine: .whisperKit, modelName: "openai_whisper-large-v3-v20240930_turbo", tokenizerName: "openai/whisper-large-v3"),
+              sizeLabel: "~1.6 GB", engine: .whisperKit, modelName: "openai_whisper-large-v3-v20240930_turbo", tokenizerName: "openai/whisper-large-v3", languages: whisperLargeV3Languages),
         .init(id: "whisper-turbo-compressed", name: "Whisper Large v3 Turbo (compressed)", detail: "The languages of Whisper Large v3 Turbo in a compressed build that takes less disk space.",
-              sizeLabel: "~650 MB", engine: .whisperKit, modelName: "openai_whisper-large-v3-v20240930_turbo_632MB", tokenizerName: "openai/whisper-large-v3"),
+              sizeLabel: "~650 MB", engine: .whisperKit, modelName: "openai_whisper-large-v3-v20240930_turbo_632MB", tokenizerName: "openai/whisper-large-v3", languages: whisperLargeV3Languages),
         .init(id: "whisper-small", name: "Whisper Small", detail: "A lighter multilingual Whisper model with a smaller download.",
-              sizeLabel: "~490 MB", engine: .whisperKit, modelName: "openai_whisper-small", tokenizerName: "openai/whisper-small")
+              sizeLabel: "~490 MB", engine: .whisperKit, modelName: "openai_whisper-small", tokenizerName: "openai/whisper-small", languages: whisperLanguagesBeforeLargeV3)
     ]
 }
 
@@ -64,6 +77,8 @@ public protocol SpeechProvider: AnyObject {
     /// their explicitly selected connection authorizes network use during transcription.
     func prepare(model: SpeechModel, download: Bool) async throws
     func transcribe(audioURL: URL, language: String?, vocabulary: [String]) async throws -> String
+    /// Also takes names read from the screen, which a provider may use only to respell words that look misspelled, and ignores by default.
+    func transcribe(audioURL: URL, language: String?, vocabulary: [String], screenTerms: [String]) async throws -> String
     /// Vocabulary terms the provider itself corrected during the last transcription.
     var vocabularyFixes: Int { get }
     func cancel()
@@ -71,6 +86,10 @@ public protocol SpeechProvider: AnyObject {
 
 extension SpeechProvider {
     public var vocabularyFixes: Int { 0 }
+
+    public func transcribe(audioURL: URL, language: String?, vocabulary: [String], screenTerms: [String]) async throws -> String {
+        try await transcribe(audioURL: audioURL, language: language, vocabulary: vocabulary)
+    }
 }
 
 extension SpeechModel {

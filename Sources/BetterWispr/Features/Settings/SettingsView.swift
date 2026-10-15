@@ -71,6 +71,20 @@ struct SettingsView: View {
                         Button("Open Vocabulary") { model.selectedPage = .vocabulary }
                     }
                     RowDivider()
+                    SettingRow("Unload speech model when idle", caption: "Frees memory between dictations. The next dictation loads the model again, so it can take a moment longer to finish.") {
+                        Picker("Unload speech model when idle", selection: Binding(
+                            get: { model.settings.unloadModelWhenIdle },
+                            set: { model.settings.unloadModelWhenIdle = $0; model.saveSettings(); model.scheduleIdleUnload() }
+                        )) {
+                            Text("Never").tag(ModelIdleUnload.never)
+                            Text("After 5 minutes").tag(ModelIdleUnload.fiveMinutes)
+                            Text("After 15 minutes").tag(ModelIdleUnload.fifteenMinutes)
+                            Text("After 1 hour").tag(ModelIdleUnload.oneHour)
+                        }
+                        .labelsHidden()
+                        .fixedSize()
+                    }
+                    RowDivider()
                     SettingRow("Input sensitivity", caption: "Lower filters help quiet voices but let more background noise through.") {
                         Picker("Input sensitivity", selection: setting(\.silenceThreshold)) {
                             Text("Standard").tag(Float(0.002))
@@ -95,7 +109,9 @@ struct SettingsView: View {
                 SettingsSection("App") {
                     SettingToggle("Show in Dock", caption: "When off, use the menu bar to open BetterWispr. Your dictation shortcut still works.", isOn: setting(\.showInDock))
                     RowDivider()
-                    SettingToggle("Dictation sounds", caption: "Soft cues when you finish, cancel or need attention. Quiet during meeting capture.", isOn: setting(\.soundEffects))
+                    SettingToggle("Dictation sounds", caption: "Soft cues when dictation starts listening, finishes, cancels or needs attention. Quiet during meeting capture.", isOn: setting(\.soundEffects))
+                    RowDivider()
+                    SettingToggle("Pause music while dictating", caption: "Pauses Music and Spotify while you speak, then resumes them. Browsers and other players keep playing. macOS asks for permission for each of these apps that is open when you turn this on.", isOn: pauseMediaWhileDictating)
                     RowDivider()
                     SettingToggle("Floating recording capsule", caption: "A small voice control at the bottom of your screen.", isOn: setting(\.showCapsule))
                     RowDivider()
@@ -108,10 +124,38 @@ struct SettingsView: View {
                     SettingToggle("Save dictation history", caption: "Keep text on this Mac so you can find and reuse it.", isOn: setting(\.saveHistory))
                 }
 
+                SettingsSection("Calendar") {
+                    SettingToggle("Use Calendar", caption: model.settings.useCalendar && !model.calendarGranted
+                                      ? "Waiting for Calendar access. Choose Allow… for Calendar under Permissions."
+                                      : "A meeting note started during an event takes its title and the people invited.",
+                                  isOn: Binding(get: { model.settings.useCalendar }, set: { model.useCalendar($0) }))
+                    if model.settings.useCalendar, model.calendarGranted {
+                        ForEach(model.calendarAccounts) { account in
+                            RowDivider()
+                            Text(account.title)
+                                .font(.callout.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 16)
+                                .padding(.top, 12)
+                                .padding(.bottom, 4)
+                                .accessibilityAddTraits(.isHeader)
+                            ForEach(account.calendars) { calendar in
+                                if calendar.id != account.calendars.first?.id { RowDivider() }
+                                SettingToggle(calendar.title, isOn: includes(calendar))
+                            }
+                        }
+                    }
+                } footer: {
+                    Text("Reads the accounts in the Calendar app on this Mac, including shared and subscribed calendars, and works offline. The event title and invitees go to your notes model with the transcript.")
+                }
+
                 SettingsSection("Permissions") {
                     PermissionStatusRow(title: "Microphone", caption: "Needed to hear your voice.", granted: model.microphoneGranted, action: model.requestMicrophone)
                     RowDivider()
                     PermissionStatusRow(title: "Accessibility", caption: "Needed for automatic paste and modifier-key shortcuts.", granted: model.accessibilityGranted, action: model.requestAccessibility)
+                    RowDivider()
+                    PermissionStatusRow(title: "Calendar", caption: "Optional. Turns on Use Calendar for meeting notes.", granted: model.calendarGranted) { model.useCalendar(true) }
                 } footer: {
                     Label("Built-in models process speech on this Mac. A selected API connection sends audio to its endpoint. Temporary recordings are removed after processing; external providers control their own retention.", systemImage: "lock.shield")
                 }
@@ -141,6 +185,9 @@ struct SettingsView: View {
         .toggleStyle(.switch)
         .animation(.ui, value: model.microphoneGranted)
         .animation(.ui, value: model.accessibilityGranted)
+        .animation(.ui, value: model.calendarGranted)
+        .animation(.ui, value: model.settings.useCalendar)
+        .animation(.ui, value: model.calendarAccounts)
     }
 
     static let spokenLanguages = [
@@ -168,6 +215,24 @@ struct SettingsView: View {
         return model.phraseBoosterInstalled
             ? "Add the names and terms you say often. When you speak English, the phrase booster listens for them and fixes their spelling."
             : "Add the names and terms you say often, then download the phrase booster there so Parakeet listens for them. About 100 MB, runs on this Mac."
+    }
+
+    private var pauseMediaWhileDictating: Binding<Bool> {
+        Binding(get: { model.settings.pauseMediaWhileDictating }, set: { isOn in
+            model.settings.pauseMediaWhileDictating = isOn
+            model.saveSettings()
+            if isOn { Task { await AppleEventMediaPlayers.requestPermission() } }
+        })
+    }
+
+    private func includes(_ calendar: CalendarInfo) -> Binding<Bool> {
+        Binding(
+            get: { !model.settings.excludedCalendarIDs.contains(calendar.id) },
+            set: { isOn in
+                if isOn { model.settings.excludedCalendarIDs.remove(calendar.id) } else { model.settings.excludedCalendarIDs.insert(calendar.id) }
+                model.saveSettings()
+            }
+        )
     }
 
     private func setting<Value>(_ keyPath: WritableKeyPath<AppSettings, Value>) -> Binding<Value> {

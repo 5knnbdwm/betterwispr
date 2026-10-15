@@ -15,16 +15,16 @@ organization, not separate packages or a plugin loader.
 Sources/
   BetterWispr/
     App/              Lifecycle, session coordination, global shortcut, capsule and toast panels, updater
-    Features/         Dashboard, insights, meetings, history, models, vocabulary, style, settings and capsule UI
+    Features/         Dashboard, insights, meetings, transcribe, history, models, vocabulary, style, settings and capsule UI
     Design/           Small shared view components and the brand mark, which also renders the app icon
   BetterWisprCore/
     Domain/           AppSettings, writing styles and app categories, usage insights, Transcript, VocabularyEntry and Meeting value types
     Persistence/      SavedState, per-meeting files and atomic local JSON storage
-    Audio/            Microphone and system audio capture, temporary recordings and level metering
+    Audio/            Microphone and system audio capture, temporary recordings, level metering and media file chunks
     Speech/           SpeechProvider contract, model catalog, Apple and WhisperKit
     Transcription/    English filler/stutter cleanup, spoken email layout, optional notes-model polish, writing styles and vocabulary replacements
-    Notes/            Meeting notes with Apple Intelligence, Ollama, signed-in CLIs and explicit API connections
-    Integrations/     Clipboard and guarded paste delivery
+    Notes/            Meeting notes with Apple Intelligence, the built-in model, Ollama, signed-in CLIs and explicit API connections
+    Integrations/     Clipboard and guarded paste delivery, and the yt-dlp link downloader
   BetterWisprCLI/      Developer entry point for model and file smoke tests
 ```
 
@@ -40,7 +40,12 @@ the policy immediately and persist through the existing workspace store.
 
 1. A dashboard action or the global shortcut (**Option–Space** unless changed in
    Settings) starts a session. Capture the previously focused external app before
-   showing the nonactivating capsule.
+   showing the nonactivating capsule. While the session is preparing, recording
+   or transcribing, a second Carbon hot key makes Escape (also with the dictation
+   shortcut's held modifiers unless they include Command, so Command-Option-Escape
+   stays Force Quit) cancel it from any app through the same Undo path;
+   it is unregistered as soon as the session leaves those phases, so other apps
+   keep Escape.
 2. Validate the selected provider and check microphone permission. Apple speech
    authorization and API-key checks still precede capture. Installed neural-model
    warm-up runs independently, so it need not delay capture; readiness is checked
@@ -51,6 +56,18 @@ the policy immediately and persist through the existing workspace store.
 4. Pass the recording URL, selected language and vocabulary hints to the provider.
    Entries written as a voice command ("question mark", "at the rate") are not
    hints, because boosting command words drops neighbouring words.
+   With "Use screen context" on, Parakeet with the phrase booster installed and
+   English or automatic language, up to 20 names from the selected text and
+   window text also go to the provider as screen terms
+   (`DictationContext.spellingTerms`). These are mixed-case words such as
+   WhisperKit and capitalized words that macOS spell checking rejects, most
+   frequent first. The clipboard is not used. Recognition waits at most
+   300 ms for the capture and leaves it running for Medium. Other providers
+   ignore screen terms, so they never
+   reach a speech API. A screen term only replaces decoded words that macOS
+   spell checking rejects, because a name on screen is no evidence it was said.
+   With no vocabulary hints, the phrase booster pass runs only when the first
+   pass has a misspelled word. Screen-term replacements are not vocabulary fixes.
    Provider partial callbacks are provisional text during recognition, not audio
    streaming while capture is still running. The Parakeet live preview is the
    one exception: `LiveTranscriber` re-recognizes the unconfirmed tail of the
@@ -63,9 +80,12 @@ the policy immediately and persist through the existing workspace store.
    commands, spoken numbers as digits and the @, # and % symbols for English
    and Auto. For English
    text, **Medium** then asks the notes model the user chose in Models (Apple
-   Intelligence, Ollama, a signed-in CLI or an API connection) for a clarity edit
+   Intelligence, the built-in model, Ollama, a signed-in CLI or an API connection) for a clarity edit
    with `TranscriptPolisher` instructions, plus the selected text, clipboard and
-   window text when "Use screen context" is on. The edit is bounded by a timeout and
+   window text when "Use screen context" is on and the dictation started in
+   Medium. Screen context is captured when it is on and either Parakeet with
+   the phrase booster is selected for English or automatic language, or Medium
+   has an available notes model. Only the Medium case reads the clipboard. The edit is bounded by a timeout and
    rejected when it answers the dictation, adds new words or changes length too
    much; any failure keeps the Light text, and Medium never picks a different
    model than the one selected.
@@ -90,6 +110,14 @@ the policy immediately and persist through the existing workspace store.
    user clipboard changes. Make failed insertion recoverable through copy either way.
 7. Remove temporary audio on completion/error/cancellation and return to idle.
 
+With "Pause music while dictating" on, `MediaPauser` sends Apple Events to pause
+Music and Spotify when the phase enters preparing, only if they report playing.
+When the phase leaves recording for any other phase it resumes only the apps it
+paused that still report paused. Operations run one at a time, address the
+running process so a closed app is never launched, and never prompt during
+dictation; consent is asked once when the setting turns on. Quitting waits for
+the resume through `terminateLater`. Meeting capture does not pause media.
+
 Swift UI-facing state and speech-provider methods are isolated to `@MainActor`.
 Audio callbacks must not mutate view state unsafely. Cancelled operations must
 not publish stale text or paste a result from a prior session. Keep these
@@ -98,19 +126,22 @@ behavior that unit tests cannot establish.
 
 ## Meeting notes flow
 
-`MeetingModel` owns meetings and is separate from dictation. It loads its own
-speech provider with `download: false` and releases it when the meeting ends.
+`MeetingModel` owns meetings and is separate from dictation. Each meeting loads
+its own speech provider with `download: false` and releases it once its last
+chunks are transcribed and its speakers are found.
 The Notetaker page's settings menu exposes the same model and microphone
 selection as dictation, plus the notes model; both use `SpeechModel.makeProvider()` with independent
 provider instances. The model name is captured when recording starts. The page
 lists notes by day beside the current note (the one recording, otherwise the
 latest); `MeetingModel.selectedID` opens one full page, and nil returns to the
 list. Starting a meeting docks its card beside the call and leaves the dashboard
-on the list; the finished note opens there once notes are written. Personal thoughts, the transcript, and the generated summary have separate
+on the list; the finished note opens there once notes are written, unless
+another meeting is recording by then. Personal thoughts, the transcript, and the generated summary have separate
 tabs backed by the existing meeting fields.
 
-1. Starting a meeting saves an empty `Meeting`, checks microphone permission and
-   starts `MeetingRecorder`. The microphone becomes "Me". On macOS 14.2 and later
+1. Starting a meeting saves an empty `Meeting`, named after the Calendar event
+   under way when Use Calendar is on (see [Calendar events](#calendar-events)),
+   checks microphone permission and starts `MeetingRecorder`. The microphone becomes "Me". On macOS 14.2 and later
    a private Core Audio process tap on a private aggregate device records every
    other app as "Them". If the tap fails, the meeting records the microphone only
    and says so. Recording starts before the speech provider finishes loading, so
@@ -131,21 +162,26 @@ tabs backed by the existing meeting fields.
 3. One serial queue transcribes chunks in order, applies the same cleanup and
    vocabulary as dictation, keeps raw and final text, inserts the segment by start
    time and saves. A failed chunk shows a message and the meeting continues.
-   When speaker detection is installed and the Mac runs macOS 15 or later
-   (FluidAudio issue 878 crashes its Core ML path on macOS 14), each transcribed
-   "Them" chunk is also resampled to 16 kHz mono and appended to one
-   `SpeakerRecording` file, which remembers where each segment sits in it.
-4. Stopping closes both sources and transcribes the remaining chunks. If a
-   `SpeakerRecording` exists, FluidAudio's `OfflineDiarizerManager` (pyannote
-   community-1 with VBx clustering) runs on it with models that
-   `SpeakerDetection.loadModels` reads from disk; it never downloads. Each "Them"
+   When speaker detection is installed, each transcribed "Them" chunk is also
+   resampled to 16 kHz mono and appended to one `SpeakerRecording` file, which
+   remembers where each segment sits in it.
+4. Stopping closes both sources and transcribes the remaining chunks. The next
+   meeting can start as soon as the recorder has handed those chunks off, while
+   the stopped one keeps transcribing, finding speakers and writing notes. If a
+   `SpeakerRecording` exists, Argmax SpeakerKit's pyannote pipeline runs on it
+   with models that `SpeakerDetection.installedDiarizer(from:)` loads from disk; it never
+   downloads. The models are pinned to one revision of
+   `argmaxinc/speakerkit-coreml` and live in
+   `BetterWispr/Models/models/argmaxinc/speakerkit-coreml`. Each "Them"
    segment gets the voice heard longest within it, numbered 1, 2, 3 by first
-   appearance, in `MeetingSegment.participant`. Skip or an error leaves the
-   segments as "Them". Names typed above the transcript are saved in
+   appearance, in `MeetingSegment.participant`. Skip stops waiting at once and
+   leaves the segments as "Them"; detection already running finishes in the
+   background on audio held in memory, so the recording file is deleted
+   normally. An error also leaves the segments as "Them". Names typed above the transcript are saved in
    `Meeting.participantNames`, and `MeetingSegment.label(names:)` renders the
    transcript, Markdown and notes input with them. Then it writes
    notes with the explicitly chosen notes model: Apple Intelligence by default,
-   local Ollama, Claude Code, Codex, or an OpenAI-compatible chat API. Transcription
+   the [built-in model](#built-in-notes-model), local Ollama, Claude Code, Codex, or an OpenAI-compatible chat API. Transcription
    selection remains independent. `NotesWriter` combines the transcript and all
    personal thoughts, condensing long inputs before the final structured summary.
    If condensation still exceeds the budget it reports an error instead of
@@ -157,8 +193,122 @@ tabs backed by the existing meeting fields.
    speaker detection file is deleted after detection, on cancel and at quit, and
    shares the chunk prefix, so launch cleanup removes it too.
 
-A session token guards every continuation, so a stopped or quit meeting never
-receives a late segment or summary.
+Speaker labels can be fixed after a meeting. A remote line's speaker name in the
+transcript opens a menu, also on right-click, that calls
+`Meeting.assign(segment:toParticipant:)` to move that line to another speaker, to
+plain "Them" while some remote lines have no speaker, or to a new speaker
+numbered by `Meeting.nextParticipant`, the lowest number no line or non-blank
+saved name uses. The Merge into menu beside each name
+calls `Meeting.mergeParticipant(_:into:)`, which relabels every line of one
+speaker as another, moves the name across when the target has none and drops the
+old number's name. Me lines never move, because echo removal and the notes prompt
+treat Me as the person recording. Both menus are hidden while the meeting is
+active, because detection replaces the segments when it finishes. A relabel
+changes `summarySourceFingerprint`, so an existing summary shows as out of date.
+When the Mac supports speaker detection but it is not installed, a meeting with
+remote lines shows a card that downloads it only when tapped. It applies from the
+next meeting, because chunk audio is already deleted. "Don’t show again" sets
+`AppSettings.dismissedSpeakerDetectionOffer`.
+
+Each meeting being captured or processed is a `MeetingRun` in
+`MeetingModel.runs`. One run records at a time and any number process. Every
+continuation checks that its run is still the one registered for its meeting,
+so a cancelled or quit meeting never receives a late segment or summary. The
+recorder's chunks go to `recorderOwner`, and a new meeting waits for the stopped
+one's `MeetingRecorder.stop()` before it takes the recorder, so a stopped
+meeting's last chunks never land in the next one. Cancelling a meeting that is
+still starting stops the recorder only if that meeting holds it. While two
+meetings overlap, each holds its own loaded speech model.
+
+### Ask
+
+A meeting's Ask tab and the Ask field on the Notetaker page answer questions
+from saved meetings. `MeetingQuestion` reads each meeting as `MeetingLine`s:
+the transcript rows shown by default, labelled with their timestamp and speaker,
+then each nonempty line of My thoughts. When every line fits
+`MeetingNotesGenerator.budget`, all of them are sent. Otherwise lines are scored
+by the question words they share, rarer words weighing more, and the best lines
+are added with their neighbours in the same meeting until the budget is spent.
+The chosen lines keep meeting order, are numbered from 1 under a header for each
+meeting, and the model is told to cite them as `[n]`. Markers that name a sent
+line become `MeetingAnswer.Citation`s; numbers outside the sources are removed
+from the answer, so every citation points at a real line. A transcript citation
+opens its meeting on the Transcript tab and scrolls to that segment; a thought
+citation opens My thoughts.
+
+A meeting that still has a `MeetingRun` can be asked about too. Ask reads the
+lines saved when the question is sent, so a meeting that is recording,
+transcribing or finding speakers is answered from its transcript so far, and its
+Ask field says so. A summary that finishes while the Ask tab is open does not
+switch tabs. Speaker detection can later split a cited "Them" row into new rows;
+that citation then opens the Transcript tab without a highlighted line.
+
+Ask uses `AppSettings.askSelection`. Nil, the default, follows the notes model.
+Another choice reuses the notes providers, their Keychain keys and their
+availability checks, and it is never a fallback: an unavailable provider shows
+its reason instead of asking another one. Removing the notes connection it
+names, or changing that connection's endpoint, resets it to the notes model.
+Questions and answers live in view state and are not saved. The request runs in
+a view task, so Cancel, leaving the meeting or leaving the Notetaker page
+cancels it, and an answer for a removed question is dropped.
+
+### Calendar events
+
+`CalendarEvents` in `Integrations/` reads, through EventKit, the events that the
+Mac's Calendar app has already synced. That covers every account Calendar shows,
+such as iCloud, Google and Exchange, including shared and subscribed calendars.
+It never contacts a calendar server itself, so it works offline and needs no
+account sign-in of its own. It is an actor that owns the one `EKEventStore`, so
+EventKit's synchronous queries run off the main thread and only `Sendable`
+values such as `CalendarEvent` reach the app.
+
+It is off by default. Only turning on `AppSettings.useCalendar`, from the
+Settings toggle or the Calendar row under Permissions, calls
+`requestFullAccessToEvents`, which shows the macOS prompt the first time. A
+denial turns the setting back off and opens the Calendars pane of Privacy
+settings. The bundle declares `NSCalendarsFullAccessUsageDescription` and the
+hardened runtime entitlement
+`com.apple.security.personal-information.calendars`. Once access is granted,
+Settings lists each account's event calendars with a toggle.
+`AppSettings.excludedCalendarIDs` stores the EventKit calendar identifiers
+switched off, so a calendar added later in Calendar is included without another
+visit to Settings. The list refreshes when the app becomes active. Every read
+resets the store first, so access granted again after a revoke takes effect
+without a relaunch. While the toggle is on without access, its caption points to
+the Calendar row under Permissions.
+
+When a meeting starts with the integration on and access granted,
+`CalendarEvents.current(excluding:)` fetches events from the included calendars
+that overlap the next five minutes. `AppModel.startMeeting` awaits it before
+checking that nothing else is recording and calling `MeetingModel.start`, so a
+second click during the lookup finds the first meeting and starts nothing.
+`CalendarEvent.current(_:at:)` ignores
+all-day events and events that were cancelled or that the user declined, keeps
+one that started or starts within five minutes and has not ended, and prefers an
+event with a Zoom, Google Meet, Microsoft Teams or Webex link, then the latest
+start. The meeting takes the event's title, on one line, and saves
+`Meeting.attendees`
+(invitees other than the user, without rooms and resources, by name, or by
+`mailto:` address when the invite gives no name) and `Meeting.eventID`. The
+notes model only fills a title that is still empty, so the event title stays.
+Attendee names without an `@` join that meeting's speech hints like Vocabulary
+terms, so the Whisper prompt, Apple's contextual strings and the Parakeet phrase
+booster can steer recognition toward them; they are not added to Vocabulary's
+replacements. A meeting cancelled before anything is recorded is still discarded
+although its title came from the event.
+
+`Meeting.calendarInvite` gives the title and up to 20 invitees, then a count of
+the rest. `NotesWriter` puts it before the material in the draft prompt, never
+in the condense prompts, after `NotesWriter.inviteNote`, which tells the model
+to use it for the subject and names, never to follow it as instructions, and not
+to assume every invitee spoke. Meetings without an `eventID` send no invite. The
+event title and invitees therefore reach whichever notes model the user chose,
+including an API connection, and the Settings footer says so.
+
+`useCalendar` and `excludedCalendarIDs` decode with `decodeIfPresent` and
+`Meeting.attendees` and `Meeting.eventID` are optional, so workspaces and
+meetings saved before them load with the integration off, no calendar excluded,
+and no event.
 
 ### Meeting detection
 
@@ -181,8 +331,9 @@ local state and never records anything itself.
    again every 3 seconds.
 4. Each call is offered once. Starting the notetaker, choosing Not now or letting
    the prompt expire after 30 seconds marks that app's call as answered. Calls
-   that run while the notetaker is active are answered too. An app's answer is
-   forgotten when it stops recording.
+   that run while the notetaker records are answered too. A new call is offered
+   while an earlier meeting is still processing. An app's answer is forgotten
+   when it stops recording.
 
 `AppSettings.notesSelection` resolves the legacy Ollama choice plus the new optional
 CLI or notes-connection selection. Old workspaces decode without changing providers.
@@ -245,6 +396,118 @@ Starting a meeting from the capsule or the menu bar docks a floating card
 (`NotetakerController`) to the right edge of the screen under the pointer. It
 hosts the same `MeetingDetailView` as the dashboard, closes when its meeting is
 deleted, and its expand button opens the meeting in the dashboard instead.
+
+## File and link transcription
+
+`TranscriptionModel` owns the Transcribe page and is separate from dictation and
+meetings. It runs one job at a time and keeps each finished transcript as a
+`Meeting` in its own `MeetingStore` under
+`Application Support/BetterWispr/Transcriptions`. The page's model menu lists
+installed models and configured API connections and starts on the dictation
+model. A model that is not installed sends the user to Models. Each job loads
+its own provider with `download: false`, and connections can't be edited while
+a job runs.
+
+1. `MediaLink` accepts only http and https links with a host. `YTDLP` runs
+   BetterWispr's own copy in `Application Support/BetterWispr/Tools`, otherwise
+   one from Homebrew, `/usr/local/bin`, `~/.local/bin` or MacPorts. It installs
+   or updates its copy only when the user clicks Install or Update, or runs
+   `BetterWisprCLI --download-yt-dlp`. The binary comes from the latest GitHub
+   release and is written only after its SHA-256 matches the release's
+   `SHA2-256SUMS`. yt-dlp runs with `--no-config`, a reduced environment and the
+   link after `--`. It fetches the best m4a or mp4 audio of the first video into
+   a private `betterwispr-media-<uuid>` folder, which is deleted after the
+   transcript, on error and on cancel. Deno or Node, when found, is passed with
+   `--js-runtimes`.
+2. `MediaAudio` reads only the first audio track with `AVAssetReader`, so
+   alternate-language tracks are not mixed in. It converts to 16 kHz mono and
+   writes one `betterwispr-media-<uuid>.caf` chunk at a time, holding about one
+   chunk of samples in memory. Each cut lands at the quietest point of a 300 ms
+   moving average of 10 ms levels, 30 to 59.5 seconds after the previous cut,
+   and the last 59.5 seconds or less become the final chunk. A cut leaves at
+   least one second after it, because Parakeet rejects audio under 0.3 seconds
+   and a failed chunk fails the job. No chunk is dropped
+   for being quiet. Files with no audio track or an unreadable container, such
+   as mkv or webm, fail with the list of supported formats.
+3. `MediaTranscriber` sends each chunk to the selected provider in order,
+   applies the meeting cleanup and vocabulary, keeps the raw text beside the
+   cleaned text and deletes the chunk. A failed chunk fails the job, and
+   cancellation is checked after each chunk. Every segment is `.them`.
+   `participant` is set only when Speaker detection is installed, which labels
+   the voices afterwards and splits segments where the voice changes, as it
+   does for meetings.
+4. A job that found speech is saved and opened, unless another transcript is
+   open. A job that found none saves nothing and says so. Launch and quit delete
+   leftover `betterwispr-media-*` files and folders.
+
+The detail view names a voice only on segments Speaker detection labeled, so a
+transcript never says "Them". Copy all and the .txt and .md exports use the same
+timestamped lines. `BetterWisprCLI --media PATH|URL` runs the same pipeline and
+prints one JSON segment per line.
+
+## Built-in notes model
+
+The built-in model is a notes provider that runs inside BetterWispr, so meeting
+notes, Medium cleanup, correction review and Ask work without Apple
+Intelligence, Ollama, a CLI or an API key. `NotesModelSelection.builtIn` is
+saved as `AppSettings.notesBuiltIn` and as `askSelection`; a CLI, connection or
+Ollama choice in an older workspace still wins, so existing settings decode
+unchanged. Like every notes provider it is never a fallback: when it is selected
+but missing, notes, Medium and Ask report that instead of asking another model.
+
+`BuiltInModel` pins one file: `Qwen3.5-2B-Q4_K_M.gguf` from
+`unsloth/Qwen3.5-2B-GGUF` at revision
+`f6d5376be1edb4d416d56da11e5397a961aca8ae`, 1,280,835,840 bytes with a fixed
+SHA-256. It downloads only from the Download button in Models or
+`BetterWisprCLI --download-builtin-model`, through WhisperKit's
+`ModelDownloader` into `BetterWispr/Models/models/unsloth/Qwen3.5-2B-GGUF`.
+`install` then checks the size, hashes the file in 8 MB reads, loads it in a
+throwaway engine and samples one token under the notes grammar. Only then does
+it write `.betterwispr-installed` holding the revision and hash. A failure or
+cancel at any step deletes the folder. `isInstalled` compares that marker and
+the file size and never reads the file, and loading opens only the local file,
+so a missing model fails instead of downloading. A finished install from Models
+selects the built-in model unless the user picked another notes model
+meanwhile or a meeting is still recording or processing. Remove deletes the
+marker first, so a request that arrives meanwhile fails as not downloaded
+instead of loading the file. It then frees the weights, deletes the folder and
+leaves the selection alone.
+
+`LlamaEngine.shared` runs the file through llama.cpp's C API from the
+llama.swift package. One `OSAllocatedUnfairLock` holds its state: idle, loading
+(with the requests waiting for it), loaded, draining while running requests
+finish, or closing while the weights are freed. A request that arrives while
+they close waits and loads them again. The weights are memory-mapped
+with every layer on Metal. Each request opens its own 8,192-token context with a
+Q8_0 KV cache and frees it on its own thread, so requests share weights but
+never a context. Prompts use Qwen's chat template with thinking off. Template
+pieces are tokenized with control tokens and message text without them, so a
+transcript cannot close a turn. A prompt that leaves fewer than 1,024 tokens for
+the reply fails before a context opens, and a reply that fills the window fails
+instead of returning cut-off text. Sampling is greedy. Meeting notes add a GBNF
+grammar for the five `NotesDraft` fields; the top token is checked first and the
+whole vocabulary is masked only when the grammar rejects it.
+
+Requests take one of two lanes. Medium edits and correction review use the
+interactive lane, and meeting notes, Ask and the Models Test use the background
+lane. Prefill runs in 256-token batches, and each request checks between batches
+and between tokens whether to go on: a background request pauses while an
+interactive one holds the weights, and a cancelled or timed-out request stops
+within one batch. The polisher's character budget for the built-in model is
+21,504, derived from its 7,168 prompt tokens at the same 3 characters a token
+guessed for Apple's window, so it keeps screen context that Apple's 12,000
+would drop.
+
+The weights load on first use, or 450 ms into a Medium dictation through
+`MeetingNotesGenerator.warmUp`, and unload after 300 seconds without a request.
+`shutdown()` refuses new requests, cancels running ones and blocks until every
+llama object is freed. The app calls it last in `applicationWillTerminate` and
+the CLI on every exit path, because llama.cpp's Metal backend aborts the process
+at exit (status 134) while a model is alive. `scripts/build-app.sh` copies
+`llama.framework` into `Contents/Frameworks`, where the executable's
+`@executable_path/../Frameworks` run path finds it. Because the weights are a
+mapped file, resident size counts the mapped pages while the process's own
+footprint stays far smaller; [testing.md](testing.md) records both.
 
 ## Microphone selection
 
@@ -397,8 +660,9 @@ because FluidAudio reads the booster's tokenizer from that fixed folder. A
 `.betterwispr-installed` marker is written after the files load. `prepare`
 loads an installed booster with `CtcModels.loadDirect` and never downloads it;
 a missing or broken booster leaves plain Parakeet transcription unchanged.
-`transcribe` boosts only English or automatic-language dictation with a
-non-empty vocabulary and keeps the decoder's text when rescoring changes nothing.
+`transcribe` boosts only English or automatic-language dictation with
+vocabulary hints or screen terms and keeps the decoder's text when rescoring
+changes nothing.
 
 ## Add an integration
 
@@ -422,6 +686,8 @@ do not acknowledge receipt; slow recipient apps need explicit manual testing.
 Add only the concrete integration and its required settings. Do not introduce
 per-app speech providers or duplicate recording code. Any future network
 integration must require explicit opt-in and preserve the local default.
+Integrations that read personal data, like `CalendarEvents`, stay off until the
+user turns them on, and only that action may show the macOS permission prompt.
 
 ## Updates
 

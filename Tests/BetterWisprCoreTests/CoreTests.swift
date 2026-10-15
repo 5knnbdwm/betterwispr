@@ -32,8 +32,10 @@ import Testing
     let settings = try JSONDecoder().decode(AppSettings.self, from: Data(saved.utf8))
     #expect(settings.selectedModelID == "parakeet-v3")
     #expect(settings.dictationMode == .hold)
+    #expect(settings.unloadModelWhenIdle == .never)
     #expect(!settings.copyToClipboard)
     #expect(settings.soundEffects)
+    #expect(!settings.pauseMediaWhileDictating)
     #expect(!settings.showInDock)
     #expect(settings.theme == .dark)
     #expect(settings.shortcut == .optionSpace)
@@ -43,10 +45,12 @@ import Testing
     #expect(settings.onboardingStep == 0)
     var toggled = settings
     toggled.dictationMode = .toggle
+    toggled.unloadModelWhenIdle = .fifteenMinutes
     toggled.completedOnboardingVersion = 1
     toggled.onboardingStep = 2
     toggled.copyToClipboard = true
     toggled.soundEffects = false
+    toggled.pauseMediaWhileDictating = true
     toggled.showInDock = true
     toggled.theme = .system
     toggled.microphone = AudioInputDevice(id: "AppleUSBAudioEngine:Shure:MV7:1", name: "Shure MV7")

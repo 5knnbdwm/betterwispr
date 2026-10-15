@@ -58,7 +58,7 @@ final class MeetingDetector {
     /// Forgets calls that ended, treats calls running alongside the notetaker as answered, and offers the first new one.
     func update(_ calls: [DetectedMeeting], recording: Set<String>) {
         answered.formIntersection(recording)
-        if meetings.activity != .idle { answered.formUnion(calls.map(\.appID)) }
+        if meetings.capturingID != nil { answered.formUnion(calls.map(\.appID)) }
         let next = calls.first { !answered.contains($0.appID) }
         guard next != meeting else { return }
         meeting = next

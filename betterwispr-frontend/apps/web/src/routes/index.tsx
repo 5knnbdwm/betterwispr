@@ -1,11 +1,13 @@
-import { ArrowRightIcon, CheckIcon } from "@phosphor-icons/react";
+import { ArrowRightIcon, CheckIcon, CoffeeIcon } from "@phosphor-icons/react";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
 import DownloadCTA, { ClosingCTA } from "@/components/download-cta";
+import DownloadCount from "@/components/download-count";
 import HeroDemo from "@/components/hero-demo";
 import FeatureBento from "@/components/feature-bento";
 import Testimonials, { type Testimonial } from "@/components/ui/cards";
 import { comparisons } from "@/lib/comparisons";
+import { BUY_ME_A_COFFEE_URL } from "@/lib/links";
 import { pageHead } from "@/lib/seo";
 
 export const Route = createFileRoute("/")({
@@ -33,7 +35,7 @@ const FAQS = [
   ],
   [
     "How do I dictate?",
-    "Focus a text field, hold Option + Space, speak, and release to transcribe. You can switch to press to toggle or choose a different shortcut in Settings. Transcription begins after recording stops, rather than appearing word by word while you talk.",
+    "Focus a text field, hold Option + Space, speak, and release to transcribe. You can switch to press to toggle or choose a different shortcut in Settings. With a Parakeet model, the capsule shows your words as you speak. The text BetterWispr pastes is the transcription of the whole recording, made when you release.",
   ],
   [
     "Why does it need permissions?",
@@ -64,8 +66,34 @@ const FAQS = [
 const TESTIMONIALS: Testimonial[] = [
   {
     name: "GodelNumbering",
-    quote: "Just tried it out as I was looking for something that does this exact thing well (macbook). So far I dictated about 5 different things in different contexts, it worked without a single error! Good choice to use parakeet v3.\nNice work, thanks for building it!",
+    quote: "Just tried it out as I was looking for something that does this exact thing well (macbook). So far I dictated about 5 different things in different contexts, it worked without a single error! Good choice to pick parakeet v3.\nNice work, thanks for building it!",
     postUrl: "https://news.ycombinator.com/item?id=50046250",
+  },
+  {
+    name: "Ed | supersetapp.com",
+    handle: "@edsonboldrini",
+    quote: "I'm using this one and it's amazing",
+    postUrl: "https://x.com/edsonboldrini/status/2110483450759127044",
+    image: "https://pbs.twimg.com/profile_images/1950971738004520960/x6P9r8Bk_200x200.jpg",
+  },
+  {
+    name: "Adetola Solesi",
+    handle: "@adetola_solesi",
+    quote: "ok so someone made a free, open source dictation app for Mac. Hold Option and Space, talk, let go, and it types into whatever app you're in. The speech models run on your Mac, unless you plug in an API yourself. No account needed.",
+    postUrl: "https://x.com/adetola_solesi/status/2109431458519548036",
+    image: "https://pbs.twimg.com/profile_images/1980046673611988992/1Y-CcolV_200x200.jpg",
+  },
+  {
+    name: "apparent",
+    quote: "Interested to give this a try. I've tried Wispr Flow and found it to be quite good, but a bit pricey for my taste. I guess I assumed there were equally good models that were cheaper, and I suppose this is one of them.",
+    postUrl: "https://news.ycombinator.com/item?id=50051742",
+  },
+  {
+    name: "予知言 Lucian",
+    handle: "@YuzhiyanLucian",
+    quote: "语音输入也要按月订阅，我有点受不了。\n\nBetterWispr 是个免费的 Mac 语音输入工具。按住快捷键说话，松开，文字就填进当前输入框。\n\n选内置模型，下载好以后可以离线转写，录音不用上传。",
+    postUrl: "https://x.com/YuzhiyanLucian/status/2109842025994506677",
+    image: "https://pbs.twimg.com/profile_images/2109250064698753024/5fYTY_yO_200x200.jpg",
   },
   {
     name: "Sameer Vanjari",
@@ -75,9 +103,23 @@ const TESTIMONIALS: Testimonial[] = [
     image: "https://pbs.twimg.com/profile_images/1595780430233743362/2e1GDWhj_200x200.jpg",
   },
   {
+    name: "小弟调调",
+    handle: "@jaywcjlove",
+    quote: "BetterWispr - 免费开源、本地优先的 Wispr Flow 替代品：用 Whisper、Parakeet 和 Apple 语音在设备端听写",
+    postUrl: "https://x.com/jaywcjlove/status/2109855640743280671",
+    image: "https://pbs.twimg.com/profile_images/764536725750165504/DFOYV1w3_200x200.jpg",
+  },
+  {
     name: "frenchie4111",
-    quote: "This is awesome.",
+    quote: "This is awesome. I really want to get something like this integrated directly into my agent IDE.",
     postUrl: "https://news.ycombinator.com/item?id=50044781",
+  },
+  {
+    name: "AI 极客新闻",
+    handle: "@aigeeknews",
+    quote: "开源的 macOS 离线听写\n\nBetterWispr 按住 ⌥ Space 说话，松开后文字落进当前应用，转写在本机用 Whisper、Parakeet 或 Apple 的语音识别跑。",
+    postUrl: "https://x.com/aigeeknews/status/2109847316614217748",
+    image: "https://pbs.twimg.com/profile_images/2101566279299809280/ETiRfmNX_200x200.jpg",
   },
   {
     name: "Nikhil Bhima",
@@ -133,6 +175,7 @@ function HomeComponent() {
               <DownloadCTA />
             </div>
             <p className="mt-3 text-xs leading-relaxed text-white/75 sm:text-sm lg:mt-4">
+              <DownloadCount className="font-semibold text-white" />
               Free · macOS 14+
               <span className="block sm:inline">
                 <span className="hidden sm:inline"> · </span>
@@ -307,6 +350,37 @@ function HomeComponent() {
                 <p className="mt-4 text-base text-zinc-600">{answer}</p>
               </details>
             ))}
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="support"
+        className="page-shell pb-24"
+        aria-labelledby="support-title"
+      >
+        <div className="grid gap-8 border-t border-zinc-200 pt-12 md:grid-cols-[1fr_2fr]">
+          <div>
+            <p className="eyebrow">Support the project</p>
+            <h2 id="support-title" className="mt-4 text-3xl tracking-tight">
+              Free to use.
+              <br />
+              Fueled by coffee.
+            </h2>
+          </div>
+          <div>
+            <p className="max-w-lg text-base text-zinc-600">
+              BetterWispr has no subscription and no account. If it saves you
+              some typing, you can support its development with a donation of
+              any amount.
+            </p>
+            <a
+              href={BUY_ME_A_COFFEE_URL}
+              className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-lg bg-[#ffdd00] px-3 py-2 text-base font-semibold text-zinc-900 transition-all duration-700 ease-fluid hover:bg-[#ffe54d] active:scale-[0.98]"
+            >
+              <CoffeeIcon weight="fill" className="size-5" aria-hidden="true" />
+              Buy me a coffee
+            </a>
           </div>
         </div>
       </section>

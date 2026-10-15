@@ -315,8 +315,9 @@ func microphoneSpeechGateDoesNotDiluteBriefSpeechAcrossLargeBuffers(bufferSecond
     for _ in 0..<3 {
         observer.scheduleCheck()
     }
-    try await Task.sleep(for: .milliseconds(600))
-    #expect(changes == 1)
+    let deadline = ContinuousClock.now + .seconds(2)
+    while changes == 0, ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
+    try #require(changes == 1)
     observer.scheduleCheck()
     observer.cancel()
     try await Task.sleep(for: .milliseconds(600))
@@ -359,6 +360,27 @@ func everyListedParakeetV3LanguageReachesTheDecoderAsAHint(_ id: String) throws 
     #expect(languages.count == 25)
     for code in languages { #expect(ParakeetProvider.hint(for: code) != nil, "\(code)") }
     #expect(ParakeetProvider.hint(for: nil) == nil)
+}
+
+@Test func everyListedWhisperLanguageReachesTheEngineAsItsOwnToken() throws {
+    let languages = try #require(SpeechModel.catalog.first { $0.id == "whisper-turbo" }?.languages)
+    for code in languages { #expect(SpeechModel.engineLanguage(code) == code, "\(code)") }
+    #expect(SpeechModel.engineLanguage("en-US") == "en")
+    #expect(SpeechModel.engineLanguage("zh_Hans") == "zh")
+    #expect(SpeechModel.engineLanguage("auto") == nil)
+    #expect(SpeechModel.engineLanguage(nil) == nil)
+}
+
+@Test func everyDownloadableModelListsItsLanguagesByName() throws {
+    for model in SpeechModel.catalog where model.engine != .apple {
+        let names = try #require(model.languageNames, "\(model.id)")
+        #expect(!names.isEmpty, "\(model.id)")
+    }
+    let turbo = try #require(SpeechModel.catalog.first { $0.id == "whisper-turbo" }?.languages)
+    #expect(turbo.count == 100)
+    #expect(turbo.contains("es") && turbo.contains("yue"))
+    let small = try #require(SpeechModel.catalog.first { $0.id == "whisper-small" }?.languages)
+    #expect(small.contains("es") && !small.contains("yue"))
 }
 
 @Test func phraseBoosterCountsAsInstalledOnlyAfterACompletedInstall() throws {
@@ -445,6 +467,25 @@ func everyListedParakeetV3LanguageReachesTheDecoderAsAHint(_ id: String) throws 
         rescored: "Pick Notion today",
         replacements: [(original: "option", replacement: "Notion", keepsOriginal: true)]
     ) == "Pick an option today.")
+}
+
+@Test func termsReadFromTheScreenReplaceOnlyMisspelledWords() {
+    for spoken in [(original: "prism", replacement: "Prisma"), (original: "Doris", replacement: "Joris"), (original: "whisper kit", replacement: "WhisperKit")] {
+        #expect(!ParakeetProvider.keepsOriginal(spoken, spelledCorrectly: true))
+        #expect(ParakeetProvider.keepsOriginal(spoken, spelledCorrectly: true, readFromScreen: true))
+    }
+    #expect(!ParakeetProvider.keepsOriginal((original: "Versal", replacement: "Vercel"), spelledCorrectly: false, readFromScreen: true))
+    #expect(!ParakeetProvider.keepsOriginal((original: "Better Wisper", replacement: "BetterWispr"), spelledCorrectly: false, readFromScreen: true))
+    #expect(ParakeetProvider.keepsOriginal((original: "Supabase's", replacement: "Supabase"), spelledCorrectly: false, readFromScreen: true))
+}
+
+@Test func onlyVocabularyTermsCountAsFixesAndOtherTermsReplaceOnlyMisspelledWords() {
+    let judged = ParakeetProvider.judging(
+        [(original: "prism", replacement: "Prisma"), (original: "superbase", replacement: "Supabase"),
+         (original: "Doris", replacement: "Joris"), (original: "versal", replacement: "Vercel")],
+        spelledCorrectly: [true, false, true, false], vocabulary: [" joris", "Vercel"])
+    #expect(judged.replacements.map(\.keepsOriginal) == [true, false, false, false])
+    #expect(judged.vocabularyFixes == 2)
 }
 
 @Test func phraseBoosterDownloadsIntoTheFolderItLoadsFrom() {

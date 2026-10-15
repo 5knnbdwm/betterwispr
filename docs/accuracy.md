@@ -2,8 +2,9 @@
 
 Research reviewed 2026-10-08. Measured below are read speech, accented
 video-call conversation, held-out Indian English, recorded meetings with speaker
-labels, meeting notes judged against their transcripts, and Light cleanup on 290
-dictations saved on the development Mac. Recognition accuracy on natural
+labels, long talks and an interview transcribed from video files, meeting notes
+judged against their transcripts, and Light cleanup on 290 dictations saved on
+the development Mac. Recognition accuracy on natural
 dictation is still not measured: BetterWispr keeps no dictation audio, so there
 is nothing to score a reference against.
 The goal is to reduce real dictation errors on the user's hardware and languages;
@@ -516,10 +517,63 @@ appeared anywhere in the reference, which scored "Christian countries" to
   the held-out result is not blind. Spell checking uses the macOS English
   dictionary, which includes words the user has taught macOS.
 
+## Names read from the screen, 2026-10-14
+
+Synthetic speech only, on an M4 Pro. macOS `say` read 24 sentences that say
+none of 20 names and 10 sentences that say two each, in 7 English voices
+(Rishi, Aman, Daniel, Karen, Moira, Tessa, Samantha): 168 absent and 70 present
+clips. The names were Joris, Pannekeet, Supabase, Vercel, Mem0, Ollama, Figma,
+Raycast, Jira, Kubectl, Qwen3, Kaggle, Opennook, BetterWispr, Prisma, Deno,
+Groq, WhisperKit, FluidAudio and PostHog. Most absent sentences use words close
+to a name, such as vessel, prism, memo, llama, denote and whisper kit. Every clip got all 20 names with Parakeet Ultra,
+`--language en`, the phrase booster installed and no cleanup. Repeated runs
+gave identical text.
+
+| Names used as | Absent WER | Absent clips changed, worse | Present WER | Names spelled exactly |
+| --- | ---: | ---: | ---: | ---: |
+| Not used | 2.15% | | 30.43% | 38 / 140 |
+| Vocabulary, with the spelling guard | 7.96% | 55, 54 | 12.63% | 99 / 140 |
+| Screen terms, misspelled words only | 2.15% | 1, 0 | 24.64% | 63 / 140 |
+
+- As vocabulary, the names made 54 absent clips worse. All 54 came from the
+  eight sentences with prism, Doris, super base, ray cast, grok, better whisper,
+  whisper kit and fluid audio, such as prism to Prisma, Doris to Joris and
+  whisper kit to WhisperKit. A name on screen is no
+  evidence it was said, so screen terms only replace words macOS spell
+  checking rejects, such as superbase to Supabase and versal to Vercel.
+- That rule loses names Parakeet decodes as real words. BetterWispr, Deno,
+  Groq, WhisperKit, FluidAudio and PostHog went from 7, 7, 4, 3, 7 and 7 of 7
+  as vocabulary to none as screen terms, heard as "better whisper", Dino, Grog
+  or Grott, Whisperkit, "fluid audio" and "post hog". Listing a name in
+  Vocabulary still uses the looser guard.
+- The one absent change was "jiro rice" to "Jira rice" for "jeera rice", at the
+  same edit distance.
+- The phrase booster pass cost about 12 ms per second of audio, nearly
+  independent of the number of names. A 79 second clip took 0.22 s without
+  names, 1.19 s with 20 and 1.11 s with one. With screen terms alone, the pass
+  now runs only when the first pass has a misspelled word. That left text
+  identical on all 238 clips and kept the 20, 39 and 79 second clips within 3 ms
+  of no names. Short clips that say a name usually trigger the pass, so their
+  median went from 0.04 s to 0.15 s. Over 0.12 s were 20 of 167 absent and 58 of
+  69 present short clips with names, against 3 and 0 without. These counts
+  leave out each run's first clip as a warm-up.
+- Real speech is not measured. A real window lists fewer, unrelated names, and
+  macOS accepts words the user has taught it, so such a capitalized name is not
+  passed unless it is mixed-case.
+
+Reproduce with `.build/release/BetterWisprCLI --bench MANIFEST --model
+parakeet-ultra --language en --screen-terms "Joris,Pannekeet,…"` against the
+same manifest without `--screen-terms`. The clip sentences and the script that
+writes the clips and manifest are not committed.
+
 ## Meetings and speakers, 2026-10-12
 
 Measured on an Apple M5 with macOS 27.0.1, release builds of `BetterWisprCLI`
 with the 0.1.5 changes, FluidAudio 0.17.5, `--language en` and Light cleanup.
+Speaker detection here is 0.1.5's FluidAudio 0.17.5 `OfflineDiarizerManager`.
+0.1.6 replaced it with Argmax SpeakerKit. Nothing in this section has been
+measured with SpeakerKit, including the WER of the split rows, which depends on
+where speaker detection hears the voice change.
 `--meeting` plays a file through the app's meeting chunker as call audio,
 transcribes each chunk as a meeting does and labels voices with Speaker
 detection. `scripts/evaluate_meetings.py` scores the segments against
@@ -616,6 +670,85 @@ file.
   runs. Every run before and after wrote "12.50 euro" as 1250.
 - One judge model scored the notes, and no person checked its counts.
 
+## Files and links, 2026-10-14
+
+Measured on an Apple M4 Pro with macOS 27.0.1, release builds of
+`BetterWisprCLI`, FluidAudio 0.17.5, Parakeet Ultra, `--language en` and Light
+cleanup. The corpus is the audio and English captions of three TED videos on
+YouTube: a 20 minute talk, a 41 minute interview between two people
+(`zIwLWfaAg-8`) and a 21 minute talk (`iCvmsMzlF7o`). Each reference is the
+caption text without cue timings, speaker prefixes, tags or parenthesized sound
+notes. Both sides are normalized as `scripts/evaluate_transcripts.py` does, and
+the cleanup's filler words (uh, um, er, hm, mm and their spellings) are removed
+from both. Word errors are the word edit distance. The captions are edited and
+leave out disfluencies, so insertions are high and about the same for every
+policy. The audio and captions are not committed.
+
+The chunk policy came first. Each pause-cut row cut a 16 kHz WAV copy of the
+file at the quietest point of a 300 ms moving average of 10 ms levels inside its
+window and sent the pieces through `--bench`. The whole-file row sent the file
+in one call, and the meeting chunker row played it through `--meeting`.
+
+| Policy | TED talk, 3,249 words | Interview, 6,139 | Talk 2, 3,204 | Total |
+| --- | ---: | ---: | ---: | ---: |
+| Whole file in one call | 243 | 873 | 166 | 1,282 |
+| Pause cut, 8 to 14.5 s | 244 | 865 | 158 | 1,267 |
+| Pause cut, 15 to 29.5 s | 240 | 843 | 173 | 1,256 |
+| Pause cut, 30 to 59.5 s | 230 | 840 | 159 | 1,229 |
+| Pause cut, 60 to 119.5 s | 233 | 847 | 157 | 1,237 |
+| Meeting chunker, 3 to 20 s | 257 | 909 | 169 | 1,335 |
+
+- The meeting chunker loses words. It deleted 42, 95 and 35 words against 17,
+  74 and 26 for the 60 to 119.5 s cut. Its 3 s minimum, forced 20 s cuts and
+  speech gate suit live calls, not files.
+- Files and links are cut at the quietest point 30 to 59.5 s after the previous
+  cut, and every chunk is transcribed. 59.5 s fits in one 125 s request of an
+  API connection and stays under the 120 s base timeout of Apple speech.
+- No interval was computed. The 30 and 60 second rows differ by 8 errors in
+  12,592 words, which does not establish that either is better. The shorter
+  chunks were kept for the engine limits.
+
+The Swift `--media` command, which the app shares, on 2026-10-15:
+
+| Input | Word errors | Substituted | Deleted | Inserted |
+| --- | ---: | ---: | ---: | ---: |
+| TED talk, m4a | 235 | 45 | 18 | 172 |
+| Interview, m4a | 839 | 132 | 79 | 633 |
+| Talk 2, m4a | 159 | 28 | 26 | 106 |
+| TED talk, mp3 | 241 | 41 | 17 | 183 |
+| TED talk, mp4 with a video track | 249 | 43 | 19 | 187 |
+
+- The three m4a files total 1,233 errors against 1,229 for the prototype's
+  30 to 59.5 s row, at most 5 apart on any file. The port decodes with
+  AVFoundation and `AVAudioConverter` instead of `afconvert`, so its levels and
+  cut points can differ slightly.
+- A second m4a run of the TED talk gave the same text, raw text and timings.
+- The mp3 and mp4 are ffmpeg conversions of the TED m4a. The mp4's cuts land
+  about 48 ms after the m4a's, likely AAC encoder priming, so a few words around
+  each cut change. Neither row is a claim about format accuracy.
+- The substituted, deleted and inserted counts come from a difflib alignment and
+  only approximate the split of the edit distance.
+- Whisper, Apple speech and API connections were not measured. No Whisper model
+  is installed on this Mac.
+
+Speaker detection, after the rebase onto the SpeakerKit detection from #34, on
+2026-10-15. The interview captions name the speaker of each turn, so each
+second of a labelled segment was compared with the captioned speaker under that
+second. A turn change inside a cue was placed by its character position.
+
+| Input | Captioned seconds | Agree with the captions | Voices |
+| --- | ---: | ---: | --- |
+| Interview, m4a | 2,259 | 94.3% | 1 and 3 for the host, 2 for the guest |
+| TED talk, m4a, one speaker | none | | 1 for 96.2% of the audio, 2 for 0.7%, 3 for 3.0% |
+
+- The agreement uses the voice to speaker mapping that agrees best. Segments
+  are 30 to 59.5 s chunks, or the pieces a chunk is split into when several
+  voices speak in it, so a segment that still holds both people counts against
+  the score.
+- The TED talk scored 237 word errors with detection, against 235 without it.
+  Detection transcribes a split chunk again in pieces, so the text changes a
+  little. This was one run, not a measurement of either way.
+
 ## Reproducible evaluation
 
 Create a consented local corpus of natural 3–30 second dictation clips, with a
@@ -650,6 +783,7 @@ swift build -c release --product BetterWisprCLI
 .build/release/BetterWisprCLI --meeting /tmp/meetings/ami-ES2004a.wav --model parakeet-ultra --language en > ES2004a.jsonl
 python3 scripts/evaluate_meetings.py /tmp/meetings/ami-ES2004a.json ES2004a.jsonl
 .build/release/BetterWisprCLI --meeting ES2004a.jsonl --notes ES2004a.md
+.build/release/BetterWisprCLI --media talk.m4a --model parakeet-ultra --language en > talk.jsonl
 python3 scripts/evaluate_transcripts.py results.jsonl --group language
 python3 scripts/evaluate_transcripts.py /path/to/pairs.jsonl
 python3 scripts/evaluate_transcripts.py /path/to/pairs.jsonl --raw

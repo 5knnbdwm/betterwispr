@@ -109,14 +109,14 @@ final class CapsuleController {
     }
 
     func update() {
-        if model.settings.showCapsule || model.phase != .idle || model.meetings.activity != .idle || model.meetings.message != nil
+        if model.settings.showCapsule || model.phase != .idle || !model.meetings.runs.isEmpty || model.meetings.message != nil
             || model.meetingDetector.meeting != nil { show() }
         else { panel.orderOut(nil) }
     }
 
     private func observeMeetings() {
         withObservationTracking {
-            _ = model.meetings.activity
+            _ = model.meetings.runs
             _ = model.meetings.message
             _ = model.meetingDetector.meeting
         } onChange: { [weak self] in

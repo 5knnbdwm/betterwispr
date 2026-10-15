@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 const SENTENCE = "Can we move the design review to Thursday at 3?";
 const WORDS = SENTENCE.length / 5;
@@ -25,6 +25,13 @@ const KEY_AT = KEY_WEIGHTS.map(
   (weight) => (keyClock += (weight / WEIGHT_SUM) * TYPING_MS),
 );
 
+const SPOKEN_WORDS = SENTENCE.split(" ");
+let speechClock = 0;
+const HEARD_AT = SPOKEN_WORDS.map(
+  (word) =>
+    ((speechClock += word.length + 1) / (SENTENCE.length + 1)) * SPOKEN_AT,
+);
+
 const BARS = Array.from(
   { length: 11 },
   (_, index) => 1 - Math.abs(index - 5) / 7,
@@ -40,6 +47,7 @@ const PHASE_LABEL: Record<Phase, string> = {
 
 /** Hero visual: one sentence typed by hand and dictated with BetterWispr, on a shared clock. */
 export default function HeroDemo() {
+  const figure = useRef<HTMLElement>(null);
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
@@ -47,18 +55,32 @@ export default function HeroDemo() {
       setElapsed(CYCLE_MS - 1);
       return;
     }
-    const start = performance.now();
-    const timer = window.setInterval(
-      () => setElapsed((performance.now() - start) % CYCLE_MS),
-      50,
+    let timer: number | undefined;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        window.clearInterval(timer);
+        if (!entry?.isIntersecting) return;
+        const start = performance.now();
+        setElapsed(0);
+        timer = window.setInterval(
+          () => setElapsed((performance.now() - start) % CYCLE_MS),
+          50,
+        );
+      },
+      { threshold: 0.4 },
     );
-    return () => window.clearInterval(timer);
+    if (figure.current) observer.observe(figure.current);
+    return () => {
+      observer.disconnect();
+      window.clearInterval(timer);
+    };
   }, []);
 
   const typed = KEY_AT.filter((at) => at <= elapsed).length;
   const typingClock = Math.min(elapsed, TYPING_MS);
   const typingWpm =
     typingClock < 1000 ? 0 : Math.round(typed / 5 / (typingClock / 60_000));
+  const heard = HEARD_AT.filter((at) => at <= elapsed).length;
   const phase: Phase =
     elapsed < SPOKEN_AT
       ? "listening"
@@ -68,6 +90,7 @@ export default function HeroDemo() {
 
   return (
     <figure
+      ref={figure}
       role="img"
       aria-label="Illustrative animation of typing and dictation; not a performance benchmark"
       className="mx-auto max-w-[880px] rounded-3xl bg-paper px-4 py-12 sm:px-16 sm:py-16"
@@ -92,14 +115,24 @@ export default function HeroDemo() {
             {phase === "pasted" && SENTENCE}
             <Caret />
           </SentenceSlot>
-          <div className="mt-6 flex h-10 items-center justify-center">
+          <div className="mt-6 flex h-28 flex-col items-center justify-end gap-1.5">
+            {phase !== "pasted" && heard > 0 && (
+              <LiveWords
+                confirmed={SPOKEN_WORDS.slice(
+                  0,
+                  phase === "listening" ? heard - 1 : heard,
+                ).join(" ")}
+                guess={phase === "listening" ? SPOKEN_WORDS[heard - 1] : ""}
+              />
+            )}
             <Capsule phase={phase} />
           </div>
         </DemoWindow>
       </div>
       <figcaption className="mt-8 text-center text-xs text-zinc-500">
         Illustration, not a benchmark. Simulated at {TYPING_WPM} wpm typing and{" "}
-        {SPEAKING_WPM} wpm speaking, with time for transcription.
+        {SPEAKING_WPM} wpm speaking with a Parakeet model, with time for
+        transcription.
       </figcaption>
     </figure>
   );
@@ -150,6 +183,16 @@ function SentenceSlot({ children }: { children: ReactNode }) {
 function Caret() {
   return (
     <span className="ml-0.5 inline-block h-5 w-0.5 translate-y-1 bg-ink" />
+  );
+}
+
+function LiveWords({ confirmed, guess }: { confirmed: string; guess: string }) {
+  return (
+    <span className="line-clamp-2 max-w-[360px] rounded-[14px] border border-white/15 bg-[#121212] px-3 py-2 text-left text-[13px] leading-snug shadow-lg shadow-black/20">
+      <span className="text-white/90">{confirmed}</span>
+      {confirmed && guess && " "}
+      <span className="text-white/50">{guess}</span>
+    </span>
   );
 }
 

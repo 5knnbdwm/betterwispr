@@ -77,7 +77,7 @@ public final class APISpeechProvider: SpeechProvider {
         let url = try connection.validatedURL()
         try connection.validateAPIKey(key)
         try connection.validateLanguage(language)
-        let language = language.flatMap { $0 == "auto" ? nil : Locale(identifier: $0).language.languageCode?.identifier }
+        let language = SpeechModel.engineLanguage(language)
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 60)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -133,10 +133,10 @@ public final class APISpeechProvider: SpeechProvider {
         let file = try AVAudioFile(forReading: url)
         let duration = Double(file.length) / file.processingFormat.sampleRate
         guard duration.isFinite, duration > 0 else { throw SpeechError.emptyAudio }
-        // Dictation is bounded at 120 s; allow a small scheduling margin at stop.
-        guard duration <= 125 else { throw SpeechAPIError.audioTooLong }
+        // Dictation is bounded by AudioRecorder.maximumDuration; allow a small scheduling margin at stop.
+        guard duration <= AudioRecorder.maximumDuration + 5 else { throw SpeechAPIError.audioTooLong }
         var chunks: [Data] = []
-        // ponytail: fixed 25 s Sarvam chunks can split words; use silence-aware cuts if boundary errors matter.
+        // ponytail: fixed 125 s chunks (25 s for Sarvam) can split a word at each cut; cut at quiet points with MediaAudio.cut if boundary errors matter.
         for start in stride(from: 0.0, to: duration, by: seconds) {
             try Task.checkCancellation()
             let buffer = try AudioProcessor.loadAudio(fromPath: url.path, startTime: start, endTime: min(duration, start + seconds))

@@ -10,6 +10,8 @@ BetterWispr is a private, offline speech-to-text app and an open-source alternat
 
 [Download the latest release](https://github.com/opennookorg/betterwispr/releases/latest) · [Website](https://betterwispr.com) · [Changelog](CHANGELOG.md)
 
+[![Buy me a coffee](https://shieldcn.dev/badge/Buy%20me%20a%20coffee-Support-FFDD00.svg?logo=buymeacoffee&variant=branded)](https://buymeacoffee.com/code_kartik)
+
 </div>
 
 ## Features
@@ -20,6 +22,7 @@ BetterWispr is a private, offline speech-to-text app and an open-source alternat
 - **Learns your corrections**: fix a misheard word once (in History, or right after it's pasted) and it's spelled right next time.
 - **Voice commands**: say "comma", "new line", "scratch that" or "sorry, remove that", and "at the rate KV" for "@KV".
 - **Meetings**: live transcript of you and the other side, plus on-device titles, summaries and action items with Apple Intelligence or a local Ollama model.
+- **Transcribe files and links**: drop in an audio or video file or paste a video link and get a timestamped transcript with the model you choose, to copy or export as text or Markdown. Links use yt-dlp, which BetterWispr installs only when you click Install.
 - **History**: raw and corrected transcripts, stored locally (can be turned off).
 - **Bring your own model**: optional Sarvam AI, Smallest AI or any OpenAI-compatible endpoint.
 
@@ -38,7 +41,7 @@ BetterWispr is a private, offline speech-to-text app and an open-source alternat
 
 If paste can't safely reach the previous app, the text is copied to your
 clipboard instead, so you never lose a dictation. Recordings stop automatically
-after two minutes.
+after ten minutes, with a countdown in the last 30 seconds.
 
 ## Bring your own model
 
@@ -72,6 +75,12 @@ falls back to a cloud provider on its own.
 ## Contributing
 
 Build instructions, project layout and guidelines are in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Star history
+
+<p align="center">
+  <a href="https://www.star-history.com/#opennookorg/betterwispr&Date"><picture><source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=opennookorg/betterwispr&type=Date&theme=dark" /><img alt="Star history of opennookorg/betterwispr" src="https://api.star-history.com/svg?repos=opennookorg/betterwispr&type=Date" /></picture></a>
+</p>
 
 ## License
 

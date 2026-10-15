@@ -49,7 +49,7 @@ public final class LiveTranscriber {
     public typealias Pass = @MainActor @Sendable ([Float]) async throws -> LivePass
 
     public static let sampleRate = 16_000
-    static let maximumSamples = 125 * sampleRate
+    static let maximumSamples = (Int(AudioRecorder.maximumDuration) + 5) * sampleRate
     static let minimumSamples = ASRConstants.minimumRequiredSamples(forSampleRate: sampleRate)
     private static let padding = [Float](repeating: 0, count: sampleRate)
 

@@ -6,6 +6,183 @@ version, Mac model, input device, engine/model and date for future runs. A
 successful build does not verify microphone capture, clipboard behavior or
 general recognition accuracy.
 
+## Built-in notes model check, 2026-10-15, version 0.1.6
+
+Apple M4 Pro with 48 GB, macOS 27.0.1, debug builds. `swift build`, all 242
+tests in `swift test` and `./scripts/build-app.sh` passed. The new tests use
+fake weights and small files, so none needs the download. They cover settings
+round trips, the install marker, prompt injection through control tokens,
+prompts and replies that overflow the window, timeouts, lane pauses, idle
+unload, a request that arrives while the weights close, shutdown during a load
+and shutdown waiting for an unload to finish.
+
+Memory figures below come from `/usr/bin/time -l`. Resident size counts the
+1.28 GB weights file, which is mapped rather than copied; the peak footprint is
+the process's own memory.
+
+- `BetterWisprCLI --download-builtin-model` downloaded 1,280,835,840 bytes in
+  116.55 s and passed the size, SHA-256 and load checks, exit 0. Its peak
+  footprint was 1,346,930,488 bytes because every 8 MB hash read stayed alive
+  until the loop ended. Reading each chunk in its own autorelease pool cut a
+  standalone hash of the file from 1,286 MB to 11 MB. Rerunning the checks on
+  the downloaded file then took 2.29 s, with 1,495,678,976 bytes resident and a
+  268,339,216-byte footprint.
+- `--meeting` with `--notes-model builtin` on the JSONL transcript of a scripted
+  four-person launch meeting exited 0 in 10.00 s, with 1,522,106,368 bytes
+  resident and a 293,799,928-byte footprint. After rebasing onto main it took
+  52.74 s, of which 42.35 s was Parakeet preparation (0.24 s in the earlier
+  runs). A CLI built from main at `aa1f9c2` also took 22 s and 23 s to prepare,
+  so the slowdown is not from this change. The run had
+  1,551,171,584 bytes resident and a 275,974,208-byte footprint. The notes
+  repeated items and gave Priya's slides to Marco.
+- `--bench` with `--cleanup medium --notes-model builtin` on two `say` clips
+  exited 0. The edits took 2.37 s, including loading the weights, and 1.63 s,
+  with 1,602,142,208 bytes resident and a 292,407,360-byte footprint. The first
+  clip's edit changed "Friday" to "Thursday" but kept "Actually, no, by
+  Thursday."
+- A temporary probe, since removed, used the same engine code. Loading took
+  0.24 s, and a 31,500-character prompt prefilled in 3.82 and 3.81 s.
+  Cancelling 150, 400, 700 and 1,000 ms into that prefill stopped it after 0.19,
+  0.28, 0.30 and 0.32 s, about one 256-token batch. A Medium-lane request sent
+  during the prefill finished in 0.58 s, with 1,586,462,720 bytes resident and
+  a 364,742,696-byte footprint. With `shutdown()` removed, the CLI exited 134
+  at `GGML_ASSERT([rsets->data count] == 0)` in `ggml-metal-device.m`; every
+  run above calls it and exited 0.
+- The app bundle passed `codesign --verify --deep --strict`, carries
+  `Contents/Frameworks/llama.framework` and links
+  `@rpath/llama.framework/Versions/Current/llama` with the
+  `@executable_path/../Frameworks` run path. Launched with a separate home
+  folder (`CFFIXED_USER_HOME`) so the installed BetterWispr kept running, it
+  loaded the embedded framework in two launches. Each quit through
+  `NSRunningApplication.terminate()`, after 94 s and 129 s, exited 0 and left
+  no crash report.
+
+The Download, Cancel, Remove and Test buttons, Medium dictation, meeting notes
+and Ask in the app, quitting during a load, offline loading in the app, macOS
+14, an Intel Mac, a Mac with 8 GB and a notarized build have not been exercised.
+
+- [ ] In Models, download the built-in model. Progress moves, and Cancel leaves
+  no `Models/models/unsloth/Qwen3.5-2B-GGUF` folder and no Remove button.
+  Download again; it finishes, becomes the notes provider and Test notes model
+  returns a summary.
+- [ ] Choose Medium with Use screen context, dictate an English sentence with a
+  self-correction into a text field and check the edit is pasted. Repeat with a
+  long selected text.
+- [ ] Record a real meeting with the built-in model selected. Notes are written,
+  and Activity Monitor shows BetterWispr's memory falling back after five idle
+  minutes.
+- [ ] Ask a question about a saved meeting with Ask set to the built-in model.
+- [ ] Start a Medium dictation and quit from the menu bar within a second, while
+  the weights load. BetterWispr quits and leaves no crash report.
+- [ ] Quit, turn off networking, relaunch and run a Medium dictation and meeting
+  notes. Both work without network access.
+- [ ] Remove the model while it is selected. Notes, Medium and Ask say it isn't
+  downloaded and never use another model.
+- [ ] Repeat the download, Test and a meeting on macOS 14 and on an Intel Mac.
+
+## File and link transcription check, 2026-10-15
+
+Apple M4 Pro, macOS 27.0.1, Parakeet Ultra, English. Speaker detection was not
+installed for the checks below until the last one. The CLI checks used a
+release build of `BetterWisprCLI --media`, which runs the same `MediaAudio`,
+`MediaTranscriber` and `YTDLP` code as the Transcribe page.
+[Accuracy](accuracy.md) has the numbers.
+
+- `--media` on the 20-minute TED talk as m4a, mp3 and an mp4 with H.264 video,
+  and on two more TED videos as m4a. Every run exited 0 and was scored against
+  the captions. Rerunning the TED m4a gave the same text and timings.
+- `--download-yt-dlp` installed yt-dlp 2026.08.19 into
+  `Application Support/BetterWispr/Tools` after the checksum matched.
+- `--media` on an 81-second YouTube link downloaded and transcribed it in 6.3
+  seconds. `javascript:alert(1)` and `not a link` were refused before any
+  download. A link that returns 404 and a YouTube video that doesn't exist
+  failed with yt-dlp's last error line. No `betterwispr-media-` folder or file
+  was left in the temporary directory after any of these runs.
+- Stopping `--media` with SIGTERM while it transcribed left one
+  `betterwispr-media-*.caf` chunk. Launching the debug app bundle with
+  `CFFIXED_USER_HOME` pointed at an empty folder removed it.
+- `swift test` covers the cut rule, chunk coverage of a file with silent gaps,
+  unreadable files, cleanup and deletion of every chunk, cancellation and a
+  failed chunk leaving no audio, the link rule, the checksum check, yt-dlp's
+  arguments, progress and error lines, its private folder after success, error
+  and cancel, and the app's job saving, cancelling and connection lock.
+- After rebasing onto main with the SpeakerKit speaker detection from #34, its
+  models installed, `--media` ran on the TED m4a and the interview. Both
+  exited 0 and ended with Finding speakers. [Accuracy](accuracy.md) has the
+  labels.
+- `swift build`, `swift test` and `./scripts/build-app.sh` passed. The
+  Transcribe page was rendered offscreen with two saved transcripts, a running
+  job and an open transcript, and the renders were checked by eye.
+
+Not exercised in the app: the sidebar entry, dropping or choosing a file,
+pasting a link, the Install and Update buttons, Cancel, the model menu, an API
+connection, Copy all, Export, Delete, Speaker detection labels, and quitting
+during a job. The dashboard did not open during the launch check. AIFF, CAF,
+FLAC, MOV and M4V files were not tried, and a WAV file was tried only in
+`swift test`. Pressing Control-C on a running `--media` was not tried.
+
+- [ ] Open Transcribe from the sidebar. Drop an m4a and a mov onto the drop
+  area, and choose a WAV with Choose File. Each shows Reading audio, then
+  Transcribing with a percentage, and is listed under Today when done.
+- [ ] Remove `Application Support/BetterWispr/Tools/yt-dlp` and have no
+  Homebrew copy. The page shows Install yt-dlp and Transcribe stays off for a
+  pasted link. Nothing downloads until Install yt-dlp is clicked. After it
+  installs, Transcribe a YouTube link.
+- [ ] Click Update with yt-dlp installed. The version only changes when a newer
+  release exists.
+- [ ] Press Cancel while a link downloads and again while a file transcribes.
+  Nothing is saved, and no `betterwispr-media-` folder or `.caf` file stays in
+  the temporary directory.
+- [ ] Pick another installed model in the menu and transcribe. With a
+  dictation model that is not installed and nothing picked, drop a file. The
+  app opens Models and downloads nothing.
+- [ ] Pick an API connection in the menu and transcribe a short file. Models
+  disables connection edits while the job runs.
+- [ ] Open a transcript. Copy all puts timestamped lines on the clipboard.
+  Export as Plain Text and as Markdown writes both files. Delete asks first,
+  then removes the transcript.
+- [ ] With Speaker detection installed, transcribe a two-person interview. The
+  lines show Speaker 1 and Speaker 2, and never Them.
+- [ ] Quit BetterWispr while a link downloads and again while a file
+  transcribes. No yt-dlp process keeps running after the quit, and after a
+  relaunch no chunk audio is left.
+
+## Speaker detection check, 2026-10-14, version 0.1.6
+
+Apple M4 Pro, macOS 27.0.1, debug builds. `swift build`, all 180 tests in
+`swift test` and `./scripts/build-app.sh` passed. Tests cover the install check
+(the marker and every pinned model folder must exist) and a cancelled wait
+returning within 5 seconds while the work behind it keeps running.
+`swift run BetterWisprCLI --download-speaker-detection` installed 15,468,430
+bytes of models into
+`~/Library/Application Support/BetterWispr/Models/models/argmaxinc/speakerkit-coreml`
+and its verification load passed. A stand-in 0.1.5 folder at
+`~/Library/Application Support/FluidAudio/Models/speaker-diarization` holding
+the BetterWispr install marker was removed after the install, and the Parakeet
+folder beside it was left alone. `--model parakeet-110m --meeting` ran on
+16 kHz WAV files made with `say`, alternating Samantha and Daniel. With 0.5 s
+pauses the four lines were labelled 1, 2, 1, 2. With no pauses, the 20-second
+chunks were cut at 10.3, 21.1 and 30.8 s, within 0.15 s of the real voice
+changes, into five lines labelled 1, 2, 2, 1, 2, which matches who spoke. These
+are synthetic voices, not people on a call. macOS 14, an Intel Mac, a real
+call, Skip and quitting during detection in the app, and the Models download
+button have not been exercised.
+
+- [ ] On macOS 14.2 or later, install Speaker detection in Models. Hold a call
+  with at least two remote people, stop the meeting and check that "Telling the
+  speakers on the call apart" appears, then Speaker 1, Speaker 2 labels and name
+  fields. Type a name and check the transcript, Copy transcript and regenerated
+  notes.
+- [ ] Press Skip during detection. The notes start at once and the meeting keeps
+  Them.
+- [ ] Quit during detection, relaunch and check no `betterwispr-meeting-voices-`
+  file is left in the temporary folder.
+- [ ] With 0.1.5's Speaker detection installed, update to 0.1.6. Models shows
+  Speaker detection as not downloaded. Download it and check that
+  `~/Library/Application Support/FluidAudio/Models/speaker-diarization` is gone.
+- [ ] Turn off Wi-Fi after installing and run a meeting. Speakers are labelled
+  without network access.
+
 ## Accuracy and meetings check, 2026-10-12, version 0.1.5
 
 Apple M5, macOS 27.0.1, release builds of `BetterWisprCLI`. Every check below
@@ -62,7 +239,8 @@ UI automation was not enabled for this session.
 
 macOS 27.0.1. `swift run BetterWisprCLI --download-speaker-detection` installed
 21 MB into `~/Library/Application Support/FluidAudio/Models/speaker-diarization`
-and its verification load passed. `--find-speakers` ran the app's
+and its verification load passed. `--find-speakers`, since replaced by
+`--meeting`, ran the app's
 `SpeakerRecording` path on two 35.5 second WAV files made with `say`, cut into
 5-second pieces. Lines were Samantha (0 to 9.8 s), Daniel (to 21.6 s), Samantha
 (to 26.6 s) and a third voice. With Rishi as the third voice the pieces were
@@ -71,17 +249,32 @@ Karen was merged into Samantha (1, 1, 2, 2, 1, 1, 1, 1): two similar synthetic
 female voices became one speaker. Each run took about 3 seconds and left no
 temporary files. These are synthetic voices, not people on a call. A real call,
 Skip, quitting during detection, renaming in the app and macOS 14 hiding the
-download have not been exercised.
+download have not been exercised. The remaining steps moved to the 0.1.6 check
+above.
 
-- [ ] Install Speaker detection in Models on macOS 15 or later. Hold a call with at
-  least two remote people, stop the meeting and check that "Telling the speakers
-  on the call apart" appears, then Speaker 1, Speaker 2 labels and name fields.
-  Type a name and check the transcript, Copy transcript and regenerated notes.
-- [ ] Press Skip during detection. The meeting keeps Them and writes notes.
-- [ ] Quit during detection, relaunch and check no `betterwispr-meeting-voices-`
-  file is left in the temporary folder.
-- [ ] On macOS 14, Models shows Speaker detection as needing macOS 15 and offers no
-  download.
+## Speaker correction check, 2026-10-14, version 0.1.6
+
+`swift test` covers `Meeting.assign`, `Meeting.mergeParticipant`,
+`Meeting.nextParticipant`, the labels and summary fingerprint after a change, and
+loading settings saved before `dismissedSpeakerDetectionOffer`. The menus and the
+download card have not been exercised in the app, and no download was run.
+
+- [ ] Open a finished meeting with Them lines and no speaker detection. Click a
+  Them line's speaker name, choose New speaker, and check it reads Speaker 1 and a
+  name field appears. Right-click the line's bubble and check the same menu opens
+  rather than only the text menu.
+- [ ] Move a line to another speaker and back to Them. Me lines show no speaker
+  menu, and right-clicking a Me line's selected text still offers Copy.
+- [ ] With two or more speakers, use Merge into on one. Its lines take the other
+  speaker's label, a typed name moves across when the target has none, and the
+  summary shows as out of date.
+- [ ] While a meeting records, transcribes or finds speakers, no speaker menu or
+  Merge into menu shows.
+- [ ] Without speaker detection, a finished meeting with Them lines
+  shows the download card. Download shows progress, Cancel stops it, a failure
+  shows Retry, and success hides the card. Don’t show again hides it in every
+  meeting after relaunch. Nothing downloads until Download is clicked.
+- [ ] With speaker detection installed, the card never shows.
 
 ## Live meeting capture recheck, 2026-10-10, version 0.1.4
 
@@ -585,6 +778,11 @@ retries. They do not access Keychain, mount disk images or submit to Apple.
   offers Undo for five seconds when speech was captured, then removes the
   session's temporary audio. Escape still cancels shortcut capture
   in Settings without changing the saved shortcut.
+- [ ] With TextEdit focused, speak and press Escape during toggle-mode recording,
+  during transcription, and while still holding ⌥ Space in hold mode. Each shows
+  "Transcript cancelled" with Undo and pastes nothing. Once the capsule is idle,
+  Escape reaches TextEdit again. Escape never stops a running notetaker. With a
+  ⌘ ⌥ dictation shortcut, ⌘ ⌥ Escape still opens Force Quit while dictating.
 - [ ] Hold mode: hold ⌥ Space, speak, release. The 96 × 28 point glass capsule
   shows only the wider waveform, with no cancel or finish buttons. Text is
   inserted once. Tap ⌥ Space briefly; recording stays active hands-free and
@@ -601,10 +799,16 @@ retries. They do not access Keychain, mount disk images or submit to Apple.
   model/settings/destination. Switching apps still prevents automatic paste.
   Expiry, dismissal, quitting or a new session discard the cancelled audio.
   Cancel before capture starts or after delivery begins: no Undo is offered.
-- [ ] With Dictation sounds enabled, finishing, completion, cancellation and
-  errors play quiet cues after microphone capture stops. Turning it off silences
+- [ ] With Dictation sounds enabled, a start cue plays once when the capsule
+  switches to Listening, and finishing, cancellation and errors play quiet cues
+  after microphone capture stops. No start cue plays when starting fails
+  (microphone denied, no input, model missing). Turning the setting off silences
   them; recording meeting audio also suppresses them. Start a new dictation during
   a cue: playback stops before capture. Check reduced motion and increased contrast.
+- [ ] Dictate past 9:30 in toggle mode with Parakeet, Whisper, Apple and an API
+  connection. At 9:30 the capsule shows "Stops in 0:30" and counts down, and
+  VoiceOver says "Dictation stops in 30 seconds." At 10:00 dictation finishes on
+  its own and pastes the whole transcript. Hold mode behaves the same while held.
 - [ ] Meeting recording uses a 100 × 26 point pill, thirteen waveform
   bars, green border and stop square. Clicking it still stops the notetaker.
 - [ ] Keep another app focused and hover the microphone, notetaker icon and chevron.
@@ -651,6 +855,36 @@ retries. They do not access Keychain, mount disk images or submit to Apple.
 - [ ] Move between Spaces, fullscreen windows and monitors. Confirm capsule
   positioning, keyboard controls, VoiceOver labels and reduced-motion behavior.
 
+## Pausing music while dictating
+
+Manual checks. Unit tests cover the pause and resume bookkeeping with a fake
+player; real playback and the Automation prompt need these steps.
+
+- [ ] Music playing: open Music, turn on Settings → App → Pause music while
+  dictating and allow the Automation prompt. Play a track and dictate. Music
+  pauses when the capsule appears and resumes as soon as the recording stops.
+  Repeat with a dictation cancelled with Escape and with "No speech heard."
+- [ ] Spotify playing: repeat the check with Spotify.
+- [ ] Nothing playing: with Music and Spotify paused or stopped, dictate. Neither
+  starts playing afterwards. With Music paused and Spotify playing, only Spotify
+  resumes.
+- [ ] Play Music again yourself during a dictation. It keeps playing when the
+  dictation ends. Known limit: a track you pause yourself during a dictation
+  looks the same as one BetterWispr paused, so it resumes.
+- [ ] Automation permission denied: deny the prompt, or turn the app off under
+  Privacy & Security → Automation. Dictation works normally, the music keeps
+  playing and no prompt or error appears during dictation.
+- [ ] App not open when the toggle was turned on: turn the setting on with
+  Spotify closed, then open Spotify, play and dictate. No prompt appears during
+  dictation and Spotify keeps playing. Turning the setting off and on with
+  Spotify open asks for permission. A closed app is never launched.
+- [ ] Quit mid-dictation: start dictating while Music plays and quit from the
+  menu bar. Music resumes and BetterWispr quits.
+- [ ] Quick tap: tap the shortcut, cancel at once and start again. Music is
+  paused during the new recording and resumes after it; it never plays while
+  the microphone is open.
+- [ ] Start meeting notes while Music plays. Music keeps playing.
+
 ## Clipboard and insertion
 
 - [ ] Start with a known clipboard string, dictate into TextEdit and verify final
@@ -664,10 +898,13 @@ retries. They do not access Keychain, mount disk images or submit to Apple.
   to idle without another sound, message or announcement. Copy-only still shows
   "Copied to clipboard"; with both output options off it shows "Transcript ready".
 - [ ] Notetaker starts, stops, finishes its notes and displays errors silently.
-- [ ] The locally installed cues (finish, cancellation and attention)
-  play from an app moved outside the build directory. Check quality and volume
-  on speakers and headphones. Removing a cue leaves that event silent; no
-  bundled or macOS sound replaces it.
+- [ ] On a Mac without `SoundOverrides`, start, finish, cancellation and
+  attention play the macOS sounds Tink, Purr, Bottle and Basso. Locally
+  installed override cues (`started.wav`, `finished.wav`, `cancelled.wav`,
+  `attention.wav`) replace them one by one and play from an app moved outside
+  the build directory. Check quality and volume on speakers and headphones.
+  Listen for the start cue in the transcript of a dictation that begins right
+  after the cue on speakers.
 - [ ] Repeat with a clipboard image or rich text; the app must preserve supported
   pasteboard representations, not just plain text.
 - [ ] Change clipboard contents while recognition/paste is pending. New user
@@ -751,6 +988,12 @@ retries. They do not access Keychain, mount disk images or submit to Apple.
   `github.com` mode Medium cleanup and Screen context Off while Use screen
   context is on. Dictate in a GitHub tab in Safari with a notes model that logs
   requests. No selected text, clipboard or window text is sent.
+- [ ] Select Parakeet with the phrase booster, Light cleanup and Use screen
+  context. Open a Slack or Messages chat that shows an unusual name such as
+  Pannekeet or Supabase and say it in a sentence. Expect the on-screen
+  spelling when the plain result was misspelled, ordinary words left alone,
+  no Vocabulary fix counted in Insights and no request to any notes model or
+  speech API. With an API speech connection selected, nothing changes.
 - [ ] With Medium cleanup, add the instruction "Use British spelling." Dictate
   "the color of the organization" in the mode. Expect British spelling from the
   notes model; outside the mode, American spelling stays.
@@ -777,6 +1020,11 @@ retries. They do not access Keychain, mount disk images or submit to Apple.
   download and confirm it is not reported as installed.
 - [ ] Compare Small, Turbo and Large v3 on the same clips; record peak memory,
   first load, warm inference and stop-to-final time. Test cancellation under load.
+- [ ] Set Unload speech model when idle to 5 minutes with Turbo loaded. After
+  five idle minutes, Activity Monitor shows BetterWispr's memory drop; the next
+  dictation loads the model again, offline, and transcribes. A dictation or
+  transcription in progress at the five-minute mark keeps the model until it
+  finishes. Waking the Mac or unlocking the screen does not load it again.
 
 ## Local history and privacy
 
@@ -999,6 +1247,94 @@ were not exercised in this UI pass.
   summary says Ollama isn't running; Apple Intelligence is never used instead.
 - [ ] Disconnect networking, then start, record, stop and summarize a meeting with
   an installed model. Everything works and a network monitor shows no requests.
+- [ ] Back-to-back meetings: stop a meeting with speech in its last seconds and
+  start the next one at once. The capsule offers the next call, the docked card
+  switches to the new meeting, and the first meeting's row shows Transcribing,
+  Finding speakers and then Writing summary. Its last words stay in its own
+  transcript and never appear in the new one. The new meeting records and
+  transcribes normally, and the dashboard does not jump to the first note while
+  the new one records.
+- [ ] Back-to-back meetings: cancel the new meeting while it says Preparing. The
+  first meeting still finishes its transcript and notes. Repeat with Cancel on
+  the first meeting's Writing summary step; the new meeting keeps recording.
+- [ ] Back-to-back meetings: quit mid-overlap. Both meetings are kept with their
+  durations and no `betterwispr-meeting-*.caf` files remain in the temporary
+  folder.
+- [ ] Open a meeting with a transcript and thoughts, choose Ask and ask about
+  something said in it. The answer names the lines it used, "Answered with"
+  shows the Ask model, and a question the meeting does not cover says so
+  instead of inventing an answer.
+- [ ] Click a transcript citation: the Transcript tab opens with that line
+  tinted and scrolled into view, even with transcript search text entered.
+  Click a My thoughts citation: My thoughts opens. Repeat in the docked card.
+- [ ] On the Notetaker page, ask a question answered in an older meeting. The
+  citation shows that meeting's title, and clicking it opens the meeting on the
+  cited line. Go back; the question and answer are still there.
+- [ ] Choose a different Ask provider in Models and in the Notetaker settings
+  menu. Ask uses it while summaries keep the notes model; "Same as notes"
+  follows the notes model again. Select a notes API connection for Ask, then
+  remove it or change its URL; Ask returns to "Same as notes".
+- [ ] Choose an unavailable Ask provider (Apple Intelligence off, or a CLI with
+  no model). The Ask field is disabled with the reason, and no other provider
+  is asked.
+- [ ] Ask with a slow model, then press Cancel, go back to the list, or open
+  another meeting before it answers. The request stops (no CLI process left, no
+  late answer appears) and a new question can be asked.
+- [ ] Back-to-back meetings: while the first meeting still shows Transcribing,
+  Finding speakers or Writing summary, open it and choose Ask. The field reads
+  "Ask about the transcript so far", the answer cites lines already shown, and
+  the Ask tab stays open when the summary finishes. Ask on the Notetaker page
+  during the overlap; lines from both meetings can be cited.
+
+### Calendar events
+
+Automated tests cover choosing the event, video link detection, the invite text
+given to the notes model, invitee names in the meeting's speech hints,
+discarding a cancelled event meeting, and loading settings and meetings saved
+before Calendar. None of them touches EventKit or the
+permission prompt. Run these checks on a Mac whose Calendar app has at least an
+iCloud or local calendar, a Google or Exchange account, a calendar shared with
+you, and a subscribed calendar. Reset the permission first with
+`tccutil reset Calendar org.betterwispr.app`.
+
+- [ ] Launch the packaged app, finish onboarding and start and stop a meeting with
+  Use Calendar off. macOS never asks for Calendar access, and Settings lists no
+  calendars.
+- [ ] Turn on Use Calendar in Settings. macOS asks once, with the
+  `NSCalendarsFullAccessUsageDescription` text. Allow it. Every calendar that
+  Calendar shows appears under its account, shared and subscribed calendars
+  included, each switched on. The Calendar row under Permissions shows granted.
+- [ ] Reset the permission, turn Use Calendar on and deny. The toggle turns back
+  off, the Calendars pane of Privacy settings opens, and starting a meeting gives
+  an untitled note as before. The Calendar row under Permissions opens the same pane.
+  Allow BetterWispr there without quitting it, come back and turn Use Calendar on.
+  The calendars appear without a relaunch.
+- [ ] Grant access, then create a timed event starting in three minutes with two
+  invitees and a Zoom link. Start a meeting. The note takes the event title, and
+  the meeting header lists the invitees, without you and without rooms. Stop it.
+  The written notes keep the event title. Record whether the summary names the
+  invitees who spoke and leaves out those who did not; do not assume either way.
+- [ ] Overlap that event with one without a video link that started later. The
+  meeting takes the event with the Zoom link. Decline the Zoom event, or have its
+  organizer cancel it, and start again. The meeting takes the other event.
+- [ ] Turn off the event's calendar in Settings and start a meeting. The note is
+  untitled and lists no one. Turn it back on and relaunch; the choice persists.
+- [ ] Repeat the event check with an event on a shared calendar and on a
+  subscribed calendar, then with an all-day event only. Shared and subscribed
+  events name the note; the all-day event does not.
+- [ ] Disconnect networking and start a meeting during an event already synced.
+  The note still takes its title and invitees, and a network monitor shows no
+  requests from BetterWispr.
+- [ ] Start a meeting during an event and cancel it before anything is
+  transcribed. The note is discarded, not kept with only the event title.
+- [ ] Revoke access in System Settings while Use Calendar is on and switch back.
+  The Permissions row shows Calendar as not granted, the calendar list is gone,
+  the Use Calendar caption asks for access, and new meetings are untitled. Allow
+  BetterWispr again in System Settings, leaving the toggle on, and switch back.
+  The calendars return without a relaunch, and a new meeting takes the event.
+- [ ] With access granted and every calendar on, click Start Notetaker during an
+  event. The window keeps responding while the note starts. Double-click Start
+  Notetaker; only one meeting starts.
 
 ## Accuracy
 

@@ -2,6 +2,7 @@ import AppKit
 import AVFoundation
 @preconcurrency import ApplicationServices
 import BetterWisprCore
+import Carbon.HIToolbox
 import Observation
 import OSLog
 import ServiceManagement
@@ -12,6 +13,9 @@ enum RecordingPhase: Equatable {
     case cancelled, completed(String)
     case failed(DictationFailure)
     case unpasted(String)
+
+    var isBusy: Bool { self == .preparing || self == .recording || self == .transcribing }
+    var holdsMicrophone: Bool { self == .preparing || self == .recording }
 }
 
 struct DictationFailure: Equatable {
@@ -75,6 +79,7 @@ final class AppModel {
     static let onboardingVersion = 1
     static let phraseBoosterID = "phrase-booster"
     static let speakerDetectionID = "speaker-detection"
+    static let builtInModelID = "built-in-model"
     static let unpastedCardSeconds = 5.0
     static let cancellationSeconds = 5.0
 
@@ -83,6 +88,15 @@ final class AppModel {
         didSet {
             cardDismissal?.cancel()
             cardDeadline = nil
+            if phase.isBusy != oldValue.isBusy {
+                onBusyChange?(phase.isBusy)
+                scheduleIdleUnload()
+            }
+            switch (oldValue.holdsMicrophone, phase.holdsMicrophone) {
+            case (false, true) where settings.pauseMediaWhileDictating: mediaPauser.pause()
+            case (true, false): mediaPauser.resume()
+            default: break
+            }
             onPresentationChange?()
         }
     }
@@ -106,29 +120,37 @@ final class AppModel {
     var models: [SpeechModel] { SpeechModel.catalog + settings.speechConnections.map(\.speechModel) }
     @ObservationIgnored lazy var updater = AppUpdater()
     let meetings: MeetingModel
+    let transcriptions: TranscriptionModel
     let meetingDetector: MeetingDetector
     var installation: ModelInstallation?
     var phraseBoosterInstalled = false
     var speakerDetectionInstalled = false
     var microphoneGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
     var accessibilityGranted = AXIsProcessTrusted()
+    var calendarGranted = CalendarEvents.isAuthorized
+    var calendarAccounts: [CalendarAccount] = []
+    @ObservationIgnored let calendarEvents = CalendarEvents()
     var microphones: [AudioInputDevice] = []
     var automaticMicrophone: AudioInputDevice?
     var onPresentationChange: (() -> Void)?
+    var onBusyChange: ((Bool) -> Void)?
     var onShowDashboard: (() -> Void)?
     var onShowNotetaker: ((UUID) -> Void)?
 
+    @ObservationIgnored let mediaPauser: MediaPauser
     @ObservationIgnored private let store: LocalStore
     @ObservationIgnored private let recorder = AudioRecorder()
     @ObservationIgnored private let startsServices: Bool
     @ObservationIgnored private let correctionWatcher = CorrectionWatcher()
     @ObservationIgnored private let globalShortcut = GlobalShortcut()
-    @ObservationIgnored private let cancelGlobalShortcut = GlobalShortcut()
+    @ObservationIgnored private let cancelGlobalShortcut = GlobalShortcut(id: 3)
+    @ObservationIgnored private let cancelShortcut = GlobalShortcut(id: 2)
     @ObservationIgnored private var microphoneObserver: AudioInputObserver?
     @ObservationIgnored private var shortcutWarning: String?
     @ObservationIgnored private var provider: (any SpeechProvider)?
     @ObservationIgnored private var preparedModelID: String?
     @ObservationIgnored private var loading: (id: String, task: Task<Void, any Error>)?
+    @ObservationIgnored private var idleUnload: Task<Void, Never>?
     @ObservationIgnored private var operation: Task<Void, Never>?
     @ObservationIgnored private var warmUp: Task<Void, Never>?
     @ObservationIgnored private var installTask: Task<Void, Never>?
@@ -147,7 +169,7 @@ final class AppModel {
     var modelRevision = 0
 
     var selectedModel: SpeechModel { models.first { $0.id == settings.selectedModelID } ?? models[0] }
-    var isBusy: Bool { phase == .preparing || phase == .recording || phase == .transcribing }
+    var isBusy: Bool { phase.isBusy }
     var isInstalling: Bool { installation != nil && installation?.failure == nil }
     var needsOnboarding: Bool { storageIsReadable && settings.completedOnboardingVersion < Self.onboardingVersion }
     var failure: DictationFailure? { if case .failed(let failure) = phase { failure } else { nil } }
@@ -161,10 +183,12 @@ final class AppModel {
         return microphones + [saved]
     }
 
-    init(store: LocalStore = LocalStore(), startsServices: Bool = true) {
+    init(store: LocalStore = LocalStore(), startsServices: Bool = true, mediaPauser: MediaPauser = MediaPauser()) {
         self.store = store
+        self.mediaPauser = mediaPauser
         self.startsServices = startsServices
         meetings = MeetingModel(store: startsServices ? nil : MeetingStore(directory: store.directory.appendingPathComponent("Meetings")))
+        transcriptions = TranscriptionModel(store: startsServices ? nil : MeetingStore(directory: store.directory.appendingPathComponent("Transcriptions")))
         meetingDetector = MeetingDetector(meetings: meetings)
         do {
             let state = try store.load()
@@ -181,8 +205,9 @@ final class AppModel {
         if !models.contains(where: { $0.id == settings.selectedModelID }) { settings.selectedModelID = "apple" }
         settings.launchAtLogin = SMAppService.mainApp.status == .enabled
         meetings.notesSettings = settings
-        if let cli = settings.notesCLI { Task { await refreshNotesCLIModels(cli) } }
+        for cli in Set([settings.notesCLI, settings.askSettings.notesCLI].compactMap { $0 }) { Task { await refreshNotesCLIModels(cli) } }
         refreshModels()
+        refreshCalendars()
         recorder.onLevel = { [weak self] levels in self?.voiceLevels = levels }
         recorder.onError = { [weak self] error in
             guard let self, self.phase == .recording else { return }
@@ -195,9 +220,14 @@ final class AppModel {
         globalShortcut.onPress = { [weak self] in self?.shortcutPressed() }
         globalShortcut.onRelease = { [weak self] in self?.shortcutReleased() }
         cancelGlobalShortcut.onPress = { [weak self] in self?.cancelRecording() }
+        cancelShortcut.onPress = { [weak self] in self?.cancelRecording() }
+        onBusyChange = { [weak self] busy in self?.armCancelShortcut(busy) }
         warmUpSelectedModel()
         let warmUpAfterWake: @Sendable (Notification) -> Void = { [weak self] _ in
-            MainActor.assumeIsolated { self?.warmUpSelectedModel(after: .seconds(3)) }
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.warmUpSelectedModel(after: .seconds(3), reloading: self.settings.unloadModelWhenIdle == .never)
+            }
         }
         _ = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main, using: warmUpAfterWake)
         _ = DistributedNotificationCenter.default().addObserver(forName: .init("com.apple.screenIsUnlocked"), object: nil, queue: .main, using: warmUpAfterWake)
@@ -233,6 +263,11 @@ final class AppModel {
     }
 
     func suspendShortcut() { globalShortcut.unregister() }
+
+    private func armCancelShortcut(_ busy: Bool) {
+        if busy { cancelShortcut.register(keyCode: UInt32(kVK_Escape), modifiers: settings.shortcut.cancelModifiers) }
+        else { cancelShortcut.unregister() }
+    }
 
     func changeShortcut(_ shortcut: DictationShortcut) {
         guard !isBusy else { return }
@@ -352,6 +387,7 @@ final class AppModel {
                 }
                 self.microphoneGranted = true
                 self.phase = .recording
+                self.playFeedback(.started)
                 let shortcut = self.settings.shortcut.displayName
                 self.statusMessage = self.isHeldSession ? "Listening. Release \(shortcut) to finish." : "Listening. Press \(shortcut) or click ✓ to finish."
                 self.warmUpSelectedModel()
@@ -364,7 +400,7 @@ final class AppModel {
                         guard !Task.isCancelled, let self, self.generation == token else { return }
                         self.recordingDuration = Date().timeIntervalSince(started)
                         // Keep dictation bounded; a new recording can start immediately afterwards.
-                        if self.recordingDuration >= 120 { self.finishRecording(); return }
+                        if self.recordingDuration >= AudioRecorder.maximumDuration { self.finishRecording(); return }
                     }
                 }
             } catch {
@@ -445,7 +481,9 @@ final class AppModel {
         let model = recording.model
         let language = recording.settings.language == "auto" ? nil : recording.settings.language
         let entries = recording.vocabulary
+        let hints = VocabularyProcessor.hints(entries)
         let context = recording.context
+        let spellsScreenNames = self.spellsScreenNames(with: model, language: recording.settings.language)
         let appBundleID = recording.target?.bundleIdentifier
         phase = .transcribing
         statusMessage = model.engine == .api ? "Transcribing with \(model.name)…" : "Transcribing on your Mac…"
@@ -456,11 +494,12 @@ final class AppModel {
             guard let self else { return }
             do {
                 try Task.checkCancellation()
+                let screenTerms = spellsScreenNames ? await context?.value(within: .milliseconds(300), cancellingOnTimeout: false)?.spellingTerms() ?? [] : []
                 try await self.prepare(model, language: recording.settings.language)
                 try Task.checkCancellation()
                 guard self.generation == token, let provider = self.provider else { return }
                 let recognitionStarted = ContinuousClock.now
-                let raw = try await provider.transcribe(audioURL: audio.url, language: language, vocabulary: VocabularyProcessor.hints(entries))
+                let raw = try await provider.transcribe(audioURL: audio.url, language: language, vocabulary: hints, screenTerms: screenTerms)
                 Logger(subsystem: "org.betterwispr.app", category: "DictationTiming").notice("Recognition completed: elapsed=\(String(describing: recognitionStarted.duration(to: .now)), privacy: .public) empty=\(raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)")
                 try Task.checkCancellation()
                 guard self.generation == token else { return }
@@ -481,7 +520,7 @@ final class AppModel {
                     spoken = email
                 } else if english, cleanup == .medium, MeetingNotesGenerator.availability(settings: writingSettings) == .available {
                     self.statusMessage = "Editing with \(writingSettings.notesModelName)…"
-                    let polished = await TranscriptPolisher.polish(spoken, settings: writingSettings, vocabulary: VocabularyProcessor.hints(entries),
+                    let polished = await TranscriptPolisher.polish(spoken, settings: writingSettings, vocabulary: hints,
                                                                    context: sharesContext ? await context?.value(within: .seconds(1)) : nil,
                                                                    instructions: mode?.instructions ?? "")
                     try Task.checkCancellation()
@@ -612,13 +651,30 @@ final class AppModel {
             try await next.prepare(model: model, download: false)
             guard let self, self.provider === next else { throw CancellationError() }
             self.preparedModelID = model.id
+            self.scheduleIdleUnload()
         }
         loading = (model.id, task)
         return task
     }
 
-    /// Loads the selected local model and, when idle, transcribes a second of quiet noise and discards the text.
-    private func warmUpSelectedModel(after delay: Duration = .zero) {
+    var isSpeechModelLoaded: Bool { provider != nil }
+
+    /// Releases the speech model once it sits unused for the idle period chosen in Settings; the next dictation loads it again.
+    func scheduleIdleUnload(after delay: Duration? = nil) {
+        idleUnload?.cancel()
+        guard let idle = settings.unloadModelWhenIdle.delay, !isBusy else { return }
+        idleUnload = Task { [weak self] in
+            try? await Task.sleep(for: delay ?? idle)
+            guard let self, !Task.isCancelled, !self.isBusy, self.loading == nil else { return }
+            self.warmUp?.cancel()
+            self.provider?.cancel()
+            self.provider = nil
+            self.preparedModelID = nil
+        }
+    }
+
+    /// Loads the selected local model, unless idle with `reloading` off, and when idle transcribes a second of quiet noise and discards the text.
+    private func warmUpSelectedModel(after delay: Duration = .zero, reloading: Bool = true) {
         let model = selectedModel
         guard model.engine != .apple, model.engine != .api, isModelInstalled(model) else { return }
         guard !isBusy else {
@@ -629,7 +685,10 @@ final class AppModel {
         warmUp = Task { [weak self] in
             try? await Task.sleep(for: delay)
             guard let self, !Task.isCancelled, self.selectedModel.id == model.id else { return }
-            if self.preparedModelID != model.id { try? await self.load(model).value }
+            if self.preparedModelID != model.id {
+                guard reloading else { return }
+                try? await self.load(model).value
+            }
             guard !Task.isCancelled, !self.isBusy, self.preparedModelID == model.id, let provider = self.provider,
                   let clip = try? WarmUpClip.url() else { return }
             let started = ContinuousClock.now
@@ -650,10 +709,17 @@ final class AppModel {
         }
     }
 
-    /// Starts reading screen context when these settings send it to an available notes model during Medium cleanup.
+    /// Starts reading screen context when Parakeet with the phrase booster can spell names from it or Medium cleanup can show it, with the clipboard, to an available notes model.
     private func captureContext(for settings: AppSettings) -> Task<DictationContext, Never>? {
-        guard settings.useScreenContext, settings.cleanup == .medium, MeetingNotesGenerator.availability(settings: settings) == .available else { return nil }
-        return targetApplication.map { DictationContext.capture(from: $0, recognizingScreen: settings.recognizeScreenText) }
+        guard settings.useScreenContext else { return nil }
+        let showsNotesModel = settings.cleanup == .medium && MeetingNotesGenerator.availability(settings: settings) == .available
+        guard showsNotesModel || spellsScreenNames(with: selectedModel, language: settings.language) else { return nil }
+        return targetApplication.map { DictationContext.capture(from: $0, recognizingScreen: settings.recognizeScreenText, readingClipboard: showsNotesModel) }
+    }
+
+    private func spellsScreenNames(with model: SpeechModel, language: String) -> Bool {
+        phraseBoosterInstalled && model.engine == .parakeet && model.languages?.contains("en") == true
+            && (language == "auto" || language.hasPrefix("en"))
     }
 
     private func observe(_ provider: any SpeechProvider, token: UUID) {
@@ -700,6 +766,31 @@ final class AppModel {
             try await SpeakerDetection.install { fraction in Task { @MainActor in report(fraction * 0.9) } }
         } completion: { [weak self] in
             self?.statusMessage = "New meetings will tell the speakers on the call apart."
+        }
+    }
+
+    func installBuiltInModel() {
+        guard !isInstalling else { return }
+        let selection = settings.notesSelection
+        install(id: Self.builtInModelID, name: BuiltInModel.displayName) { report in
+            try await BuiltInModel.install { fraction in Task { @MainActor in report(fraction * 0.9) } }
+        } completion: { [weak self] in
+            guard let self else { return }
+            if self.settings.notesSelection == selection, self.meetings.runs.isEmpty {
+                self.selectNotesModel(.builtIn)
+                self.statusMessage = "\(BuiltInModel.displayName) now writes meeting notes on this Mac."
+            } else {
+                self.statusMessage = "\(BuiltInModel.displayName) is installed. Choose it as the notes provider in Models."
+            }
+        }
+    }
+
+    func removeBuiltInModel() {
+        guard !isInstalling, canEditConnections else { return }
+        Task {
+            do { try await BuiltInModel.remove() }
+            catch { statusMessage = "Couldn’t remove \(BuiltInModel.displayName): \(error.localizedDescription)" }
+            refreshModels()
         }
     }
 
@@ -754,6 +845,7 @@ final class AppModel {
         loading = nil
         saveSettings()
         warmUpSelectedModel()
+        scheduleIdleUnload()
     }
 
     func isModelInstalled(_ model: SpeechModel) -> Bool {
@@ -761,7 +853,7 @@ final class AppModel {
         return model.engine == .apple || model.engine == .api || installedModelIDs.contains(model.id)
     }
 
-    var canEditConnections: Bool { !isBusy && meetings.activity == .idle }
+    var canEditConnections: Bool { !isBusy && meetings.runs.isEmpty && transcriptions.job == nil }
 
     func saveConnection(_ connection: SpeechConnection, key: String?, forNotes: Bool = false) throws {
         guard canEditConnections else { throw SpeechError.busy }
@@ -780,8 +872,7 @@ final class AppModel {
             connections.append(connection)
         }
         if forNotes { settings.notesConnections = connections } else { settings.speechConnections = connections }
-        if forNotes, let oldConnection, oldConnection.keychainAccount != connection.keychainAccount,
-           settings.notesConnectionID == connection.id { settings.notesSelection = .apple }
+        if forNotes, let oldConnection, oldConnection.keychainAccount != connection.keychainAccount { settings.deselectNotesConnection(connection.id) }
         if !forNotes, let oldConnection, oldConnection.keychainAccount != connection.keychainAccount,
            settings.selectedModelID == connection.speechModel.id {
             settings.selectedModelID = "apple"
@@ -814,7 +905,7 @@ final class AppModel {
         try keys.save("", for: connection)
         if forNotes {
             settings.notesConnections.removeAll { $0.id == connection.id }
-            if settings.notesConnectionID == connection.id { settings.notesSelection = .apple }
+            settings.deselectNotesConnection(connection.id)
         } else {
             settings.speechConnections.removeAll { $0.id == connection.id }
             if settings.selectedModelID == connection.speechModel.id { settings.selectedModelID = "apple" }
@@ -840,6 +931,7 @@ final class AppModel {
         installedModelIDs = Set(models.filter { WhisperKitProvider.isInstalled($0) || ParakeetProvider.isInstalled($0) }.map(\.id))
         phraseBoosterInstalled = ParakeetProvider.isPhraseBoosterInstalled()
         speakerDetectionInstalled = SpeakerDetection.isInstalled()
+        meetings.builtInModelInstalled = BuiltInModel.isInstalled()
         modelRevision += 1
     }
 
@@ -1055,7 +1147,25 @@ final class AppModel {
         accessibilityGranted = AXIsProcessTrustedWithOptions([key: true] as CFDictionary)
     }
 
+    /// Turning the integration on asks for Calendar access; a denial turns it back off and opens Privacy settings.
+    func useCalendar(_ isOn: Bool) {
+        settings.useCalendar = isOn
+        saveSettings()
+        guard isOn else { return }
+        Task {
+            calendarGranted = await calendarEvents.requestAccess()
+            guard calendarGranted else {
+                settings.useCalendar = false
+                saveSettings()
+                NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars")!)
+                return
+            }
+            calendarAccounts = await calendarEvents.accounts()
+        }
+    }
+
     func refreshPermissions() {
+        refreshCalendars()
         microphoneGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
         let previouslyGranted = accessibilityGranted
         accessibilityGranted = AXIsProcessTrusted()
@@ -1063,6 +1173,12 @@ final class AppModel {
             if settings.shortcut.isModifierOnly { registerShortcut() }
             if settings.cancelShortcut?.isModifierOnly == true { registerCancelShortcut() }
         }
+    }
+
+    private func refreshCalendars() {
+        calendarGranted = CalendarEvents.isAuthorized
+        guard settings.useCalendar, calendarGranted else { calendarAccounts = []; return }
+        Task { calendarAccounts = await calendarEvents.accounts() }
     }
 
     func selectMicrophone(_ choice: AudioInputDevice?) {
@@ -1073,8 +1189,14 @@ final class AppModel {
     }
 
     func selectNotesModel(_ selection: NotesModelSelection) {
-        guard meetings.activity == .idle else { return }
+        guard meetings.runs.isEmpty else { return }
         settings.notesSelection = selection
+        saveNotesSettings()
+        if case .cli(let cli) = selection { Task { await refreshNotesCLIModels(cli) } }
+    }
+
+    func selectAskModel(_ selection: NotesModelSelection?) {
+        settings.askSelection = selection
         saveNotesSettings()
         if case .cli(let cli) = selection { Task { await refreshNotesCLIModels(cli) } }
     }
@@ -1087,7 +1209,7 @@ final class AppModel {
             let catalog = try await NotesCLICatalog.load(cli)
             try Task.checkCancellation()
             notesCLICatalogs[cli] = catalog
-            if settings.cliModel(cli).isEmpty, let defaultID = catalog.defaultID, meetings.activity == .idle {
+            if settings.cliModel(cli).isEmpty, let defaultID = catalog.defaultID, meetings.runs.isEmpty {
                 settings.setCLIModel(defaultID, for: cli)
                 saveNotesSettings()
             }
@@ -1125,10 +1247,10 @@ final class AppModel {
 
     private func playFeedback(_ cue: DictationSound) {
         feedbackSound?.stop()
-        guard settings.soundEffects, meetings.activity.capturingID == nil, let url = cue.url else { return }
-        feedbackSound = NSSound(contentsOf: url, byReference: false)
-        feedbackSound?.volume = 0.6
-        feedbackSound?.play()
+        guard settings.soundEffects, meetings.capturingID == nil, let sound = cue.sound else { return }
+        sound.volume = 0.6
+        sound.play()
+        feedbackSound = sound
     }
 
     /// Shows a capsule card that closes itself unless another phase replaced it first.

@@ -134,6 +134,7 @@ import Testing
     #expect(global.sharesContext(startedIn: nil, trigger: inherit))
     #expect(!global.sharesContext(startedIn: off, trigger: on))
     #expect(!global.sharesContext(startedIn: inherit, trigger: off))
+    #expect(!global.sharesContext(startedIn: WritingMode(cleanup: .light), trigger: inherit))
 }
 
 @Test func settingsWithoutModesStillLoadAndModesRoundTrip() throws {

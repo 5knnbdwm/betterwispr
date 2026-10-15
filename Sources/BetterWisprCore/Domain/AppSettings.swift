@@ -8,6 +8,13 @@ public enum AppTheme: String, Codable, CaseIterable, Sendable {
     case system, light, dark
 }
 
+/// Minutes a loaded speech model may sit unused before the app releases it.
+public enum ModelIdleUnload: Int, Codable, CaseIterable, Sendable {
+    case never = 0, fiveMinutes = 5, fifteenMinutes = 15, oneHour = 60
+
+    public var delay: Duration? { self == .never ? nil : .seconds(rawValue * 60) }
+}
+
 public struct AppSettings: Codable, Equatable, Sendable {
     public var selectedModelID: String = "apple"
     public var speechConnections: [SpeechConnection] = []
@@ -24,13 +31,20 @@ public struct AppSettings: Codable, Equatable, Sendable {
     /// Shows Parakeet's provisional words in the capsule while recording.
     public var showLiveText: Bool = true
     public var soundEffects: Bool = true
+    /// Pauses Music and Spotify while the microphone is open, then resumes only what it paused.
+    public var pauseMediaWhileDictating: Bool = false
     /// Offers the notetaker when a known call app or web meeting starts recording.
     public var detectMeetings: Bool = true
+    /// Names a meeting note after the Calendar event under way when recording starts and lists its invitees.
+    public var useCalendar: Bool = false
+    /// Calendars, by EventKit calendar identifier, that meeting notes ignore.
+    public var excludedCalendarIDs: Set<String> = []
     public var theme: AppTheme = .dark
     public var launchAtLogin: Bool = false
     public var showInDock: Bool = false
     public var silenceThreshold: Float = 0.002
     public var dictationMode: DictationMode = .hold
+    public var unloadModelWhenIdle: ModelIdleUnload = .never
     public var shortcut: DictationShortcut = .optionSpace
     /// Stops a dictation without pasting it. Clear sets it to nil.
     public var cancelShortcut: DictationShortcut? = .controlOptionEscape
@@ -46,8 +60,12 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var modes: [WritingMode] = []
     /// Nil uses Automatic: the macOS default input, or the built-in mic instead of a Bluetooth headset while the lid is open.
     public var microphone: AudioInputDevice?
-    /// The Ollama model that writes meeting notes; nil uses Apple Intelligence.
+    /// The user closed the meeting card that offers the speaker detection download.
+    public var dismissedSpeakerDetectionOffer: Bool = false
     public var notesModel: String?
+    /// Nil asks questions with the notes model.
+    public var askSelection: NotesModelSelection?
+    public var notesBuiltIn: Bool = false
     /// The newest onboarding the user finished or skipped; 0 shows it again.
     public var completedOnboardingVersion: Int = 0
     /// The onboarding page to resume after quitting midway.
@@ -57,19 +75,32 @@ public struct AppSettings: Codable, Equatable, Sendable {
         get {
             if let notesCLI { return .cli(notesCLI) }
             if let notesConnectionID { return .connection(notesConnectionID) }
-            return notesModel.map(NotesModelSelection.ollama) ?? .apple
+            return notesModel.map(NotesModelSelection.ollama) ?? (notesBuiltIn ? .builtIn : .apple)
         }
         set {
             notesConnectionID = nil
             notesModel = nil
             notesCLI = nil
+            notesBuiltIn = false
             switch newValue {
             case .apple: break
+            case .builtIn: notesBuiltIn = true
             case .ollama(let name): notesModel = name
             case .connection(let id): notesConnectionID = id
             case .cli(let cli): notesCLI = cli
             }
         }
+    }
+
+    public var askSettings: AppSettings {
+        var settings = self
+        if let askSelection { settings.notesSelection = askSelection }
+        return settings
+    }
+
+    public mutating func deselectNotesConnection(_ id: UUID) {
+        if notesConnectionID == id { notesSelection = .apple }
+        if askSelection == .connection(id) { askSelection = nil }
     }
 
     public init() {}
@@ -85,6 +116,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var notesModelName: String {
         switch notesSelection {
         case .apple: "Apple Intelligence"
+        case .builtIn: "Built-in · \(BuiltInModel.displayName)"
         case .ollama(let name): "Ollama · \(name)"
         case .connection(let id): notesConnections.first { $0.id == id }.map { "\($0.name) · \($0.modelID)" } ?? "Missing notes connection"
         case .cli(let cli): "\(cli.name) · \(cliModel(cli).isEmpty ? "Choose a model" : cliModel(cli))"
@@ -107,15 +139,20 @@ public struct AppSettings: Codable, Equatable, Sendable {
         showCapsule = try container.decode(Bool.self, forKey: .showCapsule)
         showLiveText = try container.decodeIfPresent(Bool.self, forKey: .showLiveText) ?? true
         soundEffects = try container.decodeIfPresent(Bool.self, forKey: .soundEffects) ?? true
+        pauseMediaWhileDictating = try container.decodeIfPresent(Bool.self, forKey: .pauseMediaWhileDictating) ?? false
         detectMeetings = try container.decodeIfPresent(Bool.self, forKey: .detectMeetings) ?? true
+        useCalendar = try container.decodeIfPresent(Bool.self, forKey: .useCalendar) ?? false
+        excludedCalendarIDs = try container.decodeIfPresent(Set<String>.self, forKey: .excludedCalendarIDs) ?? []
         theme = try container.decodeIfPresent(AppTheme.self, forKey: .theme) ?? .dark
         launchAtLogin = try container.decode(Bool.self, forKey: .launchAtLogin)
         showInDock = try container.decodeIfPresent(Bool.self, forKey: .showInDock) ?? false
         silenceThreshold = try container.decode(Float.self, forKey: .silenceThreshold)
         dictationMode = try container.decodeIfPresent(DictationMode.self, forKey: .dictationMode) ?? .hold
+        unloadModelWhenIdle = try container.decodeIfPresent(ModelIdleUnload.self, forKey: .unloadModelWhenIdle) ?? .never
         shortcut = try container.decodeIfPresent(DictationShortcut.self, forKey: .shortcut) ?? .optionSpace
         cancelShortcut = try container.decodeIfPresent(DictationShortcut.self, forKey: .cancelShortcut)
         microphone = try container.decodeIfPresent(AudioInputDevice.self, forKey: .microphone)
+        dismissedSpeakerDetectionOffer = try container.decodeIfPresent(Bool.self, forKey: .dismissedSpeakerDetectionOffer) ?? false
         learnCorrections = try container.decodeIfPresent(Bool.self, forKey: .learnCorrections) ?? true
         cleanup = try container.decodeIfPresent(CleanupLevel.self, forKey: .cleanup) ?? .light
         useScreenContext = try container.decodeIfPresent(Bool.self, forKey: .useScreenContext) ?? false
@@ -123,6 +160,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
         styles = try container.decodeIfPresent([StyleContext: StyleTone].self, forKey: .styles) ?? [:]
         modes = try container.decodeIfPresent([WritingMode].self, forKey: .modes) ?? []
         notesModel = try container.decodeIfPresent(String.self, forKey: .notesModel)
+        askSelection = try? container.decodeIfPresent(NotesModelSelection.self, forKey: .askSelection)
+        notesBuiltIn = try container.decodeIfPresent(Bool.self, forKey: .notesBuiltIn) ?? false
         completedOnboardingVersion = try container.decodeIfPresent(Int.self, forKey: .completedOnboardingVersion) ?? 0
         onboardingStep = try container.decodeIfPresent(Int.self, forKey: .onboardingStep) ?? 0
     }
