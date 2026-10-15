@@ -43,11 +43,11 @@ the policy immediately and persist through the existing workspace store.
    showing the nonactivating capsule. With "Hide capsule while dictating" on,
    `AppModel.showsCapsule` keeps it hidden until the session leaves the busy
    phases or the 30-second limit warning starts. While the session is preparing,
-   recording or transcribing, a second Carbon hot key makes Escape (also with the dictation
-   shortcut's held modifiers unless they include Command, so Command-Option-Escape
-   stays Force Quit) cancel it from any app through the same Undo path;
-   it is unregistered as soon as the session leaves those phases, so other apps
-   keep Escape.
+   recording or transcribing, a second Carbon hot key makes Escape (also with the
+   dictation shortcut's held modifiers unless they include Command, so
+   Command-Option-Escape stays Force Quit) cancel it from any app through the
+   same Undo path; it is unregistered as soon as the session leaves those phases,
+   so other apps keep Escape.
 2. Validate the selected provider and check microphone permission. Apple speech
    authorization and API-key checks still precede capture. Installed neural-model
    warm-up runs independently, so it need not delay capture; readiness is checked

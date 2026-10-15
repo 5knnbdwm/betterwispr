@@ -37,12 +37,14 @@ import Testing
     }
     model.settings.showCapsule = false
     model.phase = .recording
-    #expect(model.showsCapsule)
+    var presentations = 0
+    model.onPresentationChange = { presentations += 1 }
+    model.advanceRecording(to: AudioRecorder.maximumDuration - 30)
+    #expect(model.showsCapsule && presentations == 0)
+    model.advanceRecording(to: 0)
     model.settings.hideCapsuleWhileDictating = true
     #expect(!model.showsCapsule)
 
-    var presentations = 0
-    model.onPresentationChange = { presentations += 1 }
     model.advanceRecording(to: AudioRecorder.maximumDuration - 31)
     #expect(model.recordingSecondsLeft == nil && !model.showsCapsule && presentations == 0)
     model.advanceRecording(to: AudioRecorder.maximumDuration - 30)

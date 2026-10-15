@@ -408,7 +408,7 @@ final class AppModel {
     func advanceRecording(to duration: TimeInterval) {
         let warned = recordingSecondsLeft != nil
         recordingDuration = duration
-        if !warned, recordingSecondsLeft != nil { onPresentationChange?() }
+        if !warned, recordingSecondsLeft != nil, settings.hideCapsuleWhileDictating { onPresentationChange?() }
     }
 
     /// Runs preview passes once the warm-up load has finished; it never starts a load itself.
