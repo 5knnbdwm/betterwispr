@@ -185,7 +185,7 @@ struct SettingsView: View {
                     RowDivider()
                     PermissionStatusRow(title: "Calendar", caption: "Optional. Turns on Use Calendar for meeting notes.", granted: model.calendarGranted) { model.useCalendar(true) }
                 } footer: {
-                    Label("Built-in models process speech on this Mac. A selected API connection sends audio to its endpoint. Temporary recordings are removed after processing; external providers control their own retention.", systemImage: "lock.shield")
+                    Label("Built-in models process speech on this Mac. A selected API connection sends audio to its endpoint. Codex subscription transcription sends audio directly to ChatGPT through an unofficial endpoint. Temporary recordings are removed after processing; external providers control their own retention.", systemImage: "lock.shield")
                 }
 
                 SettingsSection("Voice commands") {

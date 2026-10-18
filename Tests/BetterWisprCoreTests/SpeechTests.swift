@@ -5,7 +5,7 @@ import Testing
 @testable import BetterWisprCore
 
 @MainActor
-@Test(arguments: SpeechModel.catalog)
+@Test(arguments: SpeechModel.catalog + [.codex])
 func meetingAndDictationModelsCreateTheMatchingSessionProvider(_ model: SpeechModel) {
     let dictation = model.makeProvider()
     let meeting = model.makeProvider()
@@ -15,6 +15,7 @@ func meetingAndDictationModelsCreateTheMatchingSessionProvider(_ model: SpeechMo
     case .whisperKit: #expect(meeting is WhisperKitProvider)
     case .parakeet: #expect(meeting is ParakeetProvider)
     case .api: #expect(meeting is APISpeechProvider)
+    case .codex: #expect(meeting is CodexSpeechProvider)
     }
 }
 

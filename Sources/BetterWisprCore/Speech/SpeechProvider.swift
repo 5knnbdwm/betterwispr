@@ -2,7 +2,21 @@ import Foundation
 @preconcurrency import WhisperKit
 
 public enum SpeechEngine: String, Codable, Sendable {
-    case apple, whisperKit, parakeet, api
+    case apple, whisperKit, parakeet, api, codex
+}
+
+public enum SpeechProcessingLocation: Sendable {
+    case onDevice, configuredEndpoint, chatGPT
+
+    public var isOnDevice: Bool { self == .onDevice }
+
+    public var disclosure: String {
+        switch self {
+        case .onDevice: "On-device transcription"
+        case .configuredEndpoint: "Audio sent to your selected endpoint"
+        case .chatGPT: "Audio sent to ChatGPT"
+        }
+    }
 }
 
 public struct SpeechModel: Identifiable, Hashable, Sendable {
@@ -16,6 +30,35 @@ public struct SpeechModel: Identifiable, Hashable, Sendable {
     public let connection: SpeechConnection?
     /// Language codes the model recognizes; nil when its coverage is not a known fixed list.
     public let languages: [String]?
+
+    public var processingLocation: SpeechProcessingLocation {
+        switch engine {
+        case .apple, .whisperKit, .parakeet: .onDevice
+        case .api: .configuredEndpoint
+        case .codex: .chatGPT
+        }
+    }
+
+    public var requiresModelDownload: Bool {
+        switch engine {
+        case .whisperKit, .parakeet: true
+        case .apple, .api, .codex: false
+        }
+    }
+
+    public var supportsSyntheticWarmUp: Bool {
+        switch engine {
+        case .whisperKit, .parakeet: true
+        case .apple, .api, .codex: false
+        }
+    }
+
+    public var requiresPreparationBeforeRecording: Bool { engine == .apple || !processingLocation.isOnDevice }
+
+    public static let codex = SpeechModel(
+        id: "codex", name: "Codex · Subscription",
+        detail: "Transcribes with your Codex subscription through an unofficial ChatGPT endpoint. Requires internet access.",
+        sizeLabel: "ChatGPT subscription", engine: .codex, modelName: "codex")
 
     /// Supported languages as sorted display names in the user's locale.
     public var languageNames: [String]? {
@@ -73,8 +116,8 @@ public struct SpeechModel: Identifiable, Hashable, Sendable {
 public protocol SpeechProvider: AnyObject {
     var onProgress: (@MainActor @Sendable (Double) -> Void)? { get set }
     var onPartialTranscript: (@MainActor @Sendable (String) -> Void)? { get set }
-    /// Local providers may download only with `download: true`. API providers only validate here;
-    /// their explicitly selected connection authorizes network use during transcription.
+    /// Local providers may download only with `download: true`. External providers only validate here;
+    /// explicit selection authorizes network use during transcription, never during preparation.
     func prepare(model: SpeechModel, download: Bool) async throws
     func transcribe(audioURL: URL, language: String?, vocabulary: [String]) async throws -> String
     /// Also takes names read from the screen, which a provider may use only to respell words that look misspelled, and ignores by default.
@@ -99,6 +142,7 @@ extension SpeechModel {
         case .whisperKit: WhisperKitProvider()
         case .parakeet: ParakeetProvider()
         case .api: APISpeechProvider()
+        case .codex: CodexSpeechProvider()
         }
     }
 }
