@@ -384,6 +384,6 @@ private final class CodexEndpointStub: URLProtocol, @unchecked Sendable {
     }
     override func stopLoading() {
         let token = String((request.value(forHTTPHeaderField: "Authorization") ?? "").dropFirst(7))
-        Task { await Self.probe.stop(token) }
+        Task { await CodexEndpointStub.probe.stop(token) }
     }
 }
