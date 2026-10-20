@@ -3,13 +3,25 @@
 BetterWispr is one Swift package with a `BetterWispr` macOS executable,
 `BetterWisprCore` library and `BetterWisprCLI` developer executable. The app owns
 presentation and session coordination. The library owns recording, speech
-engines, local storage and delivery to other apps. The CLI reuses the local
-Whisper provider for explicit model installation and audio-file transcription.
+engines, local storage and delivery to other apps. The CLI reuses speech providers for explicit local model installation and
+audio-file transcription with the selected provider.
 `BetterWisprCoreTests` checks shared behavior.
 
 This is a native macOS application. Core includes platform frameworks where
 needed; it is not a promise of Linux/iOS portability. Feature folders are source
 organization, not separate packages or a plugin loader.
+
+Codex subscription transcription is a static model outside the local catalog.
+`CodexSpeechProvider` shares `SpeechAudio`'s bounded mono PCM16 WAV conversion
+and uploads ordered 125-second chunks directly to the fixed unofficial ChatGPT
+transcription endpoint. Each transcription owns an ephemeral URLSession and its
+cancellable task. Redirects, cookies, cached responses, and stored URL credentials
+are disabled. Preparation checks only the bounded local Codex sign-in file.
+Transcription reads credentials again before audio conversion and never refreshes
+or persists them. Errors exclude service bodies and credentials.
+Only Parakeet and Whisper permit synthetic warm-up. Processing-location metadata
+supplies the UI audio disclosure. The `codex` selection uses the existing
+selected-model string without a schema change. See [setup](codex-subscription.md).
 
 ```text
 Sources/

@@ -4,6 +4,11 @@ All notable changes to BetterWispr are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/). The current version lives in `VERSION`.
 
+## [Unreleased]
+
+### Added
+- Codex · Subscription under Models > Subscription transcription. Explicit selection sends audio directly to an unofficial ChatGPT endpoint using your local Codex sign-in. No separate transcription server or helper is required. BetterWispr does not store or refresh credentials. Local defaults and notes providers stay independent. See [setup](docs/codex-subscription.md). The developer CLI accepts `--model codex` for batch transcription.
+
 ## [0.1.6] - 2026-10-15
 
 ### Added

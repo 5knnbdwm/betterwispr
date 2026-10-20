@@ -6,6 +6,28 @@ version, Mac model, input device, engine/model and date for future runs. A
 successful build does not verify microphone capture, clipboard behavior or
 general recognition accuracy.
 
+## Codex subscription transcription check, 2026-10-18
+
+Apple Silicon, macOS 27.2, debug builds. `swift build`,
+`swift test --build-system native --no-parallel` with all 291 tests, and
+`./scripts/build-app.sh` passed. The native-provider tests cover file-backed
+sign-in, request fields, redacted failures, cancellation, independent sessions,
+ordered chunks and refusal to upload during preparation or warm-up.
+
+- `BetterWisprCLI --transcribe-file` with `--model codex` returned text for
+  synthetic English and Ukrainian WAV files and a 130-second English file.
+  The process search path excluded helper directories. The sign-in file's hash
+  stayed unchanged and the isolated temporary directory was empty afterwards.
+- An isolated app profile selected **Codex · Subscription**, showed **Audio
+  sent to ChatGPT** on Home, and completed the 130-second synthetic file through
+  **Transcribe**, with the resulting text visible in the app. The signed bundle
+  contained the upstream MIT notice.
+- These checks establish integration, not recognition quality. The Ukrainian
+  fixture said Friday at 10:30; the returned text omitted the weekday and said
+  15:30. Cancellation was exercised with deterministic network stubs, not a
+  live request. Physical microphone dictation, automatic paste, Intel and
+  macOS 14 were not exercised for this provider.
+
 ## Built-in notes model check, 2026-10-15, version 0.1.6
 
 Apple M4 Pro with 48 GB, macOS 27.0.1, debug builds. `swift build`, all 242
