@@ -43,16 +43,18 @@ final class DictationRecording {
     let settings: AppSettings
     let vocabulary: [VocabularyEntry]
     let target: NSRunningApplication?
+    let targetElement: AXUIElement?
     let mode: WritingMode?
     let context: Task<DictationContext, Never>?
 
     init(audio: RecordedAudio, model: SpeechModel, settings: AppSettings, vocabulary: [VocabularyEntry],
-         target: NSRunningApplication?, mode: WritingMode? = nil, context: Task<DictationContext, Never>? = nil) {
+         target: NSRunningApplication?, targetElement: AXUIElement? = nil, mode: WritingMode? = nil, context: Task<DictationContext, Never>? = nil) {
         self.audio = audio
         self.model = model
         self.settings = settings
         self.vocabulary = vocabulary
         self.target = target
+        self.targetElement = targetElement
         self.mode = mode
         self.context = context
     }
@@ -117,7 +119,7 @@ final class AppModel {
     var notesCLICatalogs: [NotesCLI: NotesCLICatalog] = [:]
     var notesCatalogErrors: [NotesCLI: String] = [:]
     var loadingNotesCatalogs: Set<NotesCLI> = []
-    var models: [SpeechModel] { SpeechModel.catalog + settings.speechConnections.map(\.speechModel) }
+    var models: [SpeechModel] { SpeechModel.catalog + [.codex] + settings.speechConnections.map(\.speechModel) }
     @ObservationIgnored lazy var updater = AppUpdater()
     let meetings: MeetingModel
     let transcriptions: TranscriptionModel
@@ -160,6 +162,7 @@ final class AppModel {
     @ObservationIgnored private var shortcutPressedAt: Date?
     @ObservationIgnored private var generation = UUID()
     @ObservationIgnored private var targetApplication: NSRunningApplication?
+    @ObservationIgnored private var targetElement: AXUIElement?
     @ObservationIgnored private var writingMode: WritingMode?
     @ObservationIgnored private var dictationContext: Task<DictationContext, Never>?
     @ObservationIgnored private var activeRecording: DictationRecording?
@@ -326,6 +329,7 @@ final class AppModel {
             return
         }
         targetApplication = NSWorkspace.shared.frontmostApplication
+        targetElement = FocusedAppIntegration.focusedElement(in: targetApplication)
         let modes = settings.modes
         let website = modes.needsWebsite ? targetApplication.flatMap(WebsiteReader.read) : nil
         writingMode = modes.match(app: targetApplication?.bundleIdentifier)?.mode
@@ -357,7 +361,7 @@ final class AppModel {
                 if model.engine == .apple {
                     try AppleSpeechProvider.checkAvailability(language: self.settings.language == "auto" ? nil : self.settings.language)
                 }
-                if model.engine == .apple || model.engine == .api { try await self.prepare(model) }
+                if model.requiresPreparationBeforeRecording { try await self.prepare(model) }
                 try Task.checkCancellation()
                 guard self.generation == token else { return }
                 self.recorder.silenceThreshold = self.settings.silenceThreshold
@@ -427,6 +431,7 @@ final class AppModel {
         let settings = settings
         let entries = vocabulary
         let target = targetApplication
+        let targetElement = targetElement
         let mode = writingMode
         let context = dictationContext.take()
         let live = live
@@ -450,7 +455,7 @@ final class AppModel {
                 }
                 self.playFeedback(.finished)
                 self.transcribe(DictationRecording(audio: audio, model: model, settings: settings,
-                                                  vocabulary: entries, target: target, mode: mode, context: context))
+                                                  vocabulary: entries, target: target, targetElement: targetElement, mode: mode, context: context))
             } catch {
                 guard self.generation == token else { return }
                 self.recorder.cancel()
@@ -472,7 +477,7 @@ final class AppModel {
         let spellsScreenNames = self.spellsScreenNames(with: model, language: recording.settings.language)
         let appBundleID = recording.target?.bundleIdentifier
         phase = .transcribing
-        statusMessage = model.engine == .api ? "Transcribing with \(model.name)…" : "Transcribing on your Mac…"
+        statusMessage = !model.processingLocation.isOnDevice ? "Transcribing with \(model.name)…" : "Transcribing on your Mac…"
         operation = Task { [weak self] in
             defer {
                 if self?.generation == token { self?.activeRecording = nil }
@@ -529,7 +534,7 @@ final class AppModel {
                     do { try self.persist() } catch { persistenceWarning = error.localizedDescription }
                 }
                 let integration: (any TextOutputIntegration)? = writingSettings.autoPaste
-                    ? FocusedAppIntegration(keepsCopy: writingSettings.copyToClipboard)
+                    ? FocusedAppIntegration(keepsCopy: writingSettings.copyToClipboard, expectedFocus: recording.targetElement)
                     : writingSettings.copyToClipboard ? ClipboardIntegration() : nil
                 self.activeRecording = nil
                 let result = try await integration?.deliver(text, to: recording.target)
@@ -565,7 +570,7 @@ final class AppModel {
         let recoverable: DictationRecording?
         if phase == .recording, let audio = try? recorder.stop() {
             let recording = DictationRecording(audio: audio, model: selectedModel, settings: settings, vocabulary: vocabulary,
-                                              target: targetApplication, mode: writingMode, context: dictationContext.take())
+                                              target: targetApplication, targetElement: targetElement, mode: writingMode, context: dictationContext.take())
             recoverable = audio.hasSpeech ? recording : nil
         } else {
             recoverable = activeRecording
@@ -664,7 +669,7 @@ final class AppModel {
     /// Loads the selected local model, unless idle with `reloading` off, and when idle transcribes a second of quiet noise and discards the text.
     private func warmUpSelectedModel(after delay: Duration = .zero, reloading: Bool = true) {
         let model = selectedModel
-        guard model.engine != .apple, model.engine != .api, isModelInstalled(model) else { return }
+        guard model.supportsSyntheticWarmUp, isModelInstalled(model) else { return }
         guard !isBusy else {
             if preparedModelID != model.id { load(model) }
             return
@@ -719,7 +724,7 @@ final class AppModel {
 
     /// Downloads a local model beside dictation, then switches to it unless the user chose another model meanwhile.
     func installModel(_ model: SpeechModel) {
-        guard !isInstalling, model.engine == .parakeet || model.engine == .whisperKit else { return }
+        guard !isInstalling, model.requiresModelDownload else { return }
         let installer = model.makeProvider()
         let selection = settings.selectedModelID
         install(id: model.id, name: model.name) { report in
@@ -838,7 +843,7 @@ final class AppModel {
 
     func isModelInstalled(_ model: SpeechModel) -> Bool {
         _ = modelRevision
-        return model.engine == .apple || model.engine == .api || installedModelIDs.contains(model.id)
+        return !model.requiresModelDownload || installedModelIDs.contains(model.id)
     }
 
     var canEditConnections: Bool { !isBusy && meetings.runs.isEmpty && transcriptions.job == nil }

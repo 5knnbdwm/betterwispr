@@ -24,38 +24,41 @@ public struct ClipboardIntegration: TextOutputIntegration {
 
 @MainActor
 public struct FocusedAppIntegration: TextOutputIntegration {
-    private static var pendingRestore: (items: [NSPasteboardItem], task: Task<Void, Never>)?
+    private static var pendingRestore: (contents: (items: [NSPasteboardItem], changeCount: Int), task: Task<Void, Never>)?
     private static let screenSharing = "com.apple.ScreenSharing"
     public let keepsCopy: Bool
-    public init(keepsCopy: Bool) { self.keepsCopy = keepsCopy }
+    private let expectedFocus: AXUIElement?
+    public init(keepsCopy: Bool, expectedFocus: AXUIElement? = nil) {
+        self.keepsCopy = keepsCopy
+        self.expectedFocus = expectedFocus
+    }
     public func deliver(_ text: String, to target: NSRunningApplication?) async throws -> OutputResult {
+        try Task.checkCancellation()
         // Never steal focus or paste into an app the user switched to while decoding.
         guard let target, !target.isTerminated,
               target.processIdentifier != ProcessInfo.processInfo.processIdentifier,
               NSWorkspace.shared.frontmostApplication?.processIdentifier == target.processIdentifier,
-              AXIsProcessTrusted() else {
+              AXIsProcessTrusted(),
+              Self.focusMatches(expectedFocus, current: Self.focusedElement(in: target)) else {
             _ = try await ClipboardIntegration().deliver(text, to: nil)
             return .copiedForManualPaste
         }
         let pasteboard = NSPasteboard.general
-        let previousItems: [NSPasteboardItem] = Self.pendingRestore?.items ?? pasteboard.pasteboardItems?.map { item in
-            let copy = NSPasteboardItem()
-            for type in item.types {
-                if let data = item.data(forType: type) { copy.setData(data, forType: type) }
-            }
-            return copy
-        } ?? []
+        let previousItems = Self.clipboardItems(pasteboard, pending: Self.pendingRestore?.contents)
         Self.pendingRestore?.task.cancel()
         Self.pendingRestore = nil
         _ = try await ClipboardIntegration().deliver(text, to: target)
         let ourChange = pasteboard.changeCount
         let isScreenSharing = target.bundleIdentifier == Self.screenSharing
         if isScreenSharing, !(await Self.sendClipboard(through: target)) { return .copiedForManualPaste }
-        guard NSWorkspace.shared.frontmostApplication?.processIdentifier == target.processIdentifier,
+        try Task.checkCancellation()
+        guard pasteboard.changeCount == ourChange,
+              NSWorkspace.shared.frontmostApplication?.processIdentifier == target.processIdentifier,
+              Self.focusMatches(expectedFocus, current: Self.focusedElement(in: target)),
               let events = Self.pasteKeystroke() else { return .copiedForManualPaste }
         for event in events { event.postToPid(target.processIdentifier) }
         if !keepsCopy, !isScreenSharing {
-            Self.pendingRestore = (previousItems, Task {
+            Self.pendingRestore = ((previousItems, ourChange), Task {
                 // ponytail: applications expose no paste acknowledgement; allow 750 ms before restoring.
                 try? await Task.sleep(for: .milliseconds(750))
                 guard !Task.isCancelled else { return }
@@ -126,6 +129,29 @@ public struct FocusedAppIntegration: TextOutputIntegration {
         vUp.flags = leftCommand
         commandUp.flags = []
         return [commandDown, vDown, vUp, commandUp]
+    }
+
+    public static func focusedElement(in app: NSRunningApplication?) -> AXUIElement? {
+        guard let app, AXIsProcessTrusted(), app.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return nil }
+        let element = AXUIElementCreateApplication(app.processIdentifier)
+        AXUIElementSetMessagingTimeout(element, 0.1)
+        return element.element(kAXFocusedUIElementAttribute)
+    }
+
+    static func focusMatches(_ expected: AXUIElement?, current: AXUIElement?) -> Bool {
+        guard let expected else { return true }
+        return current.map { CFEqual(expected, $0) } ?? false
+    }
+
+    static func clipboardItems(_ pasteboard: NSPasteboard, pending: (items: [NSPasteboardItem], changeCount: Int)?) -> [NSPasteboardItem] {
+        if let pending, pasteboard.changeCount == pending.changeCount { return pending.items }
+        return pasteboard.pasteboardItems?.map { item in
+            let copy = NSPasteboardItem()
+            for type in item.types {
+                if let data = item.data(forType: type) { copy.setData(data, forType: type) }
+            }
+            return copy
+        } ?? []
     }
 }
 
