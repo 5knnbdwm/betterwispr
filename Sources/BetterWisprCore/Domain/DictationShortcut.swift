@@ -57,6 +57,9 @@ public struct DictationShortcut: Codable, Equatable, Sendable {
 
     public var isModifierOnly: Bool { modifiers.isEmpty && Self.modifier(for: keyCode) != nil }
 
+    /// Whether Shift is part of the shortcut, so it can't also mean "paste without pressing Return".
+    public var usesShift: Bool { modifiers.union(Self.modifier(for: keyCode) ?? []).contains(.shift) }
+
     public var cancelModifiers: [ShortcutModifiers] {
         let held = modifiers.union(Self.modifier(for: keyCode) ?? []).subtracting(.function)
         guard !held.isEmpty, !held.contains(.command), keyCode != UInt32(kVK_Escape) else { return [[]] }

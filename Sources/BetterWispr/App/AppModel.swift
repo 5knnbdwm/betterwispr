@@ -11,10 +11,14 @@ import UniformTypeIdentifiers
 enum RecordingPhase: Equatable {
     case idle, preparing, recording, transcribing
     case cancelled, completed(String)
+    /// Pasted and about to press Return; a new dictation in the meantime takes over the send.
+    case sending
     case failed(DictationFailure)
     case unpasted(String)
 
     var isBusy: Bool { self == .preparing || self == .recording || self == .transcribing }
+    /// Escape cancels a busy dictation, and holds back a pending send.
+    var armsCancelShortcut: Bool { isBusy || self == .sending }
     var holdsMicrophone: Bool { self == .preparing || self == .recording }
 }
 
@@ -46,9 +50,14 @@ final class DictationRecording {
     let targetElement: AXUIElement?
     let mode: WritingMode?
     let context: Task<DictationContext, Never>?
+    /// Shift was held when the dictation started or finished, or the field wasn't a Claude prompt, so Return is skipped.
+    let holdsBackReturn: Bool
+    /// The app whose pending Return this dictation took over; its text follows the text pasted there just before.
+    let continuesIn: pid_t?
 
     init(audio: RecordedAudio, model: SpeechModel, settings: AppSettings, vocabulary: [VocabularyEntry],
-         target: NSRunningApplication?, targetElement: AXUIElement? = nil, mode: WritingMode? = nil, context: Task<DictationContext, Never>? = nil) {
+         target: NSRunningApplication?, targetElement: AXUIElement? = nil, mode: WritingMode? = nil, context: Task<DictationContext, Never>? = nil,
+         holdsBackReturn: Bool = false, continuesIn: pid_t? = nil) {
         self.audio = audio
         self.model = model
         self.settings = settings
@@ -57,6 +66,8 @@ final class DictationRecording {
         self.targetElement = targetElement
         self.mode = mode
         self.context = context
+        self.holdsBackReturn = holdsBackReturn
+        self.continuesIn = continuesIn
     }
 
     deinit {
@@ -91,9 +102,10 @@ final class AppModel {
             cardDismissal?.cancel()
             cardDeadline = nil
             if phase.isBusy != oldValue.isBusy {
-                onBusyChange?(phase.isBusy)
                 scheduleIdleUnload()
+                if !phase.isBusy { syncShiftShortcut() }
             }
+            if phase.armsCancelShortcut != oldValue.armsCancelShortcut { onBusyChange?(phase.armsCancelShortcut) }
             switch (oldValue.holdsMicrophone, phase.holdsMicrophone) {
             case (false, true) where settings.pauseMediaWhileDictating: mediaPauser.pause()
             case (true, false): mediaPauser.resume()
@@ -112,6 +124,8 @@ final class AppModel {
     var liveTranscript = LiveTranscript()
     var voiceLevels = VoiceLevels()
     var isHeldSession = false
+    /// The dictation in progress will press Return after pasting: Send to Claude is on, the field is a Claude prompt and Shift isn't held.
+    private(set) var pressesReturn = false
     var recordingDuration: TimeInterval = 0
     /// Counts down the last 30 seconds before a dictation reaches `AudioRecorder.maximumDuration`.
     var recordingSecondsLeft: Int? {
@@ -173,6 +187,14 @@ final class AppModel {
     @ObservationIgnored private var targetApplication: NSRunningApplication?
     @ObservationIgnored private var targetElement: AXUIElement?
     @ObservationIgnored private var writingMode: WritingMode?
+    @ObservationIgnored private var holdsBackReturn = false
+    @ObservationIgnored private var pendingReturn: Task<Void, Never>?
+    @ObservationIgnored private var pendingReturnApp: pid_t?
+    /// Whether the target's focused field was a Claude prompt when last checked, and when that check started.
+    @ObservationIgnored private var targetAccepts = false
+    @ObservationIgnored private var acceptanceCheck: (started: ContinuousClock.Instant, task: Task<Void, Never>?)?
+    @ObservationIgnored private var pendingNotSent: (() -> Void)?
+    @ObservationIgnored private var continuesIn: pid_t?
     @ObservationIgnored private var dictationContext: Task<DictationContext, Never>?
     @ObservationIgnored private var activeRecording: DictationRecording?
     @ObservationIgnored private var feedbackSound: NSSound?
@@ -232,8 +254,8 @@ final class AppModel {
         meetingDetector.isEnabled = settings.detectMeetings
         globalShortcut.onPress = { [weak self] in self?.shortcutPressed() }
         globalShortcut.onRelease = { [weak self] in self?.shortcutReleased() }
-        cancelShortcut.onPress = { [weak self] in self?.cancelRecording() }
-        customCancelShortcut.onPress = { [weak self] in self?.cancelRecording() }
+        cancelShortcut.onPress = { [weak self] in self?.cancelOrHoldBack() }
+        customCancelShortcut.onPress = { [weak self] in self?.cancelOrHoldBack() }
         selectedTextShortcut.onPress = { [weak self] in self?.cleanUpSelectedText() }
         onBusyChange = { [weak self] busy in self?.armCancelShortcut(busy) }
         warmUpSelectedModel()
@@ -244,6 +266,10 @@ final class AppModel {
             }
         }
         _ = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main, using: warmUpAfterWake)
+        // A send counting down when the Mac sleeps must not land on wake, long after the user looked away.
+        _ = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.holdBackReturn() }
+        }
         _ = DistributedNotificationCenter.default().addObserver(forName: .init("com.apple.screenIsUnlocked"), object: nil, queue: .main, using: warmUpAfterWake)
     }
 
@@ -260,7 +286,7 @@ final class AppModel {
         guard phase == .preparing || phase == .recording else { return }
         if Date().timeIntervalSince(pressedAt) < 0.3 {
             isHeldSession = false
-            if phase == .recording { statusMessage = "Listening. Press \(settings.shortcut.displayName) or click ✓ to finish." }
+            if phase == .recording { statusMessage = listeningStatus }
         }
         else if phase == .preparing { abandon(.releasedEarly(settings.shortcut)) }
         else { finishRecording() }
@@ -269,7 +295,7 @@ final class AppModel {
     func registerShortcut() {
         if let shortcut = settings.selectedTextShortcut { try? selectedTextShortcut.register(shortcut) }
         do {
-            try globalShortcut.register(settings.shortcut)
+            try globalShortcut.register(settings.shortcut, withShift: wantsShiftShortcut(for: settings.shortcut))
             if statusMessage == shortcutWarning { statusMessage = "" }
         } catch {
             statusMessage = "\(error.localizedDescription) Use the menu bar or Record button to dictate, or choose another shortcut in Settings."
@@ -300,7 +326,7 @@ final class AppModel {
             return
         }
         do {
-            try globalShortcut.register(shortcut)
+            try globalShortcut.register(shortcut, withShift: wantsShiftShortcut(for: shortcut))
         } catch {
             registerShortcut()
             ToastWindow.shared.show(Toast(failure: "Couldn’t use \(shortcut.displayName)", error))
@@ -328,6 +354,78 @@ final class AppModel {
         saveSettings()
     }
 
+    /// Rechecks in the background whether the target's focused field is a Claude prompt, at most once a second and one
+    /// check at a time, since Terminal and iTerm2 are asked through Apple Events.
+    private func refreshTargetAcceptance() {
+        guard settings.sendToClaude, let app = targetApplication else { return }
+        if let check = acceptanceCheck, check.task != nil || check.started.duration(to: .now) < .seconds(1) { return }
+        let token = generation
+        acceptanceCheck = (.now, Task { [weak self] in
+            let accepts = await ClaudePrompt.accepts(app)
+            guard let self, self.generation == token else { return }
+            self.acceptanceCheck?.task = nil
+            self.targetAccepts = accepts
+            self.updatePressesReturn()
+        })
+    }
+
+    private var listeningStatus: String {
+        let shortcut = settings.shortcut.displayName
+        let finish = pressesReturn ? "send" : "finish"
+        return isHeldSession ? "Listening. Release \(shortcut) to \(finish)." : "Listening. Press \(shortcut) or click ✓ to \(finish)."
+    }
+
+    private func cancelOrHoldBack() {
+        if phase == .sending { holdBackReturn() } else { cancelRecording() }
+    }
+
+    /// Shift held while starting or finishing a dictation pastes it without sending it to Claude.
+    private var shiftHeld: Bool { !settings.shortcut.usesShift && NSEvent.modifierFlags.contains(.shift) }
+
+    /// Waits while the app takes the paste, and while a new dictation may still take over the send, then presses Return.
+    func pressReturn(in app: NSRunningApplication, after delay: Duration, using paste: FocusedAppIntegration,
+                             otherwise notSent: @escaping () -> Void,
+                             acceptsPrompt: @escaping @MainActor (NSRunningApplication) async -> Bool = ClaudePrompt.accepts) {
+        pendingReturnApp = app.processIdentifier
+        pendingNotSent = notSent
+        phase = .sending
+        cardDuration = delay / .seconds(1)
+        cardDeadline = Date().addingTimeInterval(cardDuration)
+        pendingReturn = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard let self, !Task.isCancelled else { return }
+            // Turning the setting off, or moving to a shell or a file, during the countdown means no Return.
+            let accepts = self.settings.sendToClaude ? await acceptsPrompt(app) : false
+            guard !Task.isCancelled else { return }
+            self.pendingReturn = nil
+            self.pendingNotSent = nil
+            let sent = self.settings.sendToClaude && accepts && paste.pressReturn(in: app)
+            if self.phase == .sending { self.phase = .idle }
+            // A sent prompt leaves the field, so there is no correction to learn.
+            guard !sent else { return }
+            if !self.isBusy { self.present(.completed("Pasted, not sent"), for: 1.6) }
+            self.playFeedback(.attention)
+            notSent()
+        }
+    }
+
+    /// Leaves the pasted text in place without pressing Return.
+    func holdBackReturn() {
+        pendingReturn?.cancel()
+        pendingReturn = nil
+        if phase == .sending { phase = .idle }
+        pendingNotSent?()
+        pendingNotSent = nil
+    }
+
+    /// Follows Shift while recording, so the capsule shows whether finishing now would send.
+    private func updatePressesReturn(holdingBack: Bool? = nil) {
+        let sends = settings.sendToClaude && !(holdingBack ?? (holdsBackReturn || shiftHeld)) && targetAccepts
+        guard pressesReturn != sends else { return }
+        pressesReturn = sends
+        if phase == .recording, statusMessage.hasPrefix("Listening.") { statusMessage = listeningStatus }
+    }
+
     func changeSelectedTextShortcut(_ shortcut: DictationShortcut?) {
         guard !isBusy else { return }
         if let shortcut {
@@ -349,6 +447,7 @@ final class AppModel {
     }
 
     func cleanUpSelectedText() {
+        holdBackReturn()
         guard selectedTextCleanup == nil else { showSelectedTextProgress(); return }
         selectedTextCleanup = Task { [weak self] in
             guard let self, let outcome = await self.selectedTextOutcome(), !Task.isCancelled else { return }
@@ -419,10 +518,21 @@ final class AppModel {
             ToastWindow.shared.show(SelectedTextCleanupOutcome.busy.toast(allowingAccessibility: requestAccessibility))
         }
         targetApplication = NSWorkspace.shared.frontmostApplication
+        if settings.sendToClaude, let app = targetApplication { ClaudePrompt.prepare(app) }
         targetElement = FocusedAppIntegration.focusedElement(in: targetApplication)
         let modes = settings.modes
         let website = modes.needsWebsite ? targetApplication.flatMap(WebsiteReader.read) : nil
         writingMode = modes.match(app: targetApplication?.bundleIdentifier)?.mode
+        holdsBackReturn = shiftHeld
+        pressesReturn = false
+        targetAccepts = false
+        acceptanceCheck?.task?.cancel()
+        acceptanceCheck = nil
+        // "Oh wait, there's more": a new dictation during the wait takes over the send from the one before.
+        continuesIn = pendingReturn == nil ? nil : pendingReturnApp
+        pendingReturn?.cancel()
+        pendingReturn = nil
+        pendingNotSent = nil
         dictationContext?.cancel()
         dictationContext = website == nil ? captureContext(for: settings.applying(writingMode)) : nil
         isHeldSession = held
@@ -468,8 +578,8 @@ final class AppModel {
                 self.microphoneGranted = true
                 self.phase = .recording
                 self.playFeedback(.started)
-                let shortcut = self.settings.shortcut.displayName
-                self.statusMessage = self.isHeldSession ? "Listening. Release \(shortcut) to finish." : "Listening. Press \(shortcut) or click ✓ to finish."
+                self.updatePressesReturn()
+                self.statusMessage = self.listeningStatus
                 self.warmUpSelectedModel()
                 self.warmUpNotesModel(token: token)
                 self.startLivePreview(live, model: model, token: token)
@@ -479,6 +589,8 @@ final class AppModel {
                         try? await Task.sleep(for: .milliseconds(100))
                         guard !Task.isCancelled, let self, self.generation == token else { return }
                         self.advanceRecording(to: Date().timeIntervalSince(started))
+                        self.refreshTargetAcceptance()
+                        self.updatePressesReturn()
                         // Keep dictation bounded; a new recording can start immediately afterwards.
                         if self.recordingDuration >= AudioRecorder.maximumDuration { self.finishRecording(); return }
                     }
@@ -529,6 +641,9 @@ final class AppModel {
         let target = targetApplication
         let targetElement = targetElement
         let mode = writingMode
+        let shiftHoldsBack = holdsBackReturn || shiftHeld
+        let continuesIn = continuesIn
+        updatePressesReturn(holdingBack: shiftHoldsBack)
         let context = dictationContext.take()
         let live = live
         phase = .transcribing
@@ -550,8 +665,16 @@ final class AppModel {
                     return
                 }
                 self.playFeedback(.finished)
+                var holdsBackReturn = shiftHoldsBack
+                if settings.sendToClaude, !holdsBackReturn {
+                    // Checked afresh as the dictation ends, since the field may have changed since the last check.
+                    holdsBackReturn = if let target { await !ClaudePrompt.accepts(target) } else { true }
+                    guard self.generation == token else { return }
+                    self.updatePressesReturn(holdingBack: holdsBackReturn)
+                }
                 self.transcribe(DictationRecording(audio: audio, model: model, settings: settings,
-                                                  vocabulary: entries, target: target, targetElement: targetElement, mode: mode, context: context))
+                                                  vocabulary: entries, target: target, targetElement: targetElement, mode: mode, context: context,
+                                                  holdsBackReturn: holdsBackReturn, continuesIn: continuesIn))
             } catch {
                 guard self.generation == token else { return }
                 self.recorder.cancel()
@@ -629,11 +752,14 @@ final class AppModel {
                     self.history.insert(transcript, at: 0)
                     do { try self.persist() } catch { persistenceWarning = error.localizedDescription }
                 }
+                let returnDelay = recording.settings.sendToClaude && !recording.holdsBackReturn ? recording.settings.sendDelay : nil
+                let paste = FocusedAppIntegration(keepsCopy: writingSettings.copyToClipboard, expectedFocus: recording.targetElement)
                 let integration: (any TextOutputIntegration)? = writingSettings.autoPaste
-                    ? FocusedAppIntegration(keepsCopy: writingSettings.copyToClipboard, expectedFocus: recording.targetElement)
-                    : writingSettings.copyToClipboard ? ClipboardIntegration() : nil
+                    ? paste : writingSettings.copyToClipboard ? ClipboardIntegration() : nil
                 self.activeRecording = nil
-                let result = try await integration?.deliver(text, to: recording.target)
+                let continues = recording.continuesIn != nil && recording.continuesIn == recording.target?.processIdentifier
+                self.continuesIn = nil
+                let result = try await integration?.deliver(continues ? TextJoin.continuing(text) : text, to: recording.target)
                 guard self.generation == token else { return }
                 if result == .copiedForManualPaste && !AXIsProcessTrusted() { self.fail(.pasteBlocked) }
                 else if result == .copiedForManualPaste {
@@ -645,8 +771,14 @@ final class AppModel {
                     switch result {
                     case .pasted:
                         self.phase = .idle
-                        if writingSettings.learnCorrections, let app = recording.target {
-                            self.correctionWatcher.watch(text, in: app) { [weak self] in self?.learn(from: $0, to: $1) }
+                        let watchCorrections = { [weak self] in
+                            guard writingSettings.learnCorrections, let app = recording.target else { return }
+                            self?.correctionWatcher.watch(text, in: app) { [weak self] in self?.learn(from: $0, to: $1) }
+                        }
+                        if let returnDelay, let app = recording.target {
+                            self.pressReturn(in: app, after: returnDelay, using: paste, otherwise: watchCorrections)
+                        } else {
+                            watchCorrections()
                         }
                     case .copied: self.present(.completed("Copied to clipboard"), for: 1.6)
                     case nil: self.present(.completed("Transcript ready"), for: 1.6)
@@ -666,7 +798,8 @@ final class AppModel {
         let recoverable: DictationRecording?
         if phase == .recording, let audio = try? recorder.stop() {
             let recording = DictationRecording(audio: audio, model: selectedModel, settings: settings, vocabulary: vocabulary,
-                                              target: targetApplication, targetElement: targetElement, mode: writingMode, context: dictationContext.take())
+                                              target: targetApplication, targetElement: targetElement, mode: writingMode, context: dictationContext.take(),
+                                              holdsBackReturn: holdsBackReturn || !targetAccepts, continuesIn: continuesIn)
             recoverable = audio.hasSpeech ? recording : nil
         } else {
             recoverable = activeRecording
@@ -688,6 +821,12 @@ final class AppModel {
     /// Immediate cleanup for failures and quitting; only user cancellation offers Undo.
     func discardRecording() {
         generation = UUID()
+        pressesReturn = false
+        pendingReturn?.cancel()
+        pendingReturn = nil
+        pendingNotSent = nil
+        acceptanceCheck?.task?.cancel()
+        acceptanceCheck = nil
         shortcutPressedAt = nil
         correctionWatcher.stop()
         dictationContext.take()?.cancel()
@@ -1167,8 +1306,23 @@ final class AppModel {
         defaults.removeObject(forKey: key)
     }
 
+    private func wantsShiftShortcut(for shortcut: DictationShortcut) -> Bool {
+        guard settings.sendToClaude, !shortcut.isModifierOnly, !shortcut.usesShift else { return false }
+        return ![settings.cancelShortcut, settings.selectedTextShortcut].compactMap { $0 }.contains {
+            $0.keyCode == shortcut.keyCode && $0.modifiers == shortcut.modifiers.union(.shift)
+        }
+    }
+
+    /// Shift with the dictation shortcut is only taken from other apps while Send to Claude is on.
+    private func syncShiftShortcut() {
+        guard startsServices, !isBusy, globalShortcut.isRegistered, wantsShiftShortcut(for: settings.shortcut) != globalShortcut.wantsShift else { return }
+        registerShortcut()
+    }
+
     func saveSettings() {
+        if !settings.sendToClaude { holdBackReturn() }
         if startsServices { applyDockVisibility() }
+        syncShiftShortcut()
         do {
             let registered = SMAppService.mainApp.status == .enabled
             if settings.launchAtLogin != registered {
@@ -1324,6 +1478,7 @@ final class AppModel {
 
     func dismissCard() {
         guard !isBusy else { return }
+        if phase == .sending { holdBackReturn(); return }
         cancelledRecording = nil
         phase = .idle
     }
@@ -1334,6 +1489,12 @@ final class AppModel {
     }
 
     private func fail(_ failure: DictationFailure) {
+        var failure = failure
+        if continuesIn != nil {
+            // This dictation took over the send from the one before, which stays pasted.
+            failure.message += " Your earlier dictation was pasted but not sent."
+            continuesIn = nil
+        }
         statusMessage = failure.message
         present(.failed(failure), for: 6)
         playFeedback(.attention)

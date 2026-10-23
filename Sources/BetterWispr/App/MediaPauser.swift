@@ -1,4 +1,5 @@
 import AppKit
+import BetterWisprCore
 
 enum MediaApp: String, CaseIterable, Sendable {
     case music = "com.apple.Music"
@@ -86,29 +87,19 @@ struct AppleEventMediaPlayers: MediaPlayers {
     @concurrent
     static func requestPermission() async {
         for app in MediaApp.allCases {
-            guard let target = target(app) else { continue }
-            automationAllowed(target, askingUser: true)
+            guard let target = AppleEventTarget.descriptor(for: app.rawValue) else { continue }
+            AppleEventTarget.allowed(target, askingUser: true)
         }
-    }
-
-    private static func target(_ app: MediaApp) -> NSAppleEventDescriptor? {
-        guard let running = NSRunningApplication.runningApplications(withBundleIdentifier: app.rawValue).first else { return nil }
-        return NSAppleEventDescriptor(processIdentifier: running.processIdentifier)
     }
 
     @discardableResult
     private static func send(_ eventClass: String, _ eventID: String, to app: MediaApp,
                              directObject: NSAppleEventDescriptor? = nil) -> NSAppleEventDescriptor? {
-        guard let target = target(app), automationAllowed(target, askingUser: false) else { return nil }
+        guard let target = AppleEventTarget.descriptor(for: app.rawValue), AppleEventTarget.allowed(target, askingUser: false) else { return nil }
         let event = NSAppleEventDescriptor(eventClass: code(eventClass), eventID: code(eventID), targetDescriptor: target,
                                            returnID: AEReturnID(kAutoGenerateReturnID), transactionID: AETransactionID(kAnyTransactionID))
         if let directObject { event.setParam(directObject, forKeyword: code("----")) }
         return try? event.sendEvent(options: [.waitForReply, .neverInteract], timeout: 1)
-    }
-
-    @discardableResult
-    private static func automationAllowed(_ target: NSAppleEventDescriptor, askingUser: Bool) -> Bool {
-        AEDeterminePermissionToAutomateTarget(target.aeDesc, typeWildCard, typeWildCard, askingUser) == noErr
     }
 
     private static func code(_ text: String) -> FourCharCode {

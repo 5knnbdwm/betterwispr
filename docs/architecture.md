@@ -36,7 +36,7 @@ Sources/
     Speech/           SpeechProvider contract, model catalog, Apple and WhisperKit
     Transcription/    English filler/stutter cleanup, spoken email layout, optional notes-model polish, writing styles and vocabulary replacements
     Notes/            Meeting notes with Apple Intelligence, the built-in model, Ollama, signed-in CLIs and explicit API connections
-    Integrations/     Clipboard and guarded paste delivery, the yt-dlp link downloader and the read-only MCP server
+    Integrations/     Clipboard and guarded paste delivery, Claude prompt recognition, the yt-dlp link downloader and the read-only MCP server
   BetterWisprCLI/      Developer entry point for model and file smoke tests
 ```
 
@@ -143,6 +143,39 @@ paused that still report paused. Operations run one at a time, address the
 running process so a closed app is never launched, and never prompt during
 dictation; consent is asked once when the setting turns on. Quitting waits for
 the resume through `terminateLater`. Meeting capture does not pause media.
+
+With "Send to Claude" on (`AppSettings.sendToClaude`, off by default), a pasted
+dictation is followed by a Return key press when `ClaudePrompt` recognizes the
+focused field as a Claude prompt. Anything it does not recognize is only pasted,
+because Return in a shell runs a command:
+
+- Claude Desktop: the focused element is a text area. Text fields such as search are excluded.
+- VS Code: the Claude Code extension's "Message input" text area.
+- Terminal and iTerm2: an Apple Event asks the app for the focused tab's tty, and
+  a Claude Code process must be in the foreground of that tty. This needs
+  Automation consent, asked when the setting turns on or from its Allow button,
+  never during a dictation; without it, nothing is sent.
+- Ghostty and VS Code terminals paste without sending. Their titles can outlive Claude Code, so they cannot prove that Return reaches a prompt.
+
+Claude Code is identified from the kernel's process list (`sysctl`) by its
+executable path or arguments, since the native installer's binary is named after
+its version. Nothing checks what Claude Code shows, so Return also answers a
+question it is asking, such as a permission prompt; the setting's caption says
+so. VS Code and Claude Desktop expose these fields only after BetterWispr sets
+`AXManualAccessibility`, which can make VS Code offer its screen reader mode.
+
+The field is checked when recording starts, at most once a second while it
+continues, so the capsule shows ↵ only when the dictation will be sent, and
+again when it ends. Shift held at either end, or Shift with the dictation
+shortcut (a second Carbon hot key registered only while the setting is on),
+pastes without sending. After the paste the phase becomes `.sending` for the
+chosen wait (one second by default), during which Escape or Don't send holds the
+Return back, and starting another dictation takes over the send: its text is
+pasted after the first with a space (`TextJoin`) and its own Return sends both.
+Return is pressed only if the field is still a Claude prompt and the target app
+and focused element are unchanged, as a bare key press with modifier flags
+cleared. Otherwise the capsule says "Pasted, not sent". Sleep, quitting and
+turning the setting off cancel a pending Return. Starting selected-text cleanup also holds back a pending Return. An explicit cancel or cleanup shortcut takes priority over the optional Shift variant of the dictation shortcut.
 
 The optional Clean up selected text shortcut (`AppSettings.selectedTextShortcut`,
 `GlobalShortcut` id 4) edits text outside a dictation and is refused while one

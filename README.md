@@ -24,6 +24,7 @@ BetterWispr is a private, offline speech-to-text app and an open-source alternat
 - **Meetings**: live transcript of you and the other side, plus on-device titles, summaries and action items with Apple Intelligence or a local Ollama model.
 - **Transcribe files and links**: drop in an audio or video file or paste a video link and get a timestamped transcript with the model you choose, to copy or export as text or Markdown. Links use yt-dlp, which BetterWispr installs only when you click Install.
 - **Connected apps**: let Claude, Cursor and other apps that support MCP list, search and read your meeting notes and transcripts. Off by default and read-only.
+- **Send to Claude**: optionally press Return after pasting, only into Claude Desktop or Claude Code in the VS Code panel, Terminal or iTerm2. Off by default.
 - **History**: raw and corrected transcripts, stored locally (can be turned off).
 - **Bring your own model**: optional Sarvam AI, Smallest AI or any OpenAI-compatible endpoint.
 
@@ -69,6 +70,7 @@ For optional subscription transcription, see [Codex subscription setup](docs/cod
 - With Remember named voices on, voice profiles of the speakers you name live in `Voices.json` next to it (not encrypted). Forget Voices in Models deletes them, and deleting a meeting deletes the profiles named in it.
 - Audio is written to temporary files and deleted after each recording.
 - Built-in models only touch the network when you explicitly download one.
+- Send to Claude is off by default. When it is on, BetterWispr reads the list of running processes on this Mac to find Claude Code, and asks Terminal and iTerm2 which tab is in front once you allow it. Nothing is stored or sent.
 - Connected apps is off by default. When you turn it on, apps you connect read your meetings through `BetterWispr --mcp` on this Mac and send what they read to their own AI provider.
 
 ## Troubleshooting

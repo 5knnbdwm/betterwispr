@@ -12,6 +12,9 @@ final class GlobalShortcut {
     private var localMonitor: Any?
     private var globalMonitor: Any?
     private var modifierPressed = false
+    /// Whether Shift with the shortcut was asked for, to dictate without sending to Claude; registering it can fail.
+    private(set) var wantsShift = false
+    var isRegistered: Bool { !hotKeys.isEmpty || localMonitor != nil }
     var onPress: (() -> Void)?
     var onRelease: (() -> Void)?
 
@@ -24,8 +27,9 @@ final class GlobalShortcut {
         if let handler { RemoveEventHandler(handler) }
     }
 
-    func register(_ shortcut: DictationShortcut) throws {
+    func register(_ shortcut: DictationShortcut, withShift: Bool = false) throws {
         unregister()
+        wantsShift = withShift
         if shortcut.isModifierOnly {
             guard AXIsProcessTrusted() else { throw ShortcutError.accessibilityRequired }
             localMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
@@ -42,22 +46,26 @@ final class GlobalShortcut {
             return
         }
         guard register(keyCode: shortcut.keyCode, modifiers: [shortcut.modifiers]) else { throw ShortcutError.unavailable(shortcut) }
+        // Best effort: another app may own the Shift combination, and the plain shortcut still works.
+        if withShift, !shortcut.usesShift { _ = addHotKey(keyCode: shortcut.keyCode, modifiers: shortcut.modifiers.union(.shift)) }
     }
 
     @discardableResult
     func register(keyCode: UInt32, modifiers: [ShortcutModifiers]) -> Bool {
         unregister()
         guard installHandler() else { return false }
-        for modifier in modifiers {
-            var hotKey: EventHotKeyRef?
-            let status = RegisterEventHotKey(keyCode, modifier.rawValue, identifier, GetApplicationEventTarget(), 0, &hotKey)
-            if status == noErr, let hotKey {
-                hotKeys.append(hotKey)
-            } else {
-                Logger(subsystem: "org.betterwispr.app", category: "GlobalShortcut").error("Hot key registration failed: id=\(self.identifier.id) keyCode=\(keyCode) modifiers=\(modifier.symbols, privacy: .public) status=\(status)")
-            }
+        return modifiers.map { addHotKey(keyCode: keyCode, modifiers: $0) }.allSatisfy { $0 }
+    }
+
+    private func addHotKey(keyCode: UInt32, modifiers: ShortcutModifiers) -> Bool {
+        var hotKey: EventHotKeyRef?
+        let status = RegisterEventHotKey(keyCode, modifiers.rawValue, identifier, GetApplicationEventTarget(), 0, &hotKey)
+        guard status == noErr, let hotKey else {
+            Logger(subsystem: "org.betterwispr.app", category: "GlobalShortcut").error("Hot key registration failed: id=\(self.identifier.id) keyCode=\(keyCode) modifiers=\(modifiers.symbols, privacy: .public) status=\(status)")
+            return false
         }
-        return hotKeys.count == modifiers.count
+        hotKeys.append(hotKey)
+        return true
     }
 
     func unregister() {

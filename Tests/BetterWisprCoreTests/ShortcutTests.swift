@@ -58,6 +58,16 @@ import Testing
     #expect(fn.cancelModifiers == [[]])
 }
 
+@Test func shiftHoldsBackReturnOnlyWhenTheShortcutDoesNotUseIt() throws {
+    let controlShiftD = try #require(DictationShortcut(keyCode: UInt32(kVK_ANSI_D), modifiers: [.control, .shift], key: "D"))
+    let rightShift = try #require(DictationShortcut(keyCode: UInt32(kVK_RightShift), modifiers: [], key: "Right Shift"))
+    let fn = try #require(DictationShortcut(keyCode: UInt32(kVK_Function), modifiers: [], key: "Fn"))
+    #expect(!DictationShortcut.optionSpace.usesShift)
+    #expect(!fn.usesShift)
+    #expect(controlShiftD.usesShift)
+    #expect(rightShift.usesShift)
+}
+
 @Test @MainActor func eachShortcutAnswersOnlyItsOwnCarbonHotKey() throws {
     let dictation = GlobalShortcut()
     let cancel = GlobalShortcut(id: 2)
@@ -206,4 +216,20 @@ import Testing
     #expect(shared.count > 30)
     #expect(send.isDisjoint(with: shared))
     #expect(FocusedAppIntegration.menuTitles(FocusedAppIntegration.sendClipboardKey, in: nil).isEmpty)
+}
+
+@Test @MainActor func sendToClaudeLeavesTheShiftVariantAvailableForTheConfiguredCancelShortcut() throws {
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let model = AppModel(store: LocalStore(directory: folder), startsServices: false)
+    let f18 = try #require(DictationShortcut(keyCode: UInt32(kVK_F18), modifiers: [], key: "F18"))
+    let shiftF18 = try #require(DictationShortcut(keyCode: UInt32(kVK_F18), modifiers: [.shift], key: "F18"))
+    let cancel = GlobalShortcut(id: 11)
+    defer { cancel.unregister(); model.suspendShortcut() }
+    model.settings.shortcut = f18
+    model.settings.cancelShortcut = shiftF18
+    model.settings.sendToClaude = true
+    model.registerShortcut()
+    try cancel.register(shiftF18)
+    #expect(throws: ShortcutError.self) { try cancel.register(f18) }
 }

@@ -20,7 +20,7 @@ struct CapsuleView: View {
     }
     private var showsCard: Bool {
         switch model.phase {
-        case .cancelled, .completed, .unpasted, .failed: true
+        case .cancelled, .completed, .unpasted, .failed, .sending: true
         default: failure != nil || meetingPrompt != nil
         }
     }
@@ -73,6 +73,7 @@ struct CapsuleView: View {
             case .cancelled:
                 AccessibilityNotification.Announcement(model.canUndoCancellation ? "Transcript cancelled. Undo is available for five seconds." : "Transcript cancelled.").post()
             case .completed(let message): AccessibilityNotification.Announcement(message).post()
+            case .sending: AccessibilityNotification.Announcement("Sending. Dictate again to add more first.").post()
             default: break
             }
         }
@@ -88,6 +89,9 @@ struct CapsuleView: View {
                     .transition(swap)
             } else if model.phase == .cancelled {
                 cancellationCard
+                    .transition(swap)
+            } else if model.phase == .sending {
+                sendingCard
                     .transition(swap)
             } else if case .completed(let message) = model.phase {
                 completionCard(message)
@@ -270,6 +274,29 @@ struct CapsuleView: View {
         .frame(width: 320, height: 56)
     }
 
+    private var sendingCard: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "return")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Color(red: 0.55, green: 0.9, blue: 0.7))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Sending…")
+                    .font(.system(size: 14, weight: .medium))
+                Text("\(model.settings.shortcut.displayName) to add more")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.white.opacity(0.6))
+            }
+            Spacer(minLength: 0)
+            Button("Don’t send", action: model.holdBackReturn)
+                .help("Leave the text pasted without pressing Return")
+        }
+        .foregroundStyle(.white)
+        .buttonStyle(CapsuleCardButtonStyle())
+        .padding(.horizontal, 18)
+        .frame(width: 320, height: 56)
+    }
+
     private func completionCard(_ message: String) -> some View {
         HStack(spacing: 10) {
             Image(systemName: "checkmark.circle.fill")
@@ -434,6 +461,14 @@ struct CapsuleView: View {
                     .frame(maxWidth: .infinity)
                     .accessibilityLabel(waveformLabel)
             }
+            if model.pressesReturn {
+                Image(systemName: "return")
+                    .foregroundStyle(.white.opacity(0.75))
+                    .frame(width: 14, height: 24)
+                    .help("Sends after pasting. Hold Shift to paste only.")
+                    .accessibilityLabel("Sends after pasting")
+                    .transition(.opacity)
+            }
             if !model.isHeldSession {
                 Button(action: model.toggleRecording) {
                     Image(systemName: "checkmark")
@@ -452,7 +487,8 @@ struct CapsuleView: View {
         .foregroundStyle(.white)
         .buttonStyle(.plain)
         .padding(.horizontal, 4)
-        .frame(width: model.isHeldSession ? 96 : 108, height: 28)
+        .frame(width: (model.isHeldSession ? 96 : 108) + (model.pressesReturn ? 18 : 0), height: 28)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: model.pressesReturn)
         .contentShape(Capsule())
         .contextMenu { Button("Cancel dictation", action: model.cancelRecording) }
         .accessibilityActions { Button("Cancel dictation", action: model.cancelRecording) }

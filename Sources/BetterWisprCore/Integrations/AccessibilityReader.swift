@@ -7,6 +7,12 @@ extension AXUIElement {
         return value as? String
     }
 
+    func strings(_ attribute: String) -> [String] {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(self, attribute as CFString, &value) == .success else { return [] }
+        return value as? [String] ?? []
+    }
+
     func element(_ attribute: String) -> AXUIElement? {
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(self, attribute as CFString, &value) == .success,

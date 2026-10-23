@@ -151,7 +151,7 @@ private struct DictationPanel: View {
         case .recording: "Listening…"
         case .preparing: "Getting ready…"
         case .transcribing: "Transcribing…"
-        case .idle, .failed, .unpasted, .cancelled, .completed: greeting
+        case .idle, .failed, .unpasted, .cancelled, .completed, .sending: greeting
         }
     }
 

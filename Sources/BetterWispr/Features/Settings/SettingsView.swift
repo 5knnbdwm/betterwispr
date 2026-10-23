@@ -5,6 +5,8 @@ import SwiftUI
 
 struct SettingsView: View {
     @Bindable var model: AppModel
+    @State private var permissionCheck = 0
+    @State private var terminals: [ScriptableTerminal] = []
 
     private static let voiceCommands = [
         ("“comma”, “question mark”, “full stop”", ", ? ."),
@@ -129,6 +131,33 @@ struct SettingsView: View {
 
                 SettingsSection("After you speak") {
                     SettingToggle("Paste into the active app", caption: "Needs Accessibility. Otherwise, text is copied.", isOn: setting(\.autoPaste))
+                    RowDivider()
+                    SettingToggle("Send to Claude", caption: "Press Return after pasting into Claude Desktop, or into Claude Code in the VS Code panel, Terminal or iTerm2. Elsewhere, text is only pasted. Hold Shift to paste only. Return also answers a Claude Code question, such as a permission prompt.", isOn: sendToClaude)
+                        .task(id: permissionCheck) { await loadTerminals() }
+                        .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didActivateApplicationNotification)) { _ in permissionCheck += 1 }
+                    if model.settings.sendToClaude {
+                        RowDivider()
+                        SettingRow("Wait before sending", caption: "The capsule counts down before Return. Dictate again during it to add more, and the next dictation sends both, or click Don’t send.") {
+                            Picker("Wait before sending", selection: setting(\.sendDelayMilliseconds)) {
+                                ForEach(ClaudePrompt.delayChoices, id: \.self) { milliseconds in
+                                    let label = milliseconds < 1_000 ? "\(milliseconds) ms" : milliseconds == 1_000 ? "1 second" : "\(milliseconds / 1_000) seconds"
+                                    Text(milliseconds == ClaudePrompt.defaultDelay ? "\(label) (default)" : label)
+                                        .tag(milliseconds == ClaudePrompt.defaultDelay ? Int?.none : Optional(milliseconds))
+                                }
+                            }
+                            .labelsHidden()
+                            .fixedSize()
+                        }
+                        ForEach(terminals, id: \.bundleID) { terminal in
+                            RowDivider()
+                            SettingRow(terminal.name, caption: terminal.allowed ? "Allowed to tell BetterWispr which tab is in front." : "BetterWispr asks \(terminal.name) which tab is in front, to send only where Claude Code runs. Open \(terminal.name) to allow it.") {
+                                if !terminal.allowed {
+                                    Button("Allow…") { Task { await ClaudePrompt.requestTerminalPermission(); permissionCheck += 1 } }
+                                        .disabled(!terminal.isOpen)
+                                }
+                            }
+                        }
+                    }
                     RowDivider()
                     SettingToggle("Copy to clipboard", caption: "Keep each dictation ready to paste again. When off, your clipboard is left as it was.", isOn: setting(\.copyToClipboard))
                     RowDivider()
@@ -287,6 +316,37 @@ struct SettingsView: View {
         return model.phraseBoosterInstalled
             ? "Add the names and terms you say often. When you speak English, the phrase booster listens for them and fixes their spelling."
             : "Add the names and terms you say often, then download the phrase booster there so Parakeet listens for them. About 100 MB, runs on this Mac."
+    }
+
+    private var sendToClaude: Binding<Bool> {
+        Binding(get: { model.settings.sendToClaude }, set: { isOn in
+            model.settings.sendToClaude = isOn
+            model.saveSettings()
+            guard isOn else { return }
+            // Let open Electron apps build their accessibility tree before the first dictation reads it.
+            NSWorkspace.shared.runningApplications.forEach(ClaudePrompt.prepare)
+            Task { await ClaudePrompt.requestTerminalPermission(); permissionCheck += 1 }
+        })
+    }
+
+    private struct ScriptableTerminal {
+        let bundleID: String
+        let name: String
+        let isOpen: Bool
+        let allowed: Bool
+    }
+
+    /// Installed scriptable terminals and whether BetterWispr may ask them for their focused tab, checked off the main thread.
+    private func loadTerminals() async {
+        guard model.settings.sendToClaude else { return }
+        var found: [ScriptableTerminal] = []
+        for bundleID in ClaudePrompt.scriptableTerminals {
+            guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { continue }
+            let allowed = await ClaudePrompt.terminalAllowed(bundleID)
+            let name = FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: "")
+            found.append(ScriptableTerminal(bundleID: bundleID, name: name, isOpen: allowed != nil, allowed: allowed == true))
+        }
+        terminals = found
     }
 
     private var pauseMediaWhileDictating: Binding<Bool> {

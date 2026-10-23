@@ -43,6 +43,10 @@ public struct AppSettings: Codable, Equatable, Sendable {
     /// Languages automatic detection chooses from with a Whisper model; empty allows every language.
     public var dictationLanguages: Set<String> = []
     public var autoPaste: Bool = true
+    /// Presses Return after pasting into a recognized Claude prompt; see `ClaudePrompt`.
+    public var sendToClaude: Bool = false
+    /// Milliseconds before Return, during which another dictation can add more; nil uses `ClaudePrompt.defaultDelay`.
+    public var sendDelayMilliseconds: Int?
     public var copyToClipboard: Bool = false
     public var saveHistory: Bool = true
     public var showCapsule: Bool = true
@@ -143,6 +147,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
 
     public func tone(for context: StyleContext) -> StyleTone { styles[context] ?? .formal }
 
+    public var sendDelay: Duration { .milliseconds(min(max(sendDelayMilliseconds ?? ClaudePrompt.defaultDelay, 0), 5_000)) }
     public func soundName(for cue: DictationSound) -> String { sounds[cue] ?? cue.defaultSoundName }
 
     public func cliModel(_ cli: NotesCLI) -> String { cli == .claudeCode ? claudeNotesModel : codexNotesModel }
@@ -174,6 +179,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
         chineseScript = try container.decodeIfPresent(ChineseScript.self, forKey: .chineseScript)
         dictationLanguages = try container.decodeIfPresent(Set<String>.self, forKey: .dictationLanguages) ?? []
         autoPaste = try container.decode(Bool.self, forKey: .autoPaste)
+        sendToClaude = try container.decodeIfPresent(Bool.self, forKey: .sendToClaude) ?? false
+        sendDelayMilliseconds = try container.decodeIfPresent(Int.self, forKey: .sendDelayMilliseconds)
         copyToClipboard = try container.decodeIfPresent(Bool.self, forKey: .copyToClipboard) ?? false
         saveHistory = try container.decode(Bool.self, forKey: .saveHistory)
         showCapsule = try container.decode(Bool.self, forKey: .showCapsule)
