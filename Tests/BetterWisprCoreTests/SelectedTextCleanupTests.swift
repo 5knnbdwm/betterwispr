@@ -1,4 +1,5 @@
-import BetterWisprCore
+@testable import BetterWisprCore
+import ApplicationServices
 import Foundation
 import Testing
 @testable import BetterWispr
@@ -26,4 +27,18 @@ import Testing
     #expect(SelectedTextCleanupOutcome.replacement(keepingWhitespaceOf: "We ship it Friday.", ifChangedTo: "We ship it on Friday.") == "We ship it on Friday.")
     #expect(SelectedTextCleanupOutcome.replacement(keepingWhitespaceOf: "so um we ship it friday\u{200B}", ifChangedTo: "so um we ship it friday") == nil)
     #expect(SelectedTextCleanupOutcome.replacement(keepingWhitespaceOf: "so um we ship it friday\u{200B}", ifChangedTo: "We ship it Friday.") == "We ship it Friday.\u{200B}")
+}
+
+@Test func cleanupReplacementRequiresTheSameElementRangeAndText() {
+    let element = AXUIElementCreateApplication(1)
+    let text = "We ship it Friday."
+    let original = SelectedTextSnapshot(text: text, element: element, range: CFRange(location: 0, length: text.utf16.count))
+    #expect(original.matches(SelectedTextSnapshot(text: text, element: AXUIElementCreateApplication(1), range: CFRange(location: 0, length: text.utf16.count))))
+    #expect(!original.matches(SelectedTextSnapshot(text: text, element: AXUIElementCreateApplication(2), range: CFRange(location: 0, length: text.utf16.count))))
+    #expect(!original.matches(SelectedTextSnapshot(text: text, element: element, range: CFRange(location: 30, length: text.utf16.count))))
+    #expect(!original.matches(SelectedTextSnapshot(text: text, element: element, range: CFRange(location: 0, length: text.utf16.count + 1))))
+    #expect(!original.matches(SelectedTextSnapshot(text: "We ship it Monday.", element: element, range: CFRange(location: 0, length: text.utf16.count))))
+    #expect(!original.matches(SelectedTextSnapshot(text: text, element: element, range: nil)))
+    #expect(!SelectedTextSnapshot(text: text, element: element, range: nil).matches(original))
+    #expect(!original.matches(nil))
 }

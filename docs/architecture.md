@@ -147,14 +147,15 @@ runs. A dictation that starts while an edit runs cancels the edit, so the two
 never paste at once. Escape with any modifier is refused as this shortcut
 because Escape cancels dictation. `AppModel.cleanUpSelectedText` reads the
 frontmost app's selection through Accessibility with
-`DictationContext.selectedText(in:)`, which returns nothing
+`DictationContext.selection(in:)`, which returns nothing
 under secure input or from a password field. Empty, short (under
 `TranscriptPolisher.minimumWords`) and non-English selections are refused. The
 trimmed text goes to `TranscriptPolisher` with `AppSettings.cleanupSettings` and
 vocabulary hints, without screen context or mode instructions. Before pasting,
-the selection is read again. An unchanged selection is replaced through
-`FocusedAppIntegration`, which still requires the same frontmost app and
-restores the clipboard. Any other case copies the edit for manual paste. Each
+the selection is read again. Matching text in the same Accessibility element
+and selected range is replaced through `FocusedAppIntegration`, which also
+checks the original focused element and frontmost app and restores the clipboard.
+Missing or changed selection identity copies the edit for manual paste. Each
 ending is one `SelectedTextCleanupOutcome` toast. Cancel on the progress toast
 drops the result, and nothing is saved to history.
 

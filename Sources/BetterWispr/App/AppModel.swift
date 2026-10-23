@@ -353,7 +353,8 @@ final class AppModel {
         guard AXIsProcessTrusted() else { return .needsAccessibility }
         guard let app = NSWorkspace.shared.frontmostApplication, app.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return .noOtherApp }
         guard !IsSecureEventInputEnabled() else { return .secureInput }
-        let selected = await DictationContext.selectedText(in: app) ?? ""
+        let selection = await DictationContext.selection(in: app)
+        let selected = selection?.text ?? ""
         guard !Task.isCancelled else { return nil }
         let settings = settings.cleanupSettings
         if let refusal = SelectedTextCleanupOutcome.refusal(of: selected, settings: settings) { return refusal }
@@ -363,14 +364,15 @@ final class AppModel {
         guard !Task.isCancelled else { return nil }
         guard let edited else { return .leftAsIs(model: settings.notesModelName) }
         guard let replacement = SelectedTextCleanupOutcome.replacement(keepingWhitespaceOf: selected, ifChangedTo: edited) else { return .alreadyClean }
-        let stillSelected = await DictationContext.selectedText(in: app) == selected
+        let currentSelection = await DictationContext.selection(in: app)
+        let stillSelected = selection?.matches(currentSelection) == true
         guard !Task.isCancelled else { return nil }
         do {
             guard stillSelected else {
                 _ = try await ClipboardIntegration().deliver(replacement, to: nil)
                 return .copied
             }
-            switch try await FocusedAppIntegration(keepsCopy: false).deliver(replacement, to: app) {
+            switch try await FocusedAppIntegration(keepsCopy: false, expectedFocus: selection?.element).deliver(replacement, to: app) {
             case .pasted(let name): return .replaced(in: name)
             case .copied, .copiedForManualPaste: return .copied
             }

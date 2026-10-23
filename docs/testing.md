@@ -1182,6 +1182,11 @@ player; real playback and the Automation prompt need these steps.
   the edit. Click Cancel on the progress toast in another run; nothing is
   pasted or copied. Pressing ⌃⌥C while an edit runs shows the progress toast
   again.
+- [ ] Put the same sentence twice in one editor. Start cleanup on the first,
+  then select the second before the edit arrives. Repeat by selecting identical
+  text in another field or window of the same app. Each copies the edit without
+  replacing text. An app that supplies selected text but no selected range also
+  copies instead of pasting.
 - [ ] Press ⌃⌥C during a dictation. The toast says "Finish dictating first" and
   the dictation continues. Press ⌃⌥C with a slow provider, then start a
   dictation before the edit arrives. The same toast appears, and nothing is
