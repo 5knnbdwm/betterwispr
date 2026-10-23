@@ -27,7 +27,7 @@ struct MeetingsView: View {
                 }
             }
         }
-        .background(Color(nsColor: .textBackgroundColor))
+        .background(.pageFill)
         .answering($asking, in: .allMeetings, model: model)
         .alert("Delete this meeting?", isPresented: Binding(
             get: { meetingToDelete != nil },

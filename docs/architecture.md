@@ -52,12 +52,14 @@ the policy immediately and persist through the existing workspace store.
 
 1. A dashboard action or the global shortcut (**Option–Space** unless changed in
    Settings) starts a session. Capture the previously focused external app before
-   showing the nonactivating capsule. While the session is preparing, recording
-   or transcribing, a second Carbon hot key makes Escape (also with the dictation
-   shortcut's held modifiers unless they include Command, so Command-Option-Escape
-   stays Force Quit) cancel it from any app through the same Undo path;
-   it is unregistered as soon as the session leaves those phases, so other apps
-   keep Escape.
+   showing the nonactivating capsule. With "Hide capsule while dictating" on,
+   `AppModel.showsCapsule` keeps it hidden until the session leaves the busy
+   phases or the 30-second limit warning starts. While the session is preparing,
+   recording or transcribing, a second Carbon hot key makes Escape (also with the
+   dictation shortcut's held modifiers unless they include Command, so
+   Command-Option-Escape stays Force Quit) cancel it from any app through the
+   same Undo path; it is unregistered as soon as the session leaves those phases,
+   so other apps keep Escape.
 2. Validate the selected provider and check microphone permission. Apple speech
    authorization and API-key checks still precede capture. Installed neural-model
    warm-up runs independently, so it need not delay capture; readiness is checked
@@ -85,6 +87,7 @@ the policy immediately and persist through the existing workspace store.
    one exception: `LiveTranscriber` re-recognizes the unconfirmed tail of the
    16 kHz capture copy about once a second while recording and shows the
    agreed words in the capsule, but the pasted text is always this batch pass.
+   It does not run while the capsule is hidden for dictation.
    With automatic language and a Whisper model, a non-empty
    `AppSettings.dictationLanguages` limits detection. `WhisperKitProvider`
    runs Whisper's language detection once on the first 30 seconds, allowing
@@ -830,6 +833,24 @@ through the existing session state. Keep clipboard/focus restoration,
 Accessibility checks and cancellation behavior in the shared path. Clipboard
 restoration after automated paste uses a bounded delay because arbitrary apps
 do not acknowledge receipt; slow recipient apps need explicit manual testing.
+
+Screen Sharing sends the clipboard to the other computer only when its window
+becomes key, so for `com.apple.ScreenSharing` `FocusedAppIntegration` first
+presses Edit > Send Clipboard through Accessibility. It finds menu items by
+their `MainMenu.loctable` keys (`281.title` for Send Clipboard, `100521.title`
+for Use Shared Clipboard), so any language matches. Screen Sharing disables
+Send Clipboard while Use Shared Clipboard is on and the user is controlling the
+other computer. In that case it presses Use Shared Clipboard off, waits until
+Accessibility reports Send Clipboard enabled, presses it, and presses Use Shared
+Clipboard back on. The wait is needed because AppKit refreshes menu state for
+Accessibility about once a second and ignores presses on an item it still
+treats as disabled; turning the setting off and on sends only a flag and moves
+no clipboard data. Accessibility presses run before the call returns, so the
+clipboard is queued before the Command-V events. When Send Clipboard cannot be
+pressed it returns `copiedForManualPaste` rather than paste the other
+computer's older clipboard, and it checks the target is still frontmost after
+the wait. The text is not restored afterwards, because the other computer reads
+it after an unknown delay.
 
 Add only the concrete integration and its required settings. Do not introduce
 per-app speech providers or duplicate recording code. Any future network
