@@ -92,10 +92,10 @@ private struct TranscribeHome: View {
                     }
                 }
                 .pickerStyle(.inline)
-                Text(model.transcriptionModel.engine == .api ? "Audio sent to your selected endpoint" : "On-device transcription")
+                Text(model.transcriptionModel.processingLocation.disclosure)
                 Button("Manage models…") { model.selectedPage = .models }
             } label: {
-                Label(model.transcriptionModel.name, systemImage: model.transcriptionModel.engine == .api ? "network" : "cpu")
+                Label(model.transcriptionModel.name, systemImage: model.transcriptionModel.processingLocation.isOnDevice ? "cpu" : "network")
             }
             .menuStyle(.borderlessButton)
             .fixedSize()

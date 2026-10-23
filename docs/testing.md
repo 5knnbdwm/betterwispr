@@ -6,6 +6,150 @@ version, Mac model, input device, engine/model and date for future runs. A
 successful build does not verify microphone capture, clipboard behavior or
 general recognition accuracy.
 
+## Combined 0.1.6 checks, 2026-10-20
+
+After combining the Codex subscription changes with the dictation and Ask fixes,
+`swift build` and `swift test` passed. Swift Testing reported 296 tests passed;
+the opt-in Chrome paste and live notes-provider tests were skipped. The Codex
+cancellation test stub names `CodexEndpointStub.probe` explicitly because using
+`Self.probe` triggered a region-based isolation checker error with this compiler.
+`pnpm --filter web build` and `pnpm --filter web test` also passed, including the
+rendered changelog. No microphone, browser paste, or live-provider checks were
+repeated in this run.
+
+## Codex subscription transcription check, 2026-10-18
+
+Apple Silicon, macOS 27.2, debug builds. `swift build`,
+`swift test --build-system native --no-parallel` with all 291 tests, and
+`./scripts/build-app.sh` passed. The native-provider tests cover file-backed
+sign-in, request fields, redacted failures, cancellation, independent sessions,
+ordered chunks and refusal to upload during preparation or warm-up.
+
+- `BetterWisprCLI --transcribe-file` with `--model codex` returned text for
+  synthetic English and Ukrainian WAV files and a 130-second English file.
+  The process search path excluded helper directories. The sign-in file's hash
+  stayed unchanged and the isolated temporary directory was empty afterwards.
+- An isolated app profile selected **Codex · Subscription**, showed **Audio
+  sent to ChatGPT** on Home, and completed the 130-second synthetic file through
+  **Transcribe**, with the resulting text visible in the app. The signed bundle
+  contained the upstream MIT notice.
+- These checks establish integration, not recognition quality. The Ukrainian
+  fixture said Friday at 10:30; the returned text omitted the weekday and said
+  15:30. Cancellation was exercised with deterministic network stubs, not a
+  live request. Physical microphone dictation, automatic paste, Intel and
+  macOS 14 were not exercised for this provider.
+
+## Regression audit, 2026-10-18, version 0.1.6
+
+Base commit `07c55da`, with the uncommitted fixes described below, on Mac16,8
+with 48 GB and macOS 27.0.1. This is a regression pass, not completion of every
+manual checklist below.
+
+### Findings and fixes
+
+- Two dictations within the clipboard-restoration interval could overwrite a
+  new user copy with the clipboard from before the first dictation. The new
+  regression test failed with the old behavior. A pending snapshot is now reused
+  only while the clipboard still contains that dictation's write. Tests also
+  cover an empty clipboard and preservation of rich-text representations.
+- An answer to Ask across meetings could finish after a cited meeting was
+  deleted and save its references again. A new test reproduced this both in
+  memory and after reloading. Such late answers are now discarded.
+- Automatic paste checked the destination application's process, so moving to
+  another field or tab in the same browser could still pass the check. Dictation
+  now keeps the initial Accessibility element through transcription and Undo.
+  When that element no longer has focus, output uses the existing Copy/manual
+  paste card. Unit tests cover matching, changed and missing focus. Apps that
+  expose no initial focused element retain the application-level safeguard.
+
+### Checks performed
+
+- `swift build`, `swift test` (282 tests), `python3 Tests/evaluate_check.py`
+  and `python3 Tests/release_check.py` passed. The release checks use stub tools;
+  no release or notarization was submitted.
+- `./scripts/build-app.sh`, strict deep signature verification, and
+  `python3 scripts/mcp-smoke.py` passed. The MCP exchange uses a temporary home
+  and synthetic meetings, including sharing disabled and enabled.
+- Website type checking, production build and `pnpm --filter web test` passed:
+  13 prerendered pages, metadata, links, download controls and other site checks.
+- With `sandbox-exec` denying all networking, the already-installed Parakeet
+  Ultra transcribed an eight-second `say` recording, returned no words for
+  three seconds of digital silence, and completed the live-preview/file and
+  media-transcription paths. The media transcript retained its duration and
+  timestamp and SpeakerKit labelled its single synthetic voice. These are
+  smoke checks, not recognition or speaker-accuracy benchmarks.
+- The installed built-in Qwen model generated notes from a synthetic JSONL
+  transcript while networking was denied, and the CLI exited successfully.
+  The overview mentioned Alex sending a checklist, but no action-item section
+  was generated. This confirms the execution path, not summary completeness.
+- A temporary probe compiled the real `FocusedAppIntegration` implementation
+  and delivered synthetic text to TextEdit, Chrome's YouTube search field and
+  a local HTML textarea. YouTube's query and suggestions updated. This exercised
+  delivery directly, not microphone capture through the global shortcut.
+
+### Still requires a controlled manual run
+
+The reported intermittent YouTube failure is **not confirmed fixed**. Later
+rich-text comparisons were inconclusive because browser focus/tabs changed
+during the session. Alternative event streams and native menu actions were
+investigated, but none of those dispatch changes is retained.
+
+- [ ] Reproduce YouTube dictation with the user's browser, shortcut and input
+  device. Check whether the result enters History and whether manual paste
+  succeeds when automatic insertion fails.
+- [ ] Repeat complete dictations in browser search, a textarea, a rich-text
+  editor, TextEdit and an Electron editor. Confirm insertion and clipboard
+  restoration, not just the returned delivery status.
+- [ ] Move to another tab or field in the same browser during recognition.
+  The new field stays untouched and the manual-paste card contains the text.
+  Repeat after cancellation and Undo, and without changing focus.
+- [ ] Permission prompts/revocation, Bluetooth device changes, actual shortcuts,
+  Music/Spotify control, Calendar accounts and real multi-person calls remain
+  OS/hardware checks. The existing automated coverage for those flows passed;
+  that does not establish their behavior on real devices or on macOS 14/Intel.
+
+The rebuilt debug bundle is stamped 0.1.6. Building does not replace the app in
+Applications or restart an already-running instance.
+
+### Chrome follow-up
+
+The user confirmed Chrome, a saved History entry, and successful manual Command-V
+after the failure. In the running app, automatic paste was on, Copy to clipboard
+was off, and Accessibility showed Allowed.
+
+`LivePasteTests.swift` adds an opt-in test of `AppModel.transcribe`, using a
+temporary workspace, a `say` recording, the already-installed Parakeet Ultra,
+Light cleanup, History persistence and actual delivery into Chrome's YouTube
+search. It does not capture the microphone, register a shortcut, download a model
+or change the user's saved settings. It checks the search field's actual value
+and caret/selection, rather than trusting the returned delivery status.
+
+Run only with a disposable Chrome window showing YouTube and its empty search
+field focused:
+
+```sh
+BETTERWISPR_LIVE_PASTE=1 swift test --filter chromeYouTubeReceives
+```
+
+The first run with a cold model checked the field after only 200 ms and failed
+to observe insertion. Warm runs passed both with Copy to clipboard on and off.
+The test was corrected to poll for up to three seconds and to remain alive until
+deferred clipboard restoration runs. That corrected test passed with Copy to
+clipboard off, including insertion beside existing synthetic query text. Runs
+that found T3 Code in front instead of Chrome stopped at their preconditions
+without transcribing or sending text; those are not paste-regression failures.
+
+The ordinary suite passes with this live test disabled by default. The original
+intermittent Chrome failure still has no verified root cause or additional
+dispatch fix. A writable SelectedText attribute and native menu actions were
+also tried in temporary probes, but returned success without reliably inserting
+text, so neither approach is used by the app.
+
+The user subsequently reported that the YouTube issue appears fixed. This is
+consistent with the passing live checks, but does not establish the cause of
+the original intermittent failure. No further focus-changing test was run
+after that report.
+
 ## Built-in notes model check, 2026-10-15, version 0.1.6
 
 Apple M4 Pro with 48 GB, macOS 27.0.1, debug builds. `swift build`, all 242
@@ -794,6 +938,13 @@ retries. They do not access Keychain, mount disk images or submit to Apple.
   18 points across with 24-point hit areas. Clicking ✓
   finishes, as does pressing ⌥ Space again; clicking the waveform does nothing.
   During preparation/transcription, × works and ✓ is disabled.
+- [ ] Connect Screen Sharing to another Mac and control it with Edit > Use
+  Shared Clipboard on. Click a text field on the remote screen and dictate two
+  different phrases. Each phrase is pasted on the remote Mac once, not "v" and
+  not the previous phrase, and Use Shared Clipboard is still checked afterwards.
+  Repeat with Use Shared Clipboard off. Switch to another app during the second
+  of wait; nothing is pasted and the toast says the text was copied. Dictate into
+  TextEdit on this Mac afterwards; it still pastes and the clipboard is restored.
 - [ ] Cancel capture or transcription using ×, Escape or the menu. The capsule
   morphs into "Transcript cancelled", with Undo when audio is recoverable and
   a five-second progress line. Undo transcribes that audio once with its original

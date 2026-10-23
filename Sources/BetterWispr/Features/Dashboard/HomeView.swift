@@ -389,16 +389,23 @@ private struct RecentRow: View {
 
 private struct SetupTiles: View {
     let model: AppModel
+    @State private var subscriptionSignedIn = false
 
     var body: some View {
         let speech = model.selectedModel
         let installed = model.isModelInstalled(speech)
+        let signInMissing = speech.engine == .codex && !subscriptionSignedIn
         let onOlderParakeet = ["parakeet-v3", "parakeet-v2"].contains(speech.id)
+        let speechDetail = if speech.processingLocation.isOnDevice {
+            installed ? (onOlderParakeet ? "Try Parakeet Ultra" : "Runs on this Mac") : "Not downloaded yet"
+        } else {
+            signInMissing ? "Sign in with codex login in Terminal" : speech.connection.map { "Sends audio to \($0.endpoint)" } ?? speech.processingLocation.disclosure
+        }
         let tiles = [
             SetupTile(
-                symbol: "cpu", title: "Speech model", value: speech.name,
-                detail: speech.connection.map { "Sends audio to \($0.endpoint)" } ?? (installed ? (onOlderParakeet ? "Try Parakeet Ultra" : "Runs on this Mac") : "Not downloaded yet"),
-                ready: installed
+                symbol: speech.processingLocation.isOnDevice ? "cpu" : "network", title: "Speech model", value: speech.name,
+                detail: speechDetail,
+                ready: installed && !signInMissing
             ) { model.selectedPage = .models },
             SetupTile(
                 symbol: "mic", title: "Microphone", value: microphoneName,
@@ -415,6 +422,10 @@ private struct SetupTiles: View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 12) { ForEach(tiles, id: \.title) { $0.frame(minWidth: 168, idealWidth: 168) } }
             VStack(spacing: 12) { ForEach(tiles, id: \.title) { $0 } }
+        }
+        .task(id: speech.id) { subscriptionSignedIn = CodexSpeechProvider.isSignedIn }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            subscriptionSignedIn = CodexSpeechProvider.isSignedIn
         }
     }
 

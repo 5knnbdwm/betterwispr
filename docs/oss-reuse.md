@@ -295,6 +295,7 @@ the VoiceInk code adapted elsewhere is listed in the entries above.
 
 | Project | Upstream terms | Use in this project / useful pattern |
 | --- | --- | --- |
+| [codex-asr](https://github.com/Wangnov/codex-asr) | [MIT](https://github.com/Wangnov/codex-asr/blob/479f6a7/LICENSE-MIT) | Native Swift adaptation of file-backed ChatGPT authentication, JWT account fallback, multipart transcription, and Codex Desktop request headers from version 0.1.2, revision `479f6a7`. `CodexSpeechProvider.swift` uses URLSession directly. No Rust runtime, helper, server, credential refresh, or proxy subprocess is included. The upstream MIT notice is retained in `Resources/Licenses/codex-asr-MIT.txt` and copied into the app bundle by `scripts/build-app.sh`. |
 | [WhisperKit / Argmax OSS](https://github.com/argmaxinc/argmax-oss-swift) | [MIT](https://github.com/argmaxinc/argmax-oss-swift/blob/main/LICENSE); bundled third-party notices also apply | Native Swift on-device inference; use the OSS library rather than copying an entire app. The old WhisperKit repository URL redirects here. Argmax Pro is a separate product and is not included. |
 | [FluidAudio](https://github.com/FluidInference/FluidAudio) | [Apache-2.0](https://github.com/FluidInference/FluidAudio/blob/main/LICENSE) | Core ML Parakeet TDT inference, used for the Parakeet models. |
 | [whisper.cpp](https://github.com/ggml-org/whisper.cpp) | [MIT](https://github.com/ggml-org/whisper.cpp/blob/master/LICENSE) | Local C/C++ inference and CLI integration; useful for a separately installed local engine and GGML models. |

@@ -6,7 +6,7 @@
 
 **Free, open-source voice dictation for macOS.** Hold **⌥ Space**, speak, release, and the text lands in whatever app you were typing in.
 
-BetterWispr is a private, offline speech-to-text app and an open-source alternative to Wispr Flow. It transcribes on your Mac with Whisper, NVIDIA Parakeet or Apple's on-device speech recognition, so your voice never leaves your computer unless you add an API connection yourself.
+BetterWispr is a private, offline speech-to-text app and an open-source alternative to Wispr Flow. It transcribes on your Mac with Whisper, NVIDIA Parakeet or Apple's on-device speech recognition, so your voice never leaves your computer unless you explicitly select an API connection or Codex subscription transcription.
 
 [Download the latest release](https://github.com/opennookorg/betterwispr/releases/latest) · [Website](https://betterwispr.com) · [Changelog](CHANGELOG.md)
 
@@ -61,6 +61,8 @@ to a built-in model to return to fully local transcription. BetterWispr never
 falls back to a cloud provider on its own.
 
 ## Privacy
+
+For optional subscription transcription, see [Codex subscription setup](docs/codex-subscription.md). BetterWispr uses your local Codex sign-in directly with an unofficial ChatGPT endpoint. Audio goes to ChatGPT only when you select this model and start transcription.
 
 - Settings, vocabulary and history live in `~/Library/Application Support/BetterWispr/workspace.json` (not encrypted).
 - Models live in the `Models` folder next to it.

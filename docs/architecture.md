@@ -3,13 +3,25 @@
 BetterWispr is one Swift package with a `BetterWispr` macOS executable,
 `BetterWisprCore` library and `BetterWisprCLI` developer executable. The app owns
 presentation and session coordination. The library owns recording, speech
-engines, local storage and delivery to other apps. The CLI reuses the local
-Whisper provider for explicit model installation and audio-file transcription.
+engines, local storage and delivery to other apps. The CLI reuses speech providers for explicit local model installation and
+audio-file transcription with the selected provider.
 `BetterWisprCoreTests` checks shared behavior.
 
 This is a native macOS application. Core includes platform frameworks where
 needed; it is not a promise of Linux/iOS portability. Feature folders are source
 organization, not separate packages or a plugin loader.
+
+Codex subscription transcription is a static model outside the local catalog.
+`CodexSpeechProvider` shares `SpeechAudio`'s bounded mono PCM16 WAV conversion
+and uploads ordered 125-second chunks directly to the fixed unofficial ChatGPT
+transcription endpoint. Each transcription owns an ephemeral URLSession and its
+cancellable task. Redirects, cookies, cached responses, and stored URL credentials
+are disabled. Preparation checks only the bounded local Codex sign-in file.
+Transcription reads credentials again before audio conversion and never refreshes
+or persists them. Errors exclude service bodies and credentials.
+Only Parakeet and Whisper permit synthetic warm-up. Processing-location metadata
+supplies the UI audio disclosure. The `codex` selection uses the existing
+selected-model string without a schema change. See [setup](codex-subscription.md).
 
 ```text
 Sources/
@@ -774,6 +786,24 @@ through the existing session state. Keep clipboard/focus restoration,
 Accessibility checks and cancellation behavior in the shared path. Clipboard
 restoration after automated paste uses a bounded delay because arbitrary apps
 do not acknowledge receipt; slow recipient apps need explicit manual testing.
+
+Screen Sharing sends the clipboard to the other computer only when its window
+becomes key, so for `com.apple.ScreenSharing` `FocusedAppIntegration` first
+presses Edit > Send Clipboard through Accessibility. It finds menu items by
+their `MainMenu.loctable` keys (`281.title` for Send Clipboard, `100521.title`
+for Use Shared Clipboard), so any language matches. Screen Sharing disables
+Send Clipboard while Use Shared Clipboard is on and the user is controlling the
+other computer. In that case it presses Use Shared Clipboard off, waits until
+Accessibility reports Send Clipboard enabled, presses it, and presses Use Shared
+Clipboard back on. The wait is needed because AppKit refreshes menu state for
+Accessibility about once a second and ignores presses on an item it still
+treats as disabled; turning the setting off and on sends only a flag and moves
+no clipboard data. Accessibility presses run before the call returns, so the
+clipboard is queued before the Command-V events. When Send Clipboard cannot be
+pressed it returns `copiedForManualPaste` rather than paste the other
+computer's older clipboard, and it checks the target is still frontmost after
+the wait. The text is not restored afterwards, because the other computer reads
+it after an unknown delay.
 
 Add only the concrete integration and its required settings. Do not introduce
 per-app speech providers or duplicate recording code. Any future network

@@ -1,3 +1,4 @@
+import AppKit
 import BetterWisprCore
 import SwiftUI
 
@@ -6,6 +7,8 @@ struct ModelsView: View {
     @State private var editing: SpeechConnection?
     @State private var error: String?
     @State private var editingNotes = false
+    @State private var preparingSubscription = false
+    @State private var subscriptionSignedIn = false
 
     var body: some View {
         Form {
@@ -18,6 +21,14 @@ struct ModelsView: View {
             } footer: {
                 Label("These models process audio on your Mac. Parakeet and Whisper need an internet connection only for installation. Parakeet sizes include the 100 MB phrase booster, which downloads once and is shared.", systemImage: "internaldrive")
                     .foregroundStyle(.secondary)
+            }
+
+            Section {
+                modelRow(.codex)
+            } header: {
+                Text("Subscription transcription")
+            } footer: {
+                Text("Audio goes to ChatGPT using your Codex subscription through an unofficial endpoint. Sign in with codex login in Terminal. Account access and limits can change.")
             }
 
             Section {
@@ -117,10 +128,14 @@ struct ModelsView: View {
             }
         }
         .formStyle(.grouped)
+        .task { subscriptionSignedIn = CodexSpeechProvider.isSignedIn }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            subscriptionSignedIn = CodexSpeechProvider.isSignedIn
+        }
         .sheet(item: $editing) { connection in
             SpeechConnectionEditor(model: model, connection: connection, forNotes: editingNotes)
         }
-        .alert("Couldn’t remove connection", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
+        .alert("Couldn’t complete action", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
             Button("OK") { error = nil }
         } message: { Text(error ?? "") }
     }
@@ -155,6 +170,7 @@ struct ModelsView: View {
         let installation = model.installation?.id == speechModel.id ? model.installation : nil
         let installing = installation != nil && installation?.failure == nil
         let installed = model.isModelInstalled(speechModel)
+        let signInMissing = speechModel.engine == .codex && !subscriptionSignedIn
 
         return HStack(alignment: .top, spacing: 12) {
             SymbolTile(
@@ -166,7 +182,7 @@ struct ModelsView: View {
                 HStack(spacing: 6) {
                     Text(speechModel.name).fontWeight(.medium)
                     if selected {
-                        badge("Active", color: .green)
+                        badge(signInMissing ? "Selected · Setup required" : "Active", color: signInMissing ? .orange : .green)
                     } else if speechModel.id == "parakeet-ultra" {
                         badge("Recommended", color: .accentColor)
                     }
@@ -178,6 +194,11 @@ struct ModelsView: View {
                 Text("\(speechModel.sizeLabel) · \(engineLabel(speechModel.engine))")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
+                if signInMissing {
+                    Text("Sign in with codex login in Terminal.")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
                 if let names = speechModel.languageNames {
                     if names.count == 1 {
                         Text(names[0])
@@ -203,14 +224,34 @@ struct ModelsView: View {
             Spacer(minLength: 8)
             if installing {
                 Button("Cancel", action: model.cancelInstallation)
-            } else if selected && installed {
+            } else if selected && installed && !signInMissing {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.title3)
                     .foregroundStyle(.green)
                     .accessibilityLabel("Active model")
             } else if installed {
-                Button("Use") { model.selectModel(speechModel) }
-                    .disabled(model.isBusy)
+                Button("Use") {
+                    if speechModel.engine == .codex {
+                        preparingSubscription = true
+                        let selection = model.selectedModel.id
+                        Task {
+                            defer {
+                                preparingSubscription = false
+                                subscriptionSignedIn = CodexSpeechProvider.isSignedIn
+                            }
+                            do {
+                                let provider = speechModel.makeProvider()
+                                try await provider.prepare(model: speechModel, download: false)
+                                guard model.selectedModel.id == selection else { return }
+                                guard !model.isBusy else { throw SpeechError.busy }
+                                model.selectModel(speechModel, prepared: provider)
+                            } catch { self.error = error.localizedDescription }
+                        }
+                    } else {
+                        model.selectModel(speechModel)
+                    }
+                }
+                    .disabled(model.isBusy || preparingSubscription)
             } else {
                 Button(installation == nil ? "Download" : "Retry") { model.installModel(speechModel) }
                     .disabled(model.isInstalling)
@@ -234,6 +275,7 @@ struct ModelsView: View {
         case .whisperKit: "WhisperKit · Apple Silicon"
         case .parakeet: "Parakeet · Neural Engine"
         case .api: "API connection"
+        case .codex: "Codex subscription"
         }
     }
 }
