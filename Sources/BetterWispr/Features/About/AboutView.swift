@@ -17,7 +17,7 @@ struct AboutView: View {
                     Text("Version \(Self.version)")
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
-                    Text("Private dictation for your Mac. Press \(shortcut.displayName) in any app, speak, and your words appear where you’re typing. Speech is processed on this Mac.")
+                    Text("Dictation for your Mac. Press \(shortcut.displayName) in any app, speak, and your words appear where you’re typing. Speech runs on this Mac by default. Choosing an API connection or Codex subscription transcription sends audio to that provider.")
                         .multilineTextAlignment(.center)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: 480)

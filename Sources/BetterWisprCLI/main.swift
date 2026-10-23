@@ -13,7 +13,7 @@ func run() async throws {
     let arguments = Array(CommandLine.arguments.dropFirst())
     if arguments.isEmpty || arguments == ["--help"] {
         print("""
-        BetterWisprCLI: local speech recognition
+        BetterWisprCLI: speech recognition
 
           --list-models
           --download-model MODEL_ID
@@ -44,7 +44,10 @@ func run() async throws {
 
         Default model: parakeet-v3. Downloads only run with --download-model, --download-phrase-booster,
         --download-speaker-detection, --download-yt-dlp or --download-builtin-model.
-        Audio transcription loads existing local assets and never downloads them.
+        Local transcription loads existing assets and never downloads them.
+        Explicit --model codex sends audio to ChatGPT using your local Codex subscription sign-in.
+        It uses an unofficial endpoint and your Codex ChatGPT login. Subscription access and limits can change.
+        Codex subscription transcription supports batch transcription, not --download-model or --live-file.
         """)
         return
     }
@@ -93,8 +96,14 @@ func run() async throws {
         throw CLIError.usage("Download and transcription must select the same model.")
     }
     let modelID = options["--model"] ?? options["--download-model"] ?? "parakeet-v3"
-    guard let model = SpeechModel.catalog.first(where: { $0.id == modelID }) else {
+    guard let model = (SpeechModel.catalog + [.codex]).first(where: { $0.id == modelID }) else {
         throw CLIError.usage("Unknown model: \(modelID). Run --list-models.")
+    }
+    if model.engine == .codex {
+        guard options["--download-model"] == nil, options["--live-file"] == nil else {
+            throw CLIError.usage("Codex subscription transcription has no downloadable model and no live preview. Sign in with codex login, then use --transcribe-file, --bench, --meeting or --media.")
+        }
+        FileHandle.standardError.write(Data("Codex subscription transcription sends audio to ChatGPT through an unofficial endpoint.\n".utf8))
     }
     let provider: any SpeechProvider
     switch model.engine {
@@ -102,6 +111,7 @@ func run() async throws {
     case .whisperKit: provider = WhisperKitProvider()
     case .parakeet: provider = ParakeetProvider()
     case .api: throw CLIError.usage("Configure API connections in the macOS app. The CLI uses local models only.")
+    case .codex: provider = CodexSpeechProvider()
     }
     let clock = ContinuousClock()
     let started = clock.now

@@ -224,7 +224,7 @@ private struct NotetakerSettings: View {
             }
             .pickerStyle(.inline)
             .disabled(model.isBusy || !model.meetings.runs.isEmpty)
-            Text(model.selectedModel.engine == .api ? "Audio sent to your selected endpoint" : "On-device transcription")
+            Text(model.selectedModel.processingLocation.disclosure)
             Button("Manage models…") { model.selectedPage = .models }
             Divider()
             MicrophonePicker(model: model) { Text("Microphone") }

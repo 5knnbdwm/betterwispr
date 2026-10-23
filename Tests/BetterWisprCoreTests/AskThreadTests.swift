@@ -141,3 +141,20 @@ private func saved(_ thread: [AskExchange]?, for id: UUID, in store: MeetingStor
     }
     return false
 }
+
+@MainActor
+@Test func aLateAskAnswerCannotRestoreReferencesToADeletedMeeting() throws {
+    let folder = temporaryFolder()
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let store = MeetingStore(directory: folder.appendingPathComponent("Meetings"))
+    let meeting = Meeting(title: "Deleted while asking", notes: "A thought", modelName: "Parakeet", language: "en")
+    try store.save(meeting)
+    let model = MeetingModel(store: store)
+    let pending = exchange(citing: meeting.id)
+
+    model.delete(meeting.id)
+    model.append(pending, to: .allMeetings)
+
+    #expect(model.thread(.allMeetings).isEmpty)
+    #expect(MeetingModel(store: store).thread(.allMeetings).isEmpty)
+}
