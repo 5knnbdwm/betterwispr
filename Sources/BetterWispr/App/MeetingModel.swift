@@ -242,6 +242,7 @@ final class MeetingModel {
         switch thread {
         case .meeting(let id): edit(id) { $0.askThread = ($0.askThread ?? []) + [exchange] }
         case .allMeetings:
+            guard exchange.answer.citations.allSatisfy({ meeting($0.line.meetingID) != nil }) else { return }
             allMeetingsThread.append(exchange)
             saveAllMeetingsThread()
         }
