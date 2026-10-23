@@ -200,6 +200,12 @@ public struct HeardVoices: Sendable {
         suggestions[number] = nil
     }
 
+    public mutating func forgetSuggestions(from meetingID: UUID, participant: Int? = nil) {
+        for (number, voice) in suggestions where voice.meetingID == meetingID && (participant == nil || voice.participant == participant) {
+            drop(number)
+        }
+    }
+
     /// Saves each speaker the user named who still has lines.
     public func remember(in meeting: Meeting, to store: VoiceStore) throws {
         try store.replaceVoices(from: meeting.id, with: named(in: meeting))

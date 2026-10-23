@@ -279,7 +279,10 @@ final class MeetingModel {
             return
         }
         heardVoices[id] = nil
-        do { try voiceStore.replaceVoices(from: id, with: []) } catch { voicesMessage = voicesError(error) }
+        do {
+            try voiceStore.replaceVoices(from: id, with: [])
+            for meetingID in Array(heardVoices.keys) { heardVoices[meetingID]?.forgetSuggestions(from: id) }
+        } catch { voicesMessage = voicesError(error) }
         meetings.removeAll { $0.id == id }
         if selectedID == id { selectedID = nil }
         let kept = allMeetingsThread.filter { !$0.answer.citations.contains { $0.line.meetingID == id } }
@@ -510,6 +513,9 @@ final class MeetingModel {
         do {
             guard let rejected = try heardVoices[id]?.reject(number, in: meeting, from: voiceStore) else { return }
             heardVoices[rejected.meetingID]?.drop(rejected.participant)
+            for meetingID in Array(heardVoices.keys) {
+                heardVoices[meetingID]?.forgetSuggestions(from: rejected.meetingID, participant: rejected.participant)
+            }
         } catch { voicesMessage = voicesError(error) }
     }
 

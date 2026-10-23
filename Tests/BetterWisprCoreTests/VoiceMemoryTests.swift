@@ -201,6 +201,48 @@ private func rememberingModel(_ saved: [Meeting], in root: URL) throws -> (model
     #expect(try voices.load() == [kept])
 }
 
+@MainActor
+@Test(arguments: [false, true])
+func forgettingAVoiceRemovesOtherMeetingsSuggestionsAndPreventsSavingItAgain(deleteSource: Bool) throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let first = call([1])
+    let second = call([1])
+    let pending = call([1, 2])
+    let accepted = call([1])
+    let (model, voices) = try rememberingModel([first, second, pending, accepted], in: root)
+    model.applySpeakers((segments: first.segments, voices: [1: voice(at: 0)]), to: first.id)
+    model.edit(first.id) { $0.participantNames = [1: "Ana"] }
+    model.saveNow(first.id)
+    let bo = known("Bo", voice(at: .pi))
+    try voices.replaceVoices(from: bo.meetingID, with: [bo])
+    for meeting in [second, pending, accepted] {
+        let embeddings = meeting.id == pending.id ? [1: voice(at: 0.01), 2: voice(at: .pi)] : [1: voice(at: 0.01)]
+        model.applySpeakers((segments: meeting.segments, voices: embeddings), to: meeting.id)
+    }
+    model.edit(accepted.id) { $0.participantNames = [1: "Ana"] }
+    model.saveNow(accepted.id)
+    #expect(model.suggestedName(for: 1, in: pending) == "Ana")
+
+    if deleteSource {
+        model.delete(first.id)
+    } else {
+        model.edit(second.id) { $0.participantNames = [1: "Cy"] }
+        model.commitName(of: 1, in: second.id)
+    }
+
+    #expect(model.suggestedName(for: 1, in: pending) == nil)
+    #expect(model.suggestedName(for: 2, in: pending) == "Bo")
+    model.edit(pending.id) { $0.participantNames = [1: "Di", 2: "Eve"] }
+    model.saveNow(pending.id)
+    model.saveNow(accepted.id)
+    let saved = try voices.load()
+    #expect(!saved.contains { $0.name == "Ana" || $0.name == "Di" })
+    #expect(saved.filter { $0.meetingID == pending.id } == [known("Eve", voice(at: .pi), meeting: pending.id, participant: 2)])
+    #expect(saved.contains(bo))
+    #expect(model.meeting(accepted.id)?.participantNames == [1: "Ana"])
+}
+
 @Test func voiceStoreReplacesOneMeetingsVoicesAndNeverWritesOverAnUnreadableFile() throws {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: directory) }
