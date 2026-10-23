@@ -329,6 +329,7 @@ final class AppModel {
                 if shortcut == settings.shortcut || shortcut == settings.cancelShortcut { throw ShortcutError.alreadyAssigned(shortcut) }
                 try selectedTextShortcut.register(shortcut)
             } catch {
+                registerShortcut()
                 ToastWindow.shared.show(Toast(failure: "Couldn’t use \(shortcut.displayName)", error))
                 return
             }

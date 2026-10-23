@@ -151,9 +151,11 @@ import Testing
     let leftOption = try #require(DictationShortcut(keyCode: UInt32(kVK_Option), modifiers: [], key: "Left Option"))
     let f17 = try #require(DictationShortcut(keyCode: UInt32(kVK_F17), modifiers: [], key: "F17"))
     let f18 = try #require(DictationShortcut(keyCode: UInt32(kVK_F18), modifiers: [], key: "F18"))
+    let f20 = try #require(DictationShortcut(keyCode: UInt32(kVK_F20), modifiers: [], key: "F20"))
     let optionEscape = try #require(DictationShortcut(keyCode: UInt32(kVK_Escape), modifiers: [.option], key: "Esc"))
     let other = GlobalShortcut(id: 9)
-    defer { other.unregister() }
+    let occupied = GlobalShortcut(id: 10)
+    defer { other.unregister(); occupied.unregister() }
 
     model.changeSelectedTextShortcut(leftOption)
     model.changeSelectedTextShortcut(optionEscape)
@@ -166,6 +168,11 @@ import Testing
     #expect(model.settings.selectedTextShortcut == f18)
     #expect(AppModel(store: LocalStore(directory: folder), startsServices: false).settings.selectedTextShortcut == f18)
     #expect(throws: ShortcutError.self) { try other.register(f18) }
+    try occupied.register(f20)
+    model.changeSelectedTextShortcut(f20)
+    #expect(model.settings.selectedTextShortcut == f18)
+    #expect(throws: ShortcutError.self) { try other.register(f18) }
+    occupied.unregister()
     model.suspendShortcut()
     model.changeShortcut(f18)
     model.suspendShortcut()
