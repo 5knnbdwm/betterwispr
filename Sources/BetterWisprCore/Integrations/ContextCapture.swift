@@ -20,7 +20,7 @@ extension DictationContext {
         return Task.detached(priority: .userInitiated) {
             let element = AXUIElementCreateApplication(pid)
             AXUIElementSetMessagingTimeout(element, 0.25)
-            let selected = element.element(kAXFocusedUIElementAttribute).flatMap { $0.isSecureField ? nil : $0.string(kAXSelectedTextAttribute) }
+            let selected = element.selectedText
             guard let window = element.element(kAXFocusedWindowAttribute) else { return DictationContext(selectedText: selected, clipboard: clipboard) }
             let title = window.string(kAXTitleAttribute), frame = window.frame
             var text = accessibilityText(of: window)
@@ -31,6 +31,23 @@ extension DictationContext {
             let content = text.isEmpty ? nil : "Active Window: \(title ?? name ?? "Unknown")\nApplication: \(name ?? "Unknown")\n\nWindow Content:\n\(text)"
             return DictationContext(selectedText: selected, clipboard: clipboard, window: content)
         }
+    }
+
+    /// The selected text and its target; nil while secure input is on, without Accessibility, or for this app.
+    @MainActor
+    public static func selection(in app: NSRunningApplication) async -> SelectedTextSnapshot? {
+        let pid = app.processIdentifier
+        guard !IsSecureEventInputEnabled(), AXIsProcessTrusted(), pid != ProcessInfo.processInfo.processIdentifier else { return nil }
+        return await readSelection(pid: pid)
+    }
+
+    @concurrent
+    private static func readSelection(pid: pid_t) async -> sending SelectedTextSnapshot? {
+        let app = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(app, 0.25)
+        guard let element = app.element(kAXFocusedUIElementAttribute), !element.isSecureField,
+              let text = element.string(kAXSelectedTextAttribute) else { return nil }
+        return SelectedTextSnapshot(text: text, element: element, range: element.selectedTextRange)
     }
 
     /// The mixed-case names on screen and those macOS English spell checking does not know, for Parakeet to spell.
@@ -88,5 +105,17 @@ extension DictationContext {
         request.automaticallyDetectsLanguage = true
         try? VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
         return request.results?.compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\n")
+    }
+}
+
+public struct SelectedTextSnapshot {
+    public let text: String
+    public let element: AXUIElement
+    let range: CFRange?
+
+    public func matches(_ current: SelectedTextSnapshot?) -> Bool {
+        guard let current, let range, let currentRange = current.range else { return false }
+        return CFEqual(element, current.element) && text == current.text
+            && range.location == currentRange.location && range.length == currentRange.length
     }
 }

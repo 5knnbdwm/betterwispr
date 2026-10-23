@@ -90,6 +90,13 @@ import Testing
     #expect(fired == ["cancel press", "dictation press", "dictation release"])
 }
 
+@Test @MainActor func aShortcutThatGoesAwayFreesItsKeyForTheNextOne() throws {
+    let f16 = try #require(DictationShortcut(keyCode: UInt32(kVK_F16), modifiers: [], key: "F16"))
+    for _ in 0..<20 {
+        try GlobalShortcut(id: 8).register(f16)
+    }
+}
+
 @Test @MainActor func standaloneFnDeliversPressAndReleaseOnlyWhenAlone() throws {
     let listener = GlobalShortcut()
     let shortcut = try #require(DictationShortcut(keyCode: UInt32(kVK_Function), modifiers: [], key: "Fn"))
@@ -134,6 +141,51 @@ import Testing
     #expect(model.settings.shortcut == .optionSpace)
     model.changeCancelShortcut(nil)
     #expect(model.settings.cancelShortcut == nil)
+}
+
+@Test @MainActor func selectedTextShortcutRefusesAModifierAloneAndTheOtherShortcutsThenHoldsAKeyUntilCleared() throws {
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let model = AppModel(store: LocalStore(directory: folder), startsServices: false)
+    let leftOption = try #require(DictationShortcut(keyCode: UInt32(kVK_Option), modifiers: [], key: "Left Option"))
+    let f17 = try #require(DictationShortcut(keyCode: UInt32(kVK_F17), modifiers: [], key: "F17"))
+    let f18 = try #require(DictationShortcut(keyCode: UInt32(kVK_F18), modifiers: [], key: "F18"))
+    let f20 = try #require(DictationShortcut(keyCode: UInt32(kVK_F20), modifiers: [], key: "F20"))
+    let optionEscape = try #require(DictationShortcut(keyCode: UInt32(kVK_Escape), modifiers: [.option], key: "Esc"))
+    let other = GlobalShortcut(id: 9)
+    let occupied = GlobalShortcut(id: 10)
+    defer { other.unregister(); occupied.unregister() }
+
+    model.changeSelectedTextShortcut(leftOption)
+    model.changeSelectedTextShortcut(optionEscape)
+    model.changeSelectedTextShortcut(model.settings.shortcut)
+    model.changeCancelShortcut(f17)
+    model.changeSelectedTextShortcut(f17)
+    #expect(model.settings.selectedTextShortcut == nil)
+
+    model.changeSelectedTextShortcut(f18)
+    #expect(model.settings.selectedTextShortcut == f18)
+    #expect(AppModel(store: LocalStore(directory: folder), startsServices: false).settings.selectedTextShortcut == f18)
+    #expect(throws: ShortcutError.self) { try other.register(f18) }
+    try occupied.register(f20)
+    model.changeSelectedTextShortcut(f20)
+    #expect(model.settings.selectedTextShortcut == f18)
+    #expect(throws: ShortcutError.self) { try other.register(f18) }
+    occupied.unregister()
+    model.suspendShortcut()
+    model.changeShortcut(f18)
+    model.suspendShortcut()
+    model.changeCancelShortcut(f18)
+    #expect(model.settings.shortcut == .optionSpace)
+    #expect(model.settings.cancelShortcut == f17)
+
+    model.registerShortcut()
+    #expect(throws: ShortcutError.self) { try other.register(f18) }
+    model.changeSelectedTextShortcut(nil)
+    #expect(model.settings.selectedTextShortcut == nil)
+    #expect(AppModel(store: LocalStore(directory: folder), startsServices: false).settings.selectedTextShortcut == nil)
+    try other.register(f18)
 }
 
 @MainActor @Test func pastePressesCommandAsItsOwnKeyAroundV() throws {
