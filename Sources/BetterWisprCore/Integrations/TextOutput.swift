@@ -50,7 +50,11 @@ public struct FocusedAppIntegration: TextOutputIntegration {
         _ = try await ClipboardIntegration().deliver(text, to: target)
         let ourChange = pasteboard.changeCount
         let isScreenSharing = target.bundleIdentifier == Self.screenSharing
-        if isScreenSharing, !(await Self.sendClipboard(through: target)) { return .copiedForManualPaste }
+        if isScreenSharing, !(await Self.sendClipboard(through: target, while: {
+            !Task.isCancelled && pasteboard.changeCount == ourChange
+                && NSWorkspace.shared.frontmostApplication?.processIdentifier == target.processIdentifier
+                && Self.focusMatches(expectedFocus, current: Self.focusedElement(in: target))
+        })) { return .copiedForManualPaste }
         try Task.checkCancellation()
         guard pasteboard.changeCount == ourChange,
               NSWorkspace.shared.frontmostApplication?.processIdentifier == target.processIdentifier,
@@ -75,13 +79,13 @@ public struct FocusedAppIntegration: TextOutputIntegration {
     static let leftCommandDeviceFlag = CGEventFlags(rawValue: 0x8)
 
     /// Presses Screen Sharing's Send Clipboard, turning Use Shared Clipboard off around it because that setting disables the item.
-    static func sendClipboard(through app: NSRunningApplication) async -> Bool {
+    static func sendClipboard(through app: NSRunningApplication, while isCurrent: () -> Bool) async -> Bool {
         guard let send = menuItem(sendClipboardKey, of: app) else { return false }
-        if send.bool(kAXEnabledAttribute) == true { return press(send) }
+        if send.bool(kAXEnabledAttribute) == true { return isCurrent() && press(send) }
         guard let shared = menuItem(sharedClipboardKey, of: app), shared.bool(kAXEnabledAttribute) == true,
               !(shared.string(kAXMenuItemMarkCharAttribute) ?? "").isEmpty, press(shared) else { return false }
-        let sent = await becomesEnabled(send) && press(send)
-        _ = press(shared)
+        let sent = await becomesEnabled(send) && isCurrent() && press(send)
+        if (shared.string(kAXMenuItemMarkCharAttribute) ?? "").isEmpty { _ = press(shared) }
         return sent
     }
 
