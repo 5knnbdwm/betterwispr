@@ -133,6 +133,7 @@ final class AppModel {
     var installation: ModelInstallation?
     var phraseBoosterInstalled = false
     var speakerDetectionInstalled = false
+    var speakerDetectionQueued = false
     var microphoneGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
     var accessibilityGranted = AXIsProcessTrusted()
     var calendarGranted = CalendarEvents.isAuthorized
@@ -214,6 +215,7 @@ final class AppModel {
         if !models.contains(where: { $0.id == settings.selectedModelID }) { settings.selectedModelID = "apple" }
         settings.launchAtLogin = SMAppService.mainApp.status == .enabled
         meetings.notesSettings = settings
+        meetings.remembersVoices = settings.rememberVoices
         for cli in Set([settings.notesCLI, settings.askSettings.notesCLI].compactMap { $0 }) { Task { await refreshNotesCLIModels(cli) } }
         refreshModels()
         refreshCalendars()
@@ -766,7 +768,11 @@ final class AppModel {
     }
 
     func installSpeakerDetection() {
-        guard !isInstalling else { return }
+        guard !isInstalling else {
+            speakerDetectionQueued = installation?.id != Self.speakerDetectionID
+            return
+        }
+        speakerDetectionQueued = false
         install(id: Self.speakerDetectionID, name: "speaker detection") { report in
             try await SpeakerDetection.install { fraction in Task { @MainActor in report(fraction * 0.9) } }
         } completion: { [weak self] in
@@ -802,6 +808,7 @@ final class AppModel {
     func cancelInstallation() {
         installTask?.cancel()
         installation = nil
+        speakerDetectionQueued = false
         statusMessage = "Download cancelled."
     }
 
@@ -830,9 +837,11 @@ final class AppModel {
                 self.installTask = nil
                 self.refreshModels()
                 completion()
+                if self.speakerDetectionQueued { self.installSpeakerDetection() }
             } catch {
                 guard let self, self.installation?.token == next.token else { return }
                 self.installTask = nil
+                self.speakerDetectionQueued = false
                 self.refreshModels()
                 self.installation?.failure = error.localizedDescription
                 self.statusMessage = "Couldn’t download \(name): \(error.localizedDescription)"
@@ -1091,6 +1100,7 @@ final class AppModel {
         }
         applyAppearance()
         if startsServices { meetingDetector.isEnabled = settings.detectMeetings }
+        meetings.remembersVoices = settings.rememberVoices
         onPresentationChange?()
     }
 
