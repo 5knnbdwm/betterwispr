@@ -95,6 +95,18 @@ struct NotesModelSettings: View {
             }
             Text("Install the latest \(cli.name) CLI and run \(cli.loginCommand) in Terminal. BetterWispr uses that sign-in; subscription limits apply.")
                 .font(.caption).foregroundStyle(.secondary)
+            if cli == .claudeCode {
+                Toggle("Allow any Claude Code sign-in", isOn: Binding(
+                    get: { model.settings.claudeCodeAnySignIn },
+                    set: {
+                        model.settings.claudeCodeAnySignIn = $0
+                        model.saveNotesSettings()
+                    }
+                ))
+                .disabled(!model.canEditConnections || testing)
+                Text("Also use an API key, gateway or proxy such as CLIProxyAPI that Claude Code is set up with. Its usage is billed however Claude Code is configured.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
         HStack {
             Button(testing ? "Testing…" : "Test notes model") { result = nil; testing = true }

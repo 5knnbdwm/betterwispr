@@ -242,6 +242,24 @@ func notesAPIFailuresNeverProduceASummary(path: String) async throws {
     #expect(try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(settings)).claudeNotesModel == "claude-haiku-example")
 }
 
+@Test func claudeSignInNeedsASubscriptionUnlessAnySignInIsAllowed() throws {
+    let subscription = #"{"loggedIn":true,"authMethod":"claude.ai","apiProvider":"firstParty"}"#
+    let gateway = #"{"loggedIn":true,"authMethod":"oauth_token","apiProvider":"firstParty"}"#
+    let signedOut = #"{"loggedIn":false,"authMethod":"none"}"#
+    #expect(CLINotesModel.claudeSignInProblem(subscription, anySignIn: false) == nil)
+    #expect(CLINotesModel.claudeSignInProblem(gateway, anySignIn: false)?.contains("Allow any Claude Code sign-in") == true)
+    #expect(CLINotesModel.claudeSignInProblem(gateway, anySignIn: true) == nil)
+    #expect(CLINotesModel.claudeSignInProblem(signedOut, anySignIn: true) != nil)
+    #expect(CLINotesModel.claudeSignInProblem("not json", anySignIn: true) != nil)
+
+    let saved = #"{"autoPaste":true,"language":"auto","launchAtLogin":false,"saveHistory":true,"selectedModelID":"parakeet-v3","showCapsule":true,"silenceThreshold":0.002,"notesCLI":"claudeCode","claudeNotesModel":"claude-haiku-example"}"#
+    var settings = try JSONDecoder().decode(AppSettings.self, from: Data(saved.utf8))
+    #expect((try MeetingNotesGenerator.languageModel(settings) as? CLINotesModel)?.anySignIn == false)
+    settings.claudeCodeAnySignIn = true
+    let loaded = try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(settings))
+    #expect((try MeetingNotesGenerator.languageModel(loaded) as? CLINotesModel)?.anySignIn == true)
+}
+
 @Test(.enabled(if: ProcessInfo.processInfo.environment["BETTERWISPR_LIVE_NOTES"] == "1"),
       arguments: ["claude", "codex", "api"])
 func liveNotesProvidersGenerateFromSyntheticMeeting(provider: String) async throws {

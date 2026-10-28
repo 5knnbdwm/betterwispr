@@ -89,7 +89,8 @@ public enum MeetingNotesGenerator {
             }
             return APINotesModel(connection: connection, instructions: instructions, lowLatency: lowLatency)
         case .cli(let cli):
-            return CLINotesModel(cli: cli, model: settings.cliModel(cli), instructions: instructions, lowLatency: lowLatency)
+            return CLINotesModel(cli: cli, model: settings.cliModel(cli), instructions: instructions, lowLatency: lowLatency,
+                                 anySignIn: settings.claudeCodeAnySignIn)
         case .apple: break
         }
         #if canImport(FoundationModels)

@@ -37,6 +37,8 @@ public struct AppSettings: Codable, Equatable, Sendable {
     public var notesCLI: NotesCLI?
     public var claudeNotesModel: String = ""
     public var codexNotesModel: String = ""
+    /// Lets Claude Code notes use any sign-in it reports, such as an API key or a gateway set in its settings; off means a Claude subscription only.
+    public var claudeCodeAnySignIn: Bool = false
     public var language: String = "auto"
     /// Nil keeps Chinese in the script the speech model wrote.
     public var chineseScript: ChineseScript?
@@ -175,6 +177,7 @@ public struct AppSettings: Codable, Equatable, Sendable {
         notesCLI = try container.decodeIfPresent(NotesCLI.self, forKey: .notesCLI)
         claudeNotesModel = try container.decodeIfPresent(String.self, forKey: .claudeNotesModel) ?? ""
         codexNotesModel = try container.decodeIfPresent(String.self, forKey: .codexNotesModel) ?? ""
+        claudeCodeAnySignIn = try container.decodeIfPresent(Bool.self, forKey: .claudeCodeAnySignIn) ?? false
         language = try container.decode(String.self, forKey: .language)
         chineseScript = try container.decodeIfPresent(ChineseScript.self, forKey: .chineseScript)
         dictationLanguages = try container.decodeIfPresent(Set<String>.self, forKey: .dictationLanguages) ?? []

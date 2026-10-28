@@ -550,7 +550,12 @@ no request and clears a typed key. Anthropic's OpenAI compatibility ignores
 `response_format`, so notes from it rely on the prompt alone for JSON.
 
 Claude Code uses `claude --print` and its existing Claude subscription sign-in;
-Codex uses `codex exec` with ChatGPT authentication required. BetterWispr does not
+Codex uses `codex exec` with ChatGPT authentication required. Claude Code must
+report a `claude.ai` sign-in from `claude auth status` unless Models' "Allow any
+Claude Code sign-in" (`AppSettings.claudeCodeAnySignIn`, off by default) is on.
+That opt-in accepts whatever sign-in Claude Code is configured with, such as an
+API key or an `ANTHROPIC_BASE_URL` gateway like CLIProxyAPI in its settings, and
+billing follows that configuration. BetterWispr does not
 extract OAuth tokens. These CLI routes strip inherited provider/key environment
 variables, run in a private temporary directory, disable tools/customizations as
 supported by each CLI, and disable session persistence. Codex also uses read-only

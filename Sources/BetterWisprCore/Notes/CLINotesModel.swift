@@ -83,6 +83,8 @@ struct CLINotesModel: NotesLanguageModel {
     let model: String
     var instructions = NotesWriter.instructions
     var lowLatency = false
+    /// Accepts any Claude Code sign-in, not only a Claude subscription; see `AppSettings.claudeCodeAnySignIn`.
+    var anySignIn = false
 
     func respond(to prompt: String) async throws -> String {
         try await response(to: prompt).text
@@ -95,10 +97,7 @@ struct CLINotesModel: NotesLanguageModel {
         // Use the CLI's login, never extract or store its OAuth credentials in BetterWispr.
         if cli == .claudeCode {
             let status = try await Self.run(executable, arguments: ["auth", "status"], input: "", cli: cli)
-            guard let auth = try? JSONDecoder().decode(ClaudeAuth.self, from: Data(status.utf8)),
-                  auth.loggedIn, auth.authMethod == "claude.ai" else {
-                throw MeetingNotesError.unavailable("Sign in to your Claude subscription with claude auth login in Terminal.")
-            }
+            if let problem = Self.claudeSignInProblem(status, anySignIn: anySignIn) { throw MeetingNotesError.unavailable(problem) }
         }
         let chosen = model.trimmingCharacters(in: .whitespacesAndNewlines)
         guard chosen.count <= 200, !chosen.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else {
@@ -139,6 +138,18 @@ struct CLINotesModel: NotesLanguageModel {
         var draft = try NotesDraft.decode(response.text)
         draft.generatedWith = response.modelName
         return draft
+    }
+
+    /// Why `claude auth status` output can't be used for notes, or nil when it can.
+    /// Without `anySignIn` only a Claude subscription ("claude.ai") passes, so API keys and gateways are never used by surprise.
+    static func claudeSignInProblem(_ status: String, anySignIn: Bool) -> String? {
+        guard let auth = try? JSONDecoder().decode(ClaudeAuth.self, from: Data(status.utf8)), auth.loggedIn else {
+            return "Sign in to your Claude subscription with claude auth login in Terminal."
+        }
+        guard anySignIn || auth.authMethod == "claude.ai" else {
+            return "Claude Code isn’t signed in to a Claude subscription. Run claude auth login in Terminal, or turn on Allow any Claude Code sign-in in Models to use its current sign-in."
+        }
+        return nil
     }
 
     private struct ClaudeAuth: Decodable { var loggedIn: Bool; var authMethod: String? }
