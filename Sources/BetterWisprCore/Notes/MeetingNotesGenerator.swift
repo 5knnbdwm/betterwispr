@@ -1,5 +1,5 @@
 import Foundation
-#if canImport(FoundationModels)
+#if canImport(FoundationModels) && !BETTERWISPR_NO_APPLE_INTELLIGENCE
 import FoundationModels
 #endif
 
@@ -63,7 +63,7 @@ public enum MeetingNotesGenerator {
     }
 
     private static var appleAvailability: NotesAvailability {
-        #if canImport(FoundationModels)
+        #if canImport(FoundationModels) && !BETTERWISPR_NO_APPLE_INTELLIGENCE
         if #available(macOS 26.0, *) {
             switch SystemLanguageModel.default.availability {
             case .available: return .available
@@ -93,7 +93,7 @@ public enum MeetingNotesGenerator {
                                  anySignIn: settings.claudeCodeAnySignIn)
         case .apple: break
         }
-        #if canImport(FoundationModels)
+        #if canImport(FoundationModels) && !BETTERWISPR_NO_APPLE_INTELLIGENCE
         if #available(macOS 26.0, *) { return AppleNotesModel(instructions: instructions) }
         #endif
         throw MeetingNotesError.unavailable(appleAvailability.message)
@@ -105,7 +105,7 @@ public enum MeetingNotesGenerator {
         case .builtIn: await LlamaEngine.shared.warmUp()
         case .ollama(let name): _ = try? await Ollama.send("chat", ["model": name, "messages": [], "options": ["num_ctx": Ollama.contextLength]], timeout: 60)
         case .apple:
-            #if canImport(FoundationModels)
+            #if canImport(FoundationModels) && !BETTERWISPR_NO_APPLE_INTELLIGENCE
             if #available(macOS 26.0, *), appleAvailability == .available {
                 LanguageModelSession(instructions: TranscriptPolisher.instructions).prewarm()
             }
@@ -216,7 +216,7 @@ public enum TranscriptChunker {
     }
 }
 
-#if canImport(FoundationModels)
+#if canImport(FoundationModels) && !BETTERWISPR_NO_APPLE_INTELLIGENCE
 @available(macOS 26.0, *)
 @Generable
 struct GeneratedNotes {

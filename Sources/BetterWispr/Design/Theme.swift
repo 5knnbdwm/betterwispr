@@ -17,8 +17,14 @@ struct SymbolTile: View {
     }
 }
 
+// Spelled out instead of @Entry so the app builds without Xcode's SwiftUIMacros plugin.
+private struct AppThemeKey: EnvironmentKey { static let defaultValue: AppTheme = .system }
+
 extension EnvironmentValues {
-    @Entry var appTheme: AppTheme = .system
+    var appTheme: AppTheme {
+        get { self[AppThemeKey.self] }
+        set { self[AppThemeKey.self] = newValue }
+    }
 }
 
 extension Color {

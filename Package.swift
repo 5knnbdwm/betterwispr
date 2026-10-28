@@ -21,6 +21,9 @@ let package = Package(
             .product(name: "SpeakerKit", package: "argmax-oss-swift"),
             .product(name: "FluidAudio", package: "FluidAudio"),
             .product(name: "LlamaSwift", package: "llama.swift")
+        ], swiftSettings: [
+            // Local build: Apple Intelligence notes need Xcode's FoundationModelsMacros plugin, which this Mac lacks.
+            .define("BETTERWISPR_NO_APPLE_INTELLIGENCE")
         ]),
         .executableTarget(
             name: "BetterWispr",
